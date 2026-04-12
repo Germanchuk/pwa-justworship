@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "references": [
+    // It came from template, probably, as for me there is no sense to have specific config except single common one
+    // even intellij webstorm doesn't see this dependency correctly
+    { "path": "./tsconfig.app.json" }
+  ]
+}

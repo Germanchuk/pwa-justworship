@@ -1,0 +1,25 @@
+.MagicInput {
+  position: relative;
+}
+
+.MagicInput__textarea {
+position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  resize: none;
+  overflow: hidden;
+  color: transparent;
+  display: block;
+  background: transparent;
+  caret-color: grey;
+}
+
+.MagicInput__textarea:focus {
+  outline-style: solid;
+  outline-width: 1px;
+  outline-color: orange;
+}

@@ -1,0 +1,20 @@
+.ChordTooltip__wrapper {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+
+.ChordTooltip__wrapper--active {
+  background-color: #4ade80;
+}
+
+.ChordTooltip__wrapper--selected {
+  background-color: #4ade80;
+}
+
+.ChordTooltip {
+  position: fixed;
+  padding: 5px;
+  z-index: 100;
+}

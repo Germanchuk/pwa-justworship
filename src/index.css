@@ -1,0 +1,198 @@
+@import url("https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&display=swap");
+
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-editor-highlight: #fffbeb;
+  --color-card-orange: #fff7ed;
+  --color-card-orange-border: #fdba74;
+  --color-base-700: #3f3f46;
+  --color-create-base: #e0f2fe;
+  --color-delete-base: #fecaca;
+  --color-delete-content: #450a0a;
+  --color-error: #b91c1c;
+}
+
+@plugin "daisyui" {
+  themes: "mytheme";
+  root: ":root";
+}
+@plugin "daisyui/theme" {
+  name: "mytheme";
+  default: true; /* set as default */
+  prefersdark: false; /* set as default dark mode (prefers-color-scheme:dark) */
+  color-scheme: light; /* color of browser-provided UI */
+  --color-base-100: oklch(98% 0.02 240);
+  --color-base-200: oklch(95% 0.03 240);
+  --color-base-300: oklch(92% 0.04 240);
+  --color-base-content: oklch(20% 0.05 240);
+  --color-primary: oklch(55% 0.3 240);
+  --color-primary-content: oklch(98% 0.01 240);
+  --color-secondary: oklch(70% 0.25 200);
+  --color-secondary-content: oklch(98% 0.01 200);
+  --color-accent: oklch(65% 0.25 160);
+  --color-accent-content: oklch(98% 0.01 160);
+  --color-neutral: oklch(50% 0.05 240);
+  --color-neutral-content: oklch(98% 0.01 240);
+  --color-info: oklch(70% 0.2 220);
+  --color-info-content: oklch(98% 0.01 220);
+  --color-success: oklch(65% 0.25 140);
+  --color-success-content: oklch(53.2% 0.157 131.589);
+  --color-warning: oklch(80% 0.25 80);
+  --color-warning-content: oklch(20% 0.05 80);
+  --color-error: oklch(65% 0.3 30);
+  --color-error-content: oklch(50.5% 0.213 27.518);
+
+  /* border radius */
+  --radius-selector: 1rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+
+  /* base sizes */
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+
+  /* border size */
+  --border: 1px;
+
+  /* effects */
+  --depth: 1;
+  --noise: 0;
+
+  --color-primary: #b91c1c;
+  /*--color-primary: oklch(51.8% 0.253 323.949);*/
+  --color-secondary: #f6d860;
+  --color-neutral-content: #71717a;
+  --color-accent: #4ade80;
+  --color-base-100: #fff;
+  --color-base-200: #f4f4f5;
+  --color-base-300: #d4d4d8;
+  --color-base-content: #09090b;
+}
+
+.glass {
+  @apply bg-white/60 backdrop-blur-sm border border-black/20;
+}
+
+.shadow-inner-left-top {
+  box-shadow: -15px 0px 30px -30px rgba(0,0,0,0.75) inset;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  max-height: 100dvh;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.top,
+.bottom {
+  flex: 0 0 auto;
+}
+
+.middle {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+body {
+  margin: 0;
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  position: relative;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
+  monospace;
+}
+
+/* MY CODE GOES BELOW */
+
+select {
+  appearance: none;
+}
+
+.threeCols {
+  column-count: 3; /* Create 3 columns */
+  column-gap: 8px; /* Optional: Adjust space between columns */
+  overflow-x: scroll;
+  overflow-y: visible;
+  max-height: calc(100vh - 48px);
+}
+
+@media screen and (max-width: 1024px) {
+  .threeCols {
+    column-count: 2;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .threeCols {
+    column-count: initial;
+    overflow-x: initial;
+    max-height: initial;
+  }
+}
+
+.menu li > *:not(ul, .menu-title, details, .btn):active,
+.menu li > *:not(ul, .menu-title, details, .btn).active,
+.menu li > details > summary:active {
+  background-color: unset;
+  color: unset;
+}
+
+/* Router transition animation */
+
+.fadeIn {
+  animation: 0.3s fadeIn forwards;
+}
+
+.fadeOut {
+  animation: 0.3s fadeOut forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-20px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-20px, 0);
+  }
+}
+
+/* DatePicker overrides */
+
+.Bridge .react-datepicker-wrapper {
+  display: block;
+}
+
+
+/*!* Glass *!*/
+/*.glass {*/
+/*  !* From https://css.glass *!*/
+/*  background: rgba(244, 244, 245, 0.2);*/
+/*  border-radius: 16px;*/
+/*  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);*/
+/*  backdrop-filter: blur(2px);*/
+/*  -webkit-backdrop-filter: blur(2px);*/
+/*  border: 1px solid rgba(244, 244, 245, 0.38);*/
+/*}*/
