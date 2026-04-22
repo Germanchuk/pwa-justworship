@@ -102,6 +102,7 @@
     "@playwright/test": "^1.56.1",
     "vite-tsconfig-paths": "^5.1.4"
   },
+  "packageManager": "yarn@1.22.22",
   "engines": {
     "yarn": "1.x.x"
   }
