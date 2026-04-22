@@ -3,7 +3,15 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import Document from '@tiptap/extension-document';
 import Paragraph from '@tiptap/extension-paragraph';
 import Text from '@tiptap/extension-text';
-import { CustomHardBreak } from '#poc/TiptapEditor/extensions/CustomHardBreak';
+import HardBreak from '@tiptap/extension-hard-break';
+
+const CustomHardBreak = HardBreak.extend({
+  addKeyboardShortcuts() {
+    return {
+      Enter: () => this.editor.commands.setHardBreak(),
+    };
+  },
+});
 
 // A minimal editor, configured for lyrics-style line breaks using our custom extension.
 const LyricsEditorPoc = () => {
