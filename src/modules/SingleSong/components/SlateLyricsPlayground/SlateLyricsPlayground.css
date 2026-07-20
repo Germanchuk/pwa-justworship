@@ -1,0 +1,35 @@
+.slate-editable:focus,
+.slate-editable:focus-visible {
+  outline: none;
+}
+
+/* Suppress iOS Safari long-press callout (Look up / Share / etc). */
+.slate-editable {
+  -webkit-touch-callout: none;
+}
+
+/*.slate-editable {*/
+/*  min-height: 70vh;*/
+/*  column-count: 2;*/
+/*  column-gap: 4px;*/
+/*}*/
+
+.chord-token {
+  cursor: pointer;
+}
+
+.chord-playing-now {
+  background: #fde68a;
+  border-radius: 2px;
+}
+
+.chord-selected {
+  outline: 1px dashed currentColor;
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.chord-invalid {
+  text-decoration: underline wavy #ef4444;
+  text-decoration-skip-ink: none;
+}

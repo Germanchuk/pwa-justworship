@@ -1,0 +1,58 @@
+.song-meta-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-bottom: 1.6em;
+  margin-bottom: 0.25rem;
+}
+
+.song-meta-line {
+  line-height: 1.6;
+  font-size: 16px;
+  min-height: 1.6em;
+  padding-left: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.song-meta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.15em 0.7em;
+  border-radius: 9999px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  cursor: pointer;
+  user-select: none;
+  font-size: 14px;
+  line-height: 1.4;
+  transition: background 0.1s;
+}
+
+.song-meta-badge:hover {
+  background: #f3f4f6;
+}
+
+.song-meta-badge--readonly {
+  cursor: default;
+}
+
+.song-meta-badge--readonly:hover {
+  background: #fff;
+}
+
+.song-meta-badge__label {
+  color: #6b7280;
+}
+
+.song-meta-badge__value {
+  font-weight: 600;
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.song-meta-badge__value--placeholder {
+  color: #9ca3af;
+  font-weight: 400;
+}

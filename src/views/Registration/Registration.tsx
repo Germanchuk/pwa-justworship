@@ -11,6 +11,7 @@ import { useDispatch } from "react-redux";
 import { setUser } from "#modules/AuthenticatedUser/userSlice";
 import { addNotificationWithTimeout } from "#layout/slices/notificationsSlice";
 import { Routes } from "#constants/routes";
+import { Button } from "@/components/ui/button";
 
 export default function Registration() {
   const [email, setEmail] = React.useState("");
@@ -82,14 +83,14 @@ export default function Registration() {
   return (
     <div className="flex justify-center items-center gap-y-6 h-screen flex-col">
       <div>
-        <h1 className="text-3xl font-bold">Just Worship</h1>
+        <h1 className="text-3xl font-extrabold font-['Unbounded']">Just Worship</h1>
         <p className="text-center">реєстрація</p>
       </div>
       <form
         className="flex justify-center items-center gap-y-4 flex-col"
         onSubmit={submitHandler}
       >
-        <label className="input input-bordered flex items-center gap-2">
+        <label className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs flex items-center gap-2">
           <EnvelopeIcon className="size-5 text-current" />
           <input
             className="grow"
@@ -100,7 +101,7 @@ export default function Registration() {
           />
         </label>
 
-        <label className="input input-bordered flex items-center gap-2">
+        <label className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs flex items-center gap-2">
           <AtSymbolIcon className="size-5 text-current" />
           <input
             className="grow"
@@ -111,7 +112,7 @@ export default function Registration() {
           />
         </label>
 
-        <label className="input input-bordered flex items-center gap-2">
+        <label className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs flex items-center gap-2">
           <KeyIcon className="size-5 text-current" />
           <input
             placeholder="пароль"
@@ -122,15 +123,15 @@ export default function Registration() {
           />
         </label>
 
-        <button type="submit" className="btn">
+        <Button type="submit">
           Зареєструватися
-        </button>
+        </Button>
       </form>
-      <div className="flex flex-col items-center">
-        <div className="text-center">Вже є аккаунт?</div>
-        <Link to={Routes.Login}>
-          <button className="btn btn-link">Увійти</button>
-        </Link>
+      <div className="flex flex-col items-center gap-2">
+        <div className="text-center text-sm text-muted-foreground">Вже є аккаунт?</div>
+        <Button asChild variant="link" className="underline hover:bg-accent hover:text-accent-foreground">
+          <Link to={Routes.Login}>Увійти</Link>
+        </Button>
       </div>
     </div>
   );

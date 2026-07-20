@@ -7,15 +7,25 @@ import {
   type PlayOptions,
 } from "./playMidiGpt";
 import {getMidiFromSections} from "./getMidiFromSections/getMidiFromSections";
+import {getMidiFromSlate, type SongContentSnapshot} from "./getMidiFromSlate/getMidiFromSlate";
 import type {ChordTimelineEvent} from "./getMidiFromSections/utils/progressionToTimeline";
 
 type StateListener = (state: MidiPlayerState) => void;
 type ChordListener = (event: ChordTimelineEvent | null) => void;
-type SelectionListener = (eventId: number | null) => void;
+type SelectionListener = (eventKey: string | null) => void;
+type LegacySelectionListener = (eventId: number | null) => void;
+type ContentProvider = () => SongContentSnapshot | null;
 type PlaybackPlan = {
   midi: ReturnType<typeof getMidiFromSections>["midi"];
   timeline: ChordTimelineEvent[];
   options: PlayOptions;
+};
+
+const tokenKeyFromEvent = (event: ChordTimelineEvent | null): string | null => {
+  if (!event) return null;
+  if (event.tokenKey != null) return event.tokenKey;
+  if (event.id != null) return String(event.id);
+  return null;
 };
 
 /**
@@ -30,7 +40,8 @@ class ChordsProgressionPlayer {
   private selectionListeners = new Set<SelectionListener>();
   private scheduledChordEvents: number[] = [];
   private currentChordEvent: ChordTimelineEvent | null = null;
-  private selectedChordId: number | null = null;
+  private selectedKey: string | null = null;
+  private contentProvider: ContentProvider | null = null;
 
   static getInstance = () => {
     if (!ChordsProgressionPlayer.instance) {
@@ -78,21 +89,49 @@ class ChordsProgressionPlayer {
     };
   }
 
-  setStartChordId(chordId: number | null) {
-    this.selectedChordId = chordId;
+  setStartChordTokenKey(tokenKey: string | null) {
+    if (this.selectedKey === tokenKey) return;
+    this.selectedKey = tokenKey;
     this.emitSelectedChord();
   }
 
-  getStartChordId() {
-    return this.selectedChordId;
+  getStartChordTokenKey() {
+    return this.selectedKey;
   }
 
-  onSelectedChordChange(listener: SelectionListener) {
+  onSelectedChordKeyChange(listener: SelectionListener) {
     this.selectionListeners.add(listener);
-    listener(this.selectedChordId);
+    listener(this.selectedKey);
     return () => {
       this.selectionListeners.delete(listener);
     };
+  }
+
+  /** Legacy numeric-id API — kept for `LyricsPlayground`. */
+  setStartChordId(chordId: number | null) {
+    this.setStartChordTokenKey(chordId == null ? null : String(chordId));
+  }
+
+  getStartChordId(): number | null {
+    if (this.selectedKey == null) return null;
+    const n = Number(this.selectedKey);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  onSelectedChordChange(listener: LegacySelectionListener) {
+    return this.onSelectedChordKeyChange((key) => {
+      if (key == null) return listener(null);
+      const n = Number(key);
+      listener(Number.isFinite(n) ? n : null);
+    });
+  }
+
+  setContentProvider(provider: ContentProvider | null) {
+    if (this.contentProvider === provider) return;
+    if (this.contentProvider && provider == null && this.state !== "idle") {
+      this.stop();
+    }
+    this.contentProvider = provider;
   }
 
   pause = () => {
@@ -114,7 +153,9 @@ class ChordsProgressionPlayer {
   };
 
   private buildPlaybackPlan(options: Partial<PlayOptions>): PlaybackPlan | null {
-    const prepared = getMidiFromSections(this.selectedChordId);
+    const prepared = this.contentProvider
+      ? getMidiFromSlate(this.contentProvider(), this.selectedKey)
+      : getMidiFromSections(this.getStartChordId());
     const { midi, timeline, bpm, timeSignature } = prepared;
     const beatsPerBar = timeSignature?.[0] ?? 4;
 
@@ -204,14 +245,15 @@ class ChordsProgressionPlayer {
 
   private emitChord(event: ChordTimelineEvent | null) {
     this.currentChordEvent = event;
-    if (event?.id != null && this.selectedChordId === event.id) {
-      this.setStartChordId(null);
+    const key = tokenKeyFromEvent(event);
+    if (key != null && this.selectedKey === key) {
+      this.setStartChordTokenKey(null);
     }
     this.chordListeners.forEach((listener) => listener(event));
   }
 
   private emitSelectedChord() {
-    this.selectionListeners.forEach((listener) => listener(this.selectedChordId));
+    this.selectionListeners.forEach((listener) => listener(this.selectedKey));
   }
 
   private clearScheduledChordEvents() {

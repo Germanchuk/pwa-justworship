@@ -27,6 +27,7 @@
     /* Aliases */
     "baseUrl": ".",
     "paths": {
+      "@/*": ["src/*"],
       "#/store": ["src/store.ts"],
       "#components": ["src/components"],
       "#constants/*": ["src/constants/*"],
@@ -36,8 +37,7 @@
       "#models/*": ["src/models/*"],
       "#modules/*": ["src/modules/*"],
       "#utils/*": ["src/utils/*"],
-      "#views/*": ["src/views/*"],
-      "#poc/*": ["src/poc/*"]
+      "#views/*": ["src/views/*"]
     }
   },
   "include": ["src", "postcss.config.js"]

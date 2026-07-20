@@ -5,6 +5,7 @@ import {Routes} from "#constants/routes";
 import {addNotificationWithTimeout} from "#layout/slices/notificationsSlice";
 import {DocumentDuplicateIcon} from "@heroicons/react/24/outline";
 import React from "react";
+import { Button } from "@/components/ui/button";
 
 export function CopyButton({ songId}) {
   const dispatch = useDispatch<any>();
@@ -22,11 +23,13 @@ export function CopyButton({ songId}) {
       });
   }
   return (
-    <button
-      className="btn btn-circle btn-dash"
+    <Button
+      variant="outline"
+      size="icon"
+      className="rounded-full border-dashed"
       onClick={copySong}
     >
       <DocumentDuplicateIcon className="w-6 h-6" />
-    </button>
+    </Button>
   );
 }

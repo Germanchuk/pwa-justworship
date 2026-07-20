@@ -44,7 +44,7 @@ export default function SearchResults({ searchQuery, addItem, resetInput }) {
     <ul className="flex flex-col gap-1 h-48 overflow-scroll">
       {results.map((song) => (
         <li
-          className="rounded bg-base-200 px-2 py-1 hover:bg-base-300 cursor-pointer"
+          className="rounded bg-muted px-2 py-1 hover:bg-accent cursor-pointer"
           key={song.id}
           onClick={() => handleAddingItem({ id: song.id, ...song.attributes })}
         >

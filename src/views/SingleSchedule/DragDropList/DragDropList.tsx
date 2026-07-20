@@ -2,6 +2,7 @@ import {Bars2Icon, TrashIcon} from "@heroicons/react/24/outline";
 import {DragDropContext, Droppable, Draggable} from "react-beautiful-dnd";
 import MagicItem from "./MagicItem/MagicItem";
 import {useState} from "react";
+import { Button } from "@/components/ui/button";
 
 const DragDropList = ({items, setItems, addItem, deleteItem}) => {
   const [isFocused, setIsFocused] = useState(false);
@@ -33,10 +34,10 @@ const DragDropList = ({items, setItems, addItem, deleteItem}) => {
                     className={`
                         ${
                       snapshot.isDragging
-                        ? "bg-base-200 shadow"
+                        ? "bg-muted shadow"
                         : "bg-white"
                     }
-                        flex gap-4 justify-between items-center py-1 border-b border-base-300 w-full
+                        flex gap-4 justify-between items-center py-1 border-b border-border w-full
                       `}
                     style={{
                       ...provided.draggableProps.style,
@@ -58,12 +59,14 @@ const DragDropList = ({items, setItems, addItem, deleteItem}) => {
                       </div>
                       {item.name}
                     </div>
-                    <button
-                      className="btn btn-sm btn-square bg-delete-base text-delete-content"
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="size-8 p-0"
                       onClick={() => deleteItem(item.id)}
                     >
                       <TrashIcon className="w-4 h-4"/>
-                    </button>
+                    </Button>
                   </li>
                 )}
               </Draggable>

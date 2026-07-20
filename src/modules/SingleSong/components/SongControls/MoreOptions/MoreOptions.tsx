@@ -7,6 +7,7 @@ import {useDispatch} from "react-redux";
 import {useShouldHideChords, usePreferences, useSong} from "../../../redux/selectors";
 import {savePreferencesThunk} from "../../../redux/songSlice";
 import DeleteSong from "../DeleteSong/DeleteSong";
+import { Button } from "@/components/ui/button";
 
 export const MoreOptions = () => {
   const dispatch = useDispatch<any>();
@@ -29,24 +30,24 @@ export const MoreOptions = () => {
   return (
     <Dropdown
       trigger={() => (
-        <button className="btn btn-circle btn-ghost">
+        <Button variant="ghost" size="icon" className="rounded-full">
           <EllipsisVerticalIcon className="w-6 h-6"  />
-        </button>
+        </Button>
       )}
-      position="top"
+      position="bottom"
       className="w-45"
     >
       {/* any options zone */}
       <ul className="rounded-box bg-white w-full shadow-md m-0 p-2">
         <li
-          className="btn btn-block btn-sm mb-1"
+          className="inline-flex items-center justify-center gap-2 w-full h-8 px-3 mb-1 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
           onClick={() => createDocument()}
         >
           <DocumentArrowDownIcon className="w-5"/>
           .docx
         </li>
         <li
-          className="btn btn-block btn-sm mb-1"
+          className="inline-flex items-center justify-center gap-2 w-full h-8 px-3 mb-1 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
           onClick={handleToggle}
         >
           {hideChords ? <EyeIcon className="w-4"/>

@@ -8,6 +8,7 @@ import { useDispatch } from "react-redux";
 import { resetSong } from "#modules/SingleSong/redux/songSlice";
 import { useSetEditMode, useSong } from "#modules/SingleSong/redux/selectors";
 import {songApi} from "#modules/SingleSong/api";
+import { Button } from "@/components/ui/button";
 
 export default function FromScratch() {
   // add intermediate auto saving into localStorage
@@ -43,12 +44,13 @@ export default function FromScratch() {
 function SavingButton({ createEntry }) {
   return ReactDOM.createPortal(
     <div className="fixed bottom-4 right-4">
-      <button
-        className="btn btn-success btn-square ring-neutral ring-1"
+      <Button
+        size="icon"
+        className="bg-green-600 text-white hover:bg-green-700 ring-1 ring-neutral-400"
         onClick={createEntry}
       >
         <CheckCircleIcon className="w-6 h-6" />
-      </button>
+      </Button>
     </div>, document.body
   );
 }

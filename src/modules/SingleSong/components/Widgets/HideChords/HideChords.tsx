@@ -2,6 +2,7 @@ import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 import {useDispatch} from "react-redux";
 import {useShouldHideChords, usePreferences, useSong} from "../../../redux/selectors";
 import {savePreferencesThunk} from "../../../redux/songSlice";
+import { Button } from "@/components/ui/button";
 
 export const HideChords =  () => {
   const dispatch = useDispatch<any>();
@@ -22,13 +23,13 @@ export const HideChords =  () => {
   };
 
   return(
-    <button
-      className="btn btn-sm"
+    <Button
+      size="sm"
       onClick={handleToggle}
     >
       {hideChords ? <EyeIcon className="w-4"/>
         : <EyeSlashIcon className="w-4"/>}
       {hideChords ? "Показати" : "Сховати"} акорди
-    </button>
+    </Button>
   )
 }

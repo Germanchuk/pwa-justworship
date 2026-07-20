@@ -4,6 +4,7 @@ import debounce from "lodash.debounce";
 import { fetchAPI } from "../../utils/fetch-api";
 import { Link } from "react-router-dom";
 import { Routes } from "../../constants/routes";
+import { Button } from "@/components/ui/button";
 
 export default function JoinBand() {
   const [query, setQuery] = useState("");
@@ -48,7 +49,7 @@ export default function JoinBand() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-2">Приєднатись до гурту</h1>
-      <label className="input input-bordered flex items-center gap-2">
+      <label className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs flex items-center gap-2">
         <input
           type="text"
           className="grow"
@@ -62,13 +63,11 @@ export default function JoinBand() {
         {!!query &&
           results?.length > 0 &&
           results.map((band, index) => (
-            <Link
-              to={`${Routes.JoinBand}/${band?.id}`}
-              key={index}
-              className="btn w-full"
-            >
-              {band?.attributes?.name}
-            </Link>
+            <Button asChild key={index} className="w-full">
+              <Link to={`${Routes.JoinBand}/${band?.id}`}>
+                {band?.attributes?.name}
+              </Link>
+            </Button>
           ))}
 
         {!!query && results?.length === 0 && (

@@ -46,7 +46,7 @@ export function MagicInput({
       {editMode && (
         <textarea
           className={classNames(
-            "MagicInput__textarea border border-solid border-base-300",
+            "MagicInput__textarea border border-solid border-border",
             className
           )}
           value={value}

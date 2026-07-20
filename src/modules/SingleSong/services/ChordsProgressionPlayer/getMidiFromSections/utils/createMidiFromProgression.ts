@@ -5,6 +5,7 @@ import { toMidi } from "@tonaljs/midi";
 
 export interface ChordEvent {
   id?: number;
+  tokenKey?: string | null;
   chord: string | null; // null/REST/N.C. = пауза
   duration: number;     // у долях (beats)
 }
@@ -19,7 +20,8 @@ function isRest(ch: string | null | undefined): boolean {
 export function createMidiFromProgression(
   progression: ChordEvent[],
   bpm = 70,
-  timeSignature: [number, number] = [4, 4]
+  timeSignature: [number, number] = [4, 4],
+  transposition = 0,
 ): Midi {
   const midi = new Midi();
   midi.header.setTempo(bpm);
@@ -71,8 +73,9 @@ export function createMidiFromProgression(
 
     if (notes.length > 0 && ticks > 0) {
       for (const n of notes) {
-        const midiNote = toMidi(n);
-        if (midiNote == null) continue;
+        const baseMidi = toMidi(n);
+        if (baseMidi == null) continue;
+        const midiNote = Math.max(0, Math.min(127, baseMidi + transposition));
 
         track.addNote({
           midi: midiNote,

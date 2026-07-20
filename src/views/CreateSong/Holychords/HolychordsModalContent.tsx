@@ -2,6 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Routes } from "../../../constants/routes";
 import {fetchAPI} from "../../../utils/fetch-api";
+import { Button } from "@/components/ui/button";
 
 
 export default function HolychordsModalContent() {
@@ -30,9 +31,9 @@ export default function HolychordsModalContent() {
             setUrl(e.target.value as any);
           }}
         />
-        <button className="btn btn-primary" onClick={() => handleClick(url)}>
+        <Button onClick={() => handleClick(url)}>
           Імпортувати
-        </button>
+        </Button>
       </div>
       <p className="text-xs text-gray-500 mt-2">
         Інколи на чудо треба зачекати (зачекайте )

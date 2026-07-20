@@ -1,6 +1,7 @@
 import { PlusSmallIcon } from "@heroicons/react/24/outline";
 import { useCallback, useRef, useState } from "react";
 import SearchResults from "./SearchResults/SearchResults";
+import { Button } from "@/components/ui/button";
 
 export default function MagicItem({ addItem }) {
   const [isFocused, setIsFocused] = useState(false);
@@ -21,7 +22,7 @@ export default function MagicItem({ addItem }) {
   }, [setSearchQuery]);
 
   return (
-    <li className="flex gap-4 items-center py-1 border-b border-base-300 relative">
+    <li className="flex gap-4 items-center py-1 border-b border-border relative">
       <div className="w-10 h-8" />
       <form className="flex grow gap-2" onSubmit={(e) => e.preventDefault()}>
         <input
@@ -33,17 +34,14 @@ export default function MagicItem({ addItem }) {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
-        <button className="btn btn-sm btn-square" type="submit">
+        <Button size="sm" className="size-8 p-0" type="submit">
           <PlusSmallIcon className="w-5 h-5" />
-        </button>
-        {/* <button className="btn btn-sm btn-square">
-          <SparklesIcon className="w-5 h-5" />
-        </button> */}
+        </Button>
       </form>
       {isFocused && (
         <div
           ref={dropdownRef}
-          className="absolute -bottom-1 right-0 left-0 translate-y-full p-2 rounded shadow-lg ring-1 ring-base-200"
+          className="absolute -bottom-1 right-0 left-0 translate-y-full p-2 rounded shadow-lg ring-1 ring-muted"
           onMouseDown={(e) => e.preventDefault()}
         >
           <SearchResults

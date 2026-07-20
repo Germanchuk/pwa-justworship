@@ -27,7 +27,8 @@ import BandSongs from "#views/BandSongs/BandSongs";
 import BandShedule from "#views/BandShedule/BandShedule";
 import SingleShedule from "#views/SingleSchedule/SingleShedule";
 import WelcomePage from "#views/WelcomePage/WelcomePage";
-import {TiptapPoc} from "#views/TiptapPoc/TiptapPoc";
+import ShadcnDemo from "#views/ShadcnDemo/ShadcnDemo";
+import Landing from "#views/Landing/Landing";
 
 function Router() {
   const location = useLocation();
@@ -62,6 +63,8 @@ function Router() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Registration />} />
         </Route>
+        <Route path="/shadcn-demo" element={<ShadcnDemo />} />
+        <Route path="/landing" element={<Landing />} />
       </RouterRoutes>
     </div>
   );

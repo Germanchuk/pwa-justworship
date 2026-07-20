@@ -6,6 +6,8 @@ import {useNavigate} from "react-router-dom";
 import {useDispatch} from "react-redux";
 import {addNotificationWithTimeout} from "#layout/slices/notificationsSlice";
 import {Routes} from "#constants/routes";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 
 export default function CreateSong() {
   const navigate = useNavigate();
@@ -37,13 +39,16 @@ export default function CreateSong() {
       </div>
       <div className="flex items-center gap-4 flex-col">
         <Modal
-          trigger={<button className="btn">Імпортувати з Holychords</button>}
+          trigger={<Button>Імпортувати з Holychords</Button>}
           content={<HolychordsModalContent />}
           title={"Імпортувати з Holychords"}
         />
-        <button className="btn" onClick={createSong}>
-          {loading ? <div className="loading" /> :"Створити в редакторі"}
-        </button>
+        <Button onClick={createSong}>
+          {loading ? <Loader2 className="size-4 animate-spin" /> :"Створити в редакторі"}
+        </Button>
+        <Button>
+          Скопіювати
+        </Button>
       </div>
     </>
   );

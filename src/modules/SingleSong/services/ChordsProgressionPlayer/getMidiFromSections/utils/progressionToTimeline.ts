@@ -2,6 +2,12 @@ import type {ChordEvent} from "./createMidiFromProgression";
 
 export interface ChordTimelineEvent {
   id: number;
+  /**
+   * Stable path-derived identifier that maps the event back to a token in the editor:
+   * `${sectionIndex}:${chordLineIndexInSection}:${tokenIndexInLine}`.
+   * Null for rests / events from sources that don't track positions (legacy).
+   */
+  tokenKey: string | null;
   chord: string | null;
   start: number; // seconds from the beginning of the transport
   duration: number; // seconds
@@ -29,6 +35,7 @@ export function progressionToTimeline(
       const beats = Math.max(0, event.duration ?? 0);
       const timelineEvent: ChordTimelineEvent = {
         id: event.id ?? index,
+        tokenKey: event.tokenKey ?? null,
         chord: event.chord,
         start: accumulatedBeats * beatDuration,
         duration: beats * beatDuration,

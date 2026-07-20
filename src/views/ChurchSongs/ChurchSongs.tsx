@@ -64,7 +64,7 @@ export default function ChurchSongs() {
   return (
     <>
       <h1 className="text-2xl font-bold mb-2">Всі пісні церкви</h1>
-      <label className="input input-bordered flex items-center gap-2 mb-2">
+      <label className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs flex items-center gap-2 mb-2">
         <input
           type="text"
           className="grow"

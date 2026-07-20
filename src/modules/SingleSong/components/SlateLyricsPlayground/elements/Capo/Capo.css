@@ -1,0 +1,36 @@
+/* Power-toggle капо — кругла кнопка з іконкою power, стиль bypass-кнопки
+   плагіна в цепочці обробки (Logic): сіра коли вимкнено, світиться коли ввімкнено. */
+.capo-power {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7em;
+  height: 1.7em;
+  margin-left: 0.4em;
+  border-radius: 9999px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+
+.capo-power:hover {
+  background: #f3f4f6;
+}
+
+.capo-power svg {
+  width: 1em;
+  height: 1em;
+}
+
+.capo-power--on {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+}
+
+.capo-power--on:hover {
+  background: #4f46e5;
+}

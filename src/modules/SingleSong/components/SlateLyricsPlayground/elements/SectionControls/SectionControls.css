@@ -1,0 +1,18 @@
+.section-controls {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  user-select: none;
+}
+
+.section-controls__repeat {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e3a8a;
+  padding: 0 4px;
+  font-variant-numeric: tabular-nums;
+}

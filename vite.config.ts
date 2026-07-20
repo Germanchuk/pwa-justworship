@@ -22,8 +22,8 @@ export default defineConfig({
         short_name: "Just Worship",
         start_url: "/",
         display: "standalone",
-        background_color: "#ffffff",
-        theme_color: "#ffffff",
+        background_color: "#f8f5eb",
+        theme_color: "#f8f5eb",
         icons: [
           {
             src: "/logo192.png",

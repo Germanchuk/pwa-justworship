@@ -4,37 +4,41 @@ import { Routes } from "#constants/routes";
 import { useSelector } from "react-redux";
 import classNames from "classnames";
 import {PageFooterArea} from "#layout/PageFooterArea/PageFooterArea";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 
-export default function BottomBar() {
+type Props = {
+  onMenuClick: () => void;
+};
+
+export default function BottomBar({ onMenuClick }: Props) {
   const isLoading = useSelector((state: any) => state.viewConfig.globalLoader);
-  // <div className="fixed inset-x-0 bottom-0 z-40 animate__zoomIn">
   return (
-    <div className={"bottom"}>
-      <div className="container mx-auto p-2 pb-0">
+    <div className={"top"}>
+      <div className="container mx-auto p-2">
         <div className={`flex gap-2`}>
-          <div className="glass rounded-t-2xl p-1">
-            <Link to={Routes.Root} className={"btn btn-circle btn-ghost"}>
+          <div className="glass rounded-2xl p-1">
+            <Button asChild variant="ghost" size="icon" className="rounded-full">
+              <Link to={Routes.Root}>
                 {isLoading ? <GlobalLoader /> : <HomeIcon className="animate__bounceIn h-6 w-6" />}
-            </Link>
+              </Link>
+            </Button>
           </div>
 
               <div
                 className={
                   classNames(
-                    "flex-1 flex gap-2 glass border-b-0 rounded-t-2xl p-1 items-center justify-end"
+                    "flex-1 flex gap-2 glass border-t-0 rounded-2xl p-1 items-center justify-end"
                   )
                 }
               >
                 <PageFooterArea />
               </div>
 
-          <div className="glass rounded-t-2xl p-1">
-              <label
-                htmlFor="my-drawer-4"
-                className="drawer-button btn btn-circle btn-ghost"
-              >
-                <Bars3Icon className={"h-6 w-6"} />
-              </label>
+          <div className="glass rounded-2xl p-1">
+            <Button variant="ghost" size="icon" className="rounded-full" onClick={onMenuClick}>
+              <Bars3Icon className={"h-6 w-6"} />
+            </Button>
           </div>
         </div>
       </div>
@@ -45,6 +49,6 @@ export default function BottomBar() {
 function GlobalLoader() {
 
   return (
-      <span className="animate__bounceIn loading loading-spinner loading-xl" />
+      <Loader2 className="animate__bounceIn size-6 animate-spin" />
   );
 }

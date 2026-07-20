@@ -10,7 +10,7 @@ export default function BandSongs({name, songs}) {
       Trigger={({isOpen, clickHandler}) => (
         <div
           onClick={clickHandler}
-          className={classNames("bg-base-300 px-3 py-2 rounded mb-2 flex justify-between", {
+          className={classNames("bg-accent px-3 py-2 rounded mb-2 flex justify-between", {
             "bg-white": isOpen,
           })}
         >
@@ -24,7 +24,7 @@ export default function BandSongs({name, songs}) {
       {songs?.map((song) => (
         <Link
           to={`${Routes.PublicSongs}/${song.id}`}
-          className="bg-base-200 px-3 py-2 rounded block mb-2"
+          className="bg-muted px-3 py-2 rounded block mb-2"
         >
           {song.name}
         </Link>

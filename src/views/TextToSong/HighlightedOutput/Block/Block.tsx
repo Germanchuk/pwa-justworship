@@ -8,7 +8,7 @@ export default function Block({ data }) {
   return (
     <div
       className={classNames(
-        // "ring-1 ring-neutral shadow bg-base-200 rounded divide-y divide-neutral",
+        // "ring-1 ring-neutral shadow bg-muted rounded divide-y divide-neutral",
         {
           "Block--editabled": editMode,
         }

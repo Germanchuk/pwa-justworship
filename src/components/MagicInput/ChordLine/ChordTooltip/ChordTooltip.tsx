@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom";
 import "./ChordTooltip.css";
 import getChordImg from "../../../../utils/getChordImg";
+import { Loader2 } from "lucide-react";
 
 const ChordTooltip = ({ children }) => {
   const [visible, setVisible] = useState(false);
@@ -75,7 +76,7 @@ function ChordContent({ chordName, triggerRef }) {
   return ReactDOM.createPortal(
     <div
       ref={contentRef}
-      className="ChordTooltip shadow-xl bg-base-100 rounded ring-1 ring-base-300"
+      className="ChordTooltip shadow-xl bg-background rounded ring-1 ring-border"
     >
       {src ? (
         <div className="w-72">
@@ -83,7 +84,7 @@ function ChordContent({ chordName, triggerRef }) {
         </div>
       ) : (
         <div className="w-72 h-44 flex justify-center items-center">
-          <span className="loading loading-ring loading-xl"></span>
+          <Loader2 className="size-10 animate-spin" />
         </div>
       )}
     </div>,

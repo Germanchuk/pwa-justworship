@@ -1,3 +1,5 @@
+import type { Descendant } from "slate";
+
 export interface Song {
   id: number;
   name: string;
@@ -5,6 +7,7 @@ export interface Song {
   key: "A" | "B" | "C" | "D" | "E" | "F" | "G";
   timeSignature?: "fourFour" | "threeFour";
   sections: Section[];
+  slate?: Descendant[];
   // there is field 'owner' with detailed info, it's better to refactor it to isMy or something
 }
 

@@ -4,6 +4,7 @@ import classNames from "classnames";
 import {Modal} from "#components";
 import {useEditMode, useKey} from "../../../redux/selectors";
 import { handleChangeKey, handleTransposeSong } from "./actions";
+import { Button } from "@/components/ui/button";
 
 export default function KeySelector() {
   const basicKey = useKey();
@@ -26,9 +27,9 @@ export default function KeySelector() {
           content={<div>
             <p className="mb-4">Тональність пісні вказується вручну і може відрізнятись від тональності акордів. Тому є вартіанти:</p>
             <div className="flex flex-col items-center gap-2">
-              <button className="btn btn-outline" onClick={changeKey}>Виправити тональність</button>
-              <button className="btn btn-outline" onClick={transposeSong}>Перетонувати всю пісню</button>
-              <button className="btn" onClick={revert}>Відмінити</button>
+              <Button variant="outline" onClick={changeKey}>Виправити тональність</Button>
+              <Button variant="outline" onClick={transposeSong}>Перетонувати всю пісню</Button>
+              <Button onClick={revert}>Відмінити</Button>
           </div>
         </div>}
           hideCloseButton

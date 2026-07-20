@@ -1,0 +1,33 @@
+.song-section {
+  position: relative;
+  padding-left: 8px;
+  border-radius: 0 4px 4px 0;
+  overflow: hidden;
+}
+
+.song-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  background: var(--section-stripe, #1e3a8a);
+  pointer-events: none;
+}
+
+.song-section--collapsed {
+  border-bottom: 2px solid #1e3a8a;
+  opacity: 0.85;
+}
+
+/* Collapsed section: keep ONLY the first non-void child (the title line
+   with SectionControls). Voids (comment anchors) and everything after the
+   first content row are hidden. */
+.song-section--collapsed > [data-slate-void] {
+  display: none;
+}
+.song-section--collapsed > [data-slate-node="element"]:not([data-slate-void])
+  ~ [data-slate-node="element"] {
+  display: none;
+}

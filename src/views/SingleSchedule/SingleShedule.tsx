@@ -13,6 +13,7 @@ import {addNotificationWithTimeout} from "#layout/slices/notificationsSlice";
 import {useDispatch} from "react-redux";
 import {ToPageHeaderArea} from "#layout/PageHeaderArea/ToPageHeaderArea";
 import {ToPageFooterArea} from "#layout/PageFooterArea/ToPageFooterArea";
+import { Button } from "@/components/ui/button";
 
 const EMPTY_SHEDULE = {
   date: "",
@@ -24,7 +25,7 @@ const Trigger = forwardRef(
     <button
       onClick={onClick}
       ref={ref}
-      className="input input-bordered flex justify-between items-center gap-2 w-full cursor-pointer"
+      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs flex justify-between items-center gap-2 w-full cursor-pointer"
     >
       {value && (
         <div className="text-xl font-medium">
@@ -162,12 +163,12 @@ export default function SingleShedule() {
 
 function SavingButton({ saveShedule }) {
   return (
-      <button
-        className="btn rounded-4xl"
+      <Button
+        className="rounded-4xl"
         onClick={saveShedule}
       >
         <CheckIcon className="w-6 h-6" />
         Зберегти як є {/*тут прикол в тому, що кнопка існує навіть тоді коли список не змінився і потреби зберігати немає*/}
-      </button>
+      </Button>
   );
 }

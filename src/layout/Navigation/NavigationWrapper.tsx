@@ -1,23 +1,30 @@
-import React, { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import Sidebar from "./Sidebar/Sidebar";
 import { useLocation } from "react-router-dom";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 
-export default function NavigationWrapper({ children = null }) {
-    const ref = useRef();
-    const location = useLocation();
-    useEffect(() => {
-        // @ts-ignore
-        if (ref?.current?.checked) {
-          // @ts-ignore
-          ref.current.checked = false;
-        }
-    }, [location]);
+type Props = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+export default function NavigationWrapper({ open, onOpenChange }: Props) {
+  const location = useLocation();
+
+  useEffect(() => {
+    onOpenChange(false);
+  }, [location.pathname]);
+
   return (
-    <div className="drawer drawer-end">
-      <input ref={ref} id="my-drawer-4" type="checkbox" className="drawer-toggle" />
-      {/*<div className="drawer-content">{children}</div>*/}
-      {children}
-      <Sidebar />
-    </div>
+    <Drawer open={open} onOpenChange={onOpenChange} direction="right">
+      <DrawerContent className="bg-muted text-foreground w-80 sm:max-w-sm">
+        <DrawerTitle className="sr-only">Меню</DrawerTitle>
+        <Sidebar />
+      </DrawerContent>
+    </Drawer>
   );
 }

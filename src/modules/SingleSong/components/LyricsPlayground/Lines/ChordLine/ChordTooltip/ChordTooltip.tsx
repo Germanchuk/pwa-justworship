@@ -5,6 +5,7 @@ import "./ChordTooltip.css";
 import getChordImg from "#utils/getChordImg";
 import ChordsProgressionPlayer from "../../../../../services/ChordsProgressionPlayer/ChordsProgressionPlayer";
 import {useChordSequenceId} from "../../../ChordSequenceContext";
+import { Loader2 } from "lucide-react";
 
 const normalizeChord = (value: string) => value.trim().toLowerCase();
 
@@ -134,7 +135,7 @@ function ChordContent({ chordName, triggerRef }: ChordContentProps) {
   return ReactDOM.createPortal(
     <div
       ref={contentRef}
-      className="ChordTooltip shadow-xl bg-base-100 rounded ring-1 ring-base-300"
+      className="ChordTooltip shadow-xl bg-background rounded ring-1 ring-border"
     >
       {src ? (
         <div className="w-72">
@@ -142,7 +143,7 @@ function ChordContent({ chordName, triggerRef }: ChordContentProps) {
         </div>
       ) : (
         <div className="w-72 h-44 flex justify-center items-center">
-          <span className="loading loading-ring loading-xl"></span>
+          <Loader2 className="size-10 animate-spin" />
         </div>
       )}
     </div>,

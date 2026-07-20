@@ -1,6 +1,8 @@
-@import url("https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Manrope:wght@200..800&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Unbounded:wght@200..900&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext");
 
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "./styles/_drawer.css";
 @plugin "@tailwindcss/typography";
 
 @theme {
@@ -14,61 +16,55 @@
   --color-error: #b91c1c;
 }
 
-@plugin "daisyui" {
-  themes: "mytheme";
-  root: ":root";
+:root {
+  --radius: 0.625rem;
+
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.255 0.012 88);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.255 0.012 88);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.255 0.012 88);
+  --primary: oklch(0.295 0.014 88);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.965 0.015 90);
+  --secondary-foreground: oklch(0.21 0.008 90);
+  --muted: oklch(0.965 0.015 90);
+  --muted-foreground: oklch(0.552 0.022 88);
+  --accent: oklch(0.955 0.022 88);
+  --accent-foreground: oklch(0.21 0.008 90);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.915 0.022 88);
+  --input: oklch(0.915 0.022 88);
+  --ring: oklch(0.705 0.028 88);
 }
-@plugin "daisyui/theme" {
-  name: "mytheme";
-  default: true; /* set as default */
-  prefersdark: false; /* set as default dark mode (prefers-color-scheme:dark) */
-  color-scheme: light; /* color of browser-provided UI */
-  --color-base-100: oklch(98% 0.02 240);
-  --color-base-200: oklch(95% 0.03 240);
-  --color-base-300: oklch(92% 0.04 240);
-  --color-base-content: oklch(20% 0.05 240);
-  --color-primary: oklch(55% 0.3 240);
-  --color-primary-content: oklch(98% 0.01 240);
-  --color-secondary: oklch(70% 0.25 200);
-  --color-secondary-content: oklch(98% 0.01 200);
-  --color-accent: oklch(65% 0.25 160);
-  --color-accent-content: oklch(98% 0.01 160);
-  --color-neutral: oklch(50% 0.05 240);
-  --color-neutral-content: oklch(98% 0.01 240);
-  --color-info: oklch(70% 0.2 220);
-  --color-info-content: oklch(98% 0.01 220);
-  --color-success: oklch(65% 0.25 140);
-  --color-success-content: oklch(53.2% 0.157 131.589);
-  --color-warning: oklch(80% 0.25 80);
-  --color-warning-content: oklch(20% 0.05 80);
-  --color-error: oklch(65% 0.3 30);
-  --color-error-content: oklch(50.5% 0.213 27.518);
 
-  /* border radius */
-  --radius-selector: 1rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.5rem;
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 
-  /* base sizes */
-  --size-selector: 0.25rem;
-  --size-field: 0.25rem;
-
-  /* border size */
-  --border: 1px;
-
-  /* effects */
-  --depth: 1;
-  --noise: 0;
-
-  --color-primary: #b91c1c;
-  /*--color-primary: oklch(51.8% 0.253 323.949);*/
-  --color-secondary: #f6d860;
-  --color-neutral-content: #71717a;
-  --color-accent: #4ade80;
-  --color-base-100: #fff;
-  --color-base-200: #f4f4f5;
-  --color-base-300: #d4d4d8;
-  --color-base-content: #09090b;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 }
 
 .glass {
@@ -79,36 +75,32 @@
   box-shadow: -15px 0px 30px -30px rgba(0,0,0,0.75) inset;
 }
 
-#root {
-  display: flex;
-  flex-direction: column;
-  max-height: 100dvh;
-  height: 100vh;
-  overflow: hidden;
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 30;
 }
 
-.top,
-.bottom {
-  flex: 0 0 auto;
-}
-
-.middle {
-  flex: 1 1 auto;
-  overflow-y: auto;
+/* Фолбек-барва під фоновим зображенням body (шум+градієнт) — щоб у PWA
+   (standalone) краї/overscroll, safe-area та статус-бар збігалися з папером. */
+html {
+  background-color: #f8f5eb;
 }
 
 body {
   margin: 0;
-  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   position: relative;
+  min-height: 100dvh;
+  background-color: #f8f5eb;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
+  font-family: "JetBrains Mono", source-code-pro, Menlo, Monaco, Consolas, "Courier New",
   monospace;
 }
 
@@ -138,13 +130,6 @@ select {
     overflow-x: initial;
     max-height: initial;
   }
-}
-
-.menu li > *:not(ul, .menu-title, details, .btn):active,
-.menu li > *:not(ul, .menu-title, details, .btn).active,
-.menu li > details > summary:active {
-  background-color: unset;
-  color: unset;
 }
 
 /* Router transition animation */
@@ -183,6 +168,14 @@ select {
 
 .Bridge .react-datepicker-wrapper {
   display: block;
+}
+
+summary {
+  display: block;
+}
+
+summary::-webkit-details-marker {
+  display: none;
 }
 
 

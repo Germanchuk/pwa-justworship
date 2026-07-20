@@ -6,6 +6,7 @@ import {MagicInput} from "#components";
 import { useEditMode, useSetEditMode } from "#modules/SingleSong/redux/selectors";
 import { ContentBlock } from "#utils/compiler/compiler";
 import ReactDOM from "react-dom";
+import { Button } from "@/components/ui/button";
 
 export default function SingleSong({
   songObject,
@@ -65,12 +66,14 @@ function SongTitle({ children }) {
 function ToggleModeButton({ setEditMode, editMode }) {
   return ReactDOM.createPortal(
     <div className="fixed bottom-4 right-4">
-      <button
-        className="btn btn-square bg-base-300 ring-neutral ring-1"
+      <Button
+        size="icon"
+        variant="secondary"
+        className="ring-1 ring-neutral-400"
         onClick={() => setEditMode(!editMode)}
       >
         {editMode ? <ArrowLeftIcon /> : <EditIcon />}
-      </button>
+      </Button>
     </div>, document.body
   );
 }

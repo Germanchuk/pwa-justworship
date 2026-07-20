@@ -3,6 +3,7 @@ import { fetchAPI } from "../../utils/fetch-api";
 import {Link, useNavigate} from "react-router-dom";
 import { Routes } from "../../constants/routes";
 import {PlusCircleIcon} from "@heroicons/react/24/outline";
+import { Button } from "@/components/ui/button";
 
 export default function BandSongs() {
   const [songs, setSongs] = React.useState([]);
@@ -19,20 +20,20 @@ export default function BandSongs() {
     <>
       <div className="flex justify-between items-center pb-4">
         <h1 className="text-3xl font-bold tracking-tight">Пісні гурту</h1>
-        <button
-          className="btn btb-ghost bg-create"
+        <Button
+          variant="ghost"
           onClick={() => navigate(Routes.CreateSong)}
         >
           <PlusCircleIcon className="w-5 h-5"/>
           Додати
-        </button>
+        </Button>
       </div>
       {songs?.length === 0 && <div>Поки пісень немає</div>}
       {songs?.length && songs.map((song) => {
         return (
           <Link
             to={`${Routes.PublicSongs}/${song.id}`}
-            className="bg-base-200 p-3 rounded block mb-2"
+            className="bg-muted p-3 rounded block mb-2"
           >
             {song.attributes.name}
           </Link>

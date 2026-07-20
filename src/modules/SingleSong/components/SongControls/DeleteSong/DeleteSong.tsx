@@ -5,10 +5,11 @@ import {addNotificationWithTimeout} from "#layout/slices/notificationsSlice";
 import {useDispatch} from "react-redux";
 import {useEditMode, useSong} from "../../../redux/selectors";
 import {useNavigate} from "react-router-dom";
+import { Button } from "@/components/ui/button";
 
 const Trigger = (props) => {
   return (
-    <li className="btn btn-block btn-sm mb-1 bg-delete-base text-delete-content ring-delete-content" {...props}>
+    <li className="inline-flex items-center justify-center gap-2 w-full h-8 px-3 mb-1 rounded-md text-xs font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 cursor-pointer" {...props}>
       Видалити пісню
     </li>
   )
@@ -32,9 +33,9 @@ const Content = () => {
   }
   return (
     <div className="flex justify-end gap-2">
-      <button className={"btn bg-delete-base text-delete-content"} onClick={deleteSong}>Так</button>
+      <Button variant="destructive" onClick={deleteSong}>Так</Button>
       <form method="dialog">
-        <button className={"btn"}>Ні</button>
+        <Button variant="outline">Ні</Button>
       </form>
     </div>
   )

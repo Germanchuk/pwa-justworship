@@ -1,15 +1,22 @@
 import {CheckCircleIcon, ClockIcon, ExclamationCircleIcon} from "@heroicons/react/24/outline";
 import React from "react";
+import { Loader2 } from "lucide-react";
 
 export const Status = ({status}) => {
+  let icon: React.ReactNode = null;
   switch (status) {
     case "error":
-      return <ExclamationCircleIcon className="w-5 h-5 text-error-content animate__bounceIn" />
+      icon = <ExclamationCircleIcon className="w-4 h-4 text-destructive animate__bounceIn" />;
+      break;
     case "saved":
-      return <CheckCircleIcon className="w-5 h-5 text-success-content animate__bounceIn" />
+      icon = <CheckCircleIcon className="w-4 h-4 text-green-700 animate__bounceIn" />;
+      break;
     case "saving":
-      return <span className="loading loading-ring animate__bounceIn" />
+      icon = <Loader2 className="w-3.5 h-3.5 animate-spin animate__bounceIn" />;
+      break;
     case "pending":
-      return <ClockIcon className="w-5 h-5 text-neutral animate__bounceIn" />
+      icon = <ClockIcon className="w-4 h-4 text-muted-foreground animate__bounceIn" />;
+      break;
   }
+  return <span className="inline-flex items-center justify-center w-4 h-4 shrink-0">{icon}</span>;
 }

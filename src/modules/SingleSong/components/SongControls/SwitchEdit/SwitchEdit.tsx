@@ -3,6 +3,7 @@ import React from "react";
 import {LockClosedIcon, LockOpenIcon} from "@heroicons/react/24/outline";
 import {useDispatch} from "react-redux";
 import {showChordsAgainstPreferences} from "#modules/SingleSong/redux/songSlice";
+import { Button } from "@/components/ui/button";
 
 export function SwitchEdit() {
   const dispatch = useDispatch();
@@ -23,19 +24,23 @@ export function SwitchEdit() {
     <div className="animate__bounceIn">
       {!editMode ?
       (
-        <button
-          className="btn btn-circle btn-dash"
+        <Button
+          variant="outline"
+          size="icon"
+          className="rounded-full border-dashed"
           onClick={enableEditing}
         >
           <LockClosedIcon className="w-6 h-6" />
-        </button>
+        </Button>
       ) : (
-        <button
-          className="btn btn-circle btn-dash"
+        <Button
+          variant="outline"
+          size="icon"
+          className="rounded-full border-dashed"
           onClick={disableEditing}
         >
           <LockOpenIcon className="w-6 h-6" />
-        </button>
+        </Button>
       )}
     </div>
   );

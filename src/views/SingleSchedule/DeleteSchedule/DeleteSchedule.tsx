@@ -1,19 +1,20 @@
 import {Modal} from "#components";
+import { Button } from "@/components/ui/button";
 
 const Trigger = (props) => {
   return (
-    <button className="btn btn-outline bg-delete-base text-delete-content ring-delete-content" {...props}>
+    <Button variant="destructive" {...props}>
       Видалити список
-    </button>
+    </Button>
   )
 }
 
 const Content = ({ onDelete }) => {
   return (
     <div className="flex justify-end gap-2">
-      <button className={"btn bg-delete-base text-delete-content"} onClick={onDelete}>Так</button>
+      <Button variant="destructive" onClick={onDelete}>Так</Button>
       <form method="dialog">
-        <button className={"btn"}>Ні</button>
+        <Button variant="outline">Ні</Button>
       </form>
     </div>
   )

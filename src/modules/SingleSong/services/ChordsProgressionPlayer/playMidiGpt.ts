@@ -1,9 +1,28 @@
 import * as Tone from "tone";
 import { Midi } from "@tonejs/midi";
 import {createPad} from "./createPad/createPad";
+import {createWorshipPad} from "./createPad/createWorshipPad";
 import {createPiano} from "./createPiano/createPiano";
 
 type BBSTime = string; // "bars:beats:sixteenths"
+
+export type PadPreset = "classic" | "worship";
+
+/**
+ * Anything that exposes Tone's note-trigger interface. Lets us swap between the
+ * sample-based `createPad` and the synth-based `createWorshipPad` without
+ * leaking concrete types through the player.
+ */
+type PadVoice = {
+  triggerAttackRelease(
+    notes: string | string[],
+    duration: BBSTime | number,
+    time?: number,
+    velocity?: number,
+  ): unknown;
+  volume: Tone.Param<"decibels"> | {value: number};
+  dispose(): unknown;
+};
 
 interface MidiEvent {
   time: BBSTime;
@@ -19,6 +38,8 @@ export interface PlayOptions {
   introBars?: number;      // кількість тактів вступного кліку перед відтворенням
   padVolume?: number;      // дБ
   pianoVolume?: number;    // дБ
+  padPreset?: PadPreset;   // default залежить від плеєра (defaultPlayer → "classic")
+  piano?: boolean;         // грати піаніно-стаб поверх пада; default: true
   onEnded?: () => void;
 }
 
@@ -69,7 +90,7 @@ function midiToBBSEvents(midi: Midi): MidiEvent[] {
   );
 }
 
-function createPart(events: MidiEvent[], players: { pad?: Tone.Sampler; piano?: Tone.Sampler }) {
+function createPart(events: MidiEvent[], players: { pad?: PadVoice; piano?: Tone.Sampler }) {
   const part = new Tone.Part<MidiEvent>((time, e) => {
     players.pad?.triggerAttackRelease(e.name, e.duration, time, e.velocity);
     players.piano?.triggerAttackRelease(e.name, e.duration, time, e.velocity);
@@ -123,7 +144,7 @@ function setDestinationVolumeImmediately(volume: number) {
 export class MidiPlayer {
   private part: Tone.Part<MidiEvent> | null = null;
   private metro: MetronomeCtrl | null = null;
-  private pad: Tone.Sampler | null = null;
+  private pad: PadVoice | null = null;
   private piano: Tone.Sampler | null = null;
   private state: MidiPlayerState = "idle";
   private endEventId: number | null = null;
@@ -169,19 +190,24 @@ export class MidiPlayer {
     const introOffset = introBars > 0 ? `${introBars}m` : 0;
     const introOffsetSeconds = Tone.Time(introOffset).toSeconds();
 
-    this.pad = createPad();
-    this.piano = createPiano();
+    const preset = opts.padPreset ?? this.defaults.padPreset ?? "worship";
+    this.pad = preset === "worship" ? createWorshipPad() : createPad();
     if (typeof opts.padVolume === "number") {
       this.pad.volume.value = opts.padVolume;
     }
-    if (typeof opts.pianoVolume === "number") {
+
+    // Піаніно — додатковий "стаб" поверх пада. Якщо вимкнено (`piano: false`),
+    // пед лишається основним (і єдиним) звуком.
+    const wantPiano = (opts.piano ?? this.defaults.piano) !== false;
+    this.piano = wantPiano ? createPiano() : null;
+    if (this.piano && typeof opts.pianoVolume === "number") {
       this.piano.volume.value = opts.pianoVolume;
     }
 
     await Tone.loaded();
 
     const events = midiToBBSEvents(midi);
-    this.part = createPart(events, { pad: this.pad, piano: this.piano });
+    this.part = createPart(events, { pad: this.pad, piano: this.piano ?? undefined });
     this.part.start(introOffset);
 
     const endBBS = computeEndBBS(midi);
@@ -256,10 +282,10 @@ export class MidiPlayer {
   dispose() {
     this.cancelEndEvent();
     this.clearFadeTimer();
-    try { this.metro?.dispose(); } catch {}
-    try { this.part?.dispose(); } catch {}
-    try { this.pad?.dispose(); } catch {}
-    try { this.piano?.dispose(); } catch {}
+    try { this.metro?.dispose(); } catch { /* ignore */ }
+    try { this.part?.dispose(); } catch { /* ignore */ }
+    try { this.pad?.dispose(); } catch { /* ignore */ }
+    try { this.piano?.dispose(); } catch { /* ignore */ }
     this.metro = null;
     this.part = null;
     this.pad = null;
@@ -269,7 +295,9 @@ export class MidiPlayer {
 }
 
 // ========== Тонка обгортка під старе API (окремі функції) ==========
-const defaultPlayer = new MidiPlayer();
+// Основний звук плеєра — старий семпл-пед (lotus-pond, пресет "classic"),
+// піаніно-стаб вимкнено: "як було раніше".
+const defaultPlayer = new MidiPlayer({ padPreset: "classic", piano: false });
 
 export async function playMidiProgressionGpt(midi: Midi, opts?: PlayOptions) {
   return defaultPlayer.play(midi, opts);

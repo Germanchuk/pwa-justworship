@@ -1,4 +1,5 @@
 import React from "react";
+import { Button } from "@/components/ui/button";
 
 export default function CreateChurch() {
   return (
@@ -11,11 +12,11 @@ export default function CreateChurch() {
         <input
           type="text"
           placeholder="Джерело життя"
-          className="input input-bordered w-full"
+          className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs w-full"
         />
       </label>
       <div className="py-4 flex justify-center">
-        <button className="btn btn-primary">Зареєструвати</button>
+        <Button>Зареєструвати</Button>
       </div>
     </div>
   );

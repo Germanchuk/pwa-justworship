@@ -133,7 +133,7 @@ export default function ChunkedTextarea({ coloredLines, setLines, value }: { val
               coloredLines={coloredLinesChunks[i]}
               onChange={(e) => handleChange(i, e.target)}
               onKeyDown={(e) => handleKeydown(i, e)}
-              className={"w-96 border-x-1 border-base-200"}
+              className={"w-96 border-x-1 border-muted"}
             />
           ))}
         </div>

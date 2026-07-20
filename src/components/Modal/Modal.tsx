@@ -1,4 +1,5 @@
 import React, {useEffect} from "react";
+import { Button } from "@/components/ui/button";
 
 export function Modal({ trigger = null, content, title, hideCloseButton = false }: any) {
   const ref = React.useRef(null);
@@ -24,9 +25,9 @@ export function Modal({ trigger = null, content, title, hideCloseButton = false 
           <form method="dialog" className="flex justify-between items-center">
             {/* if there is a button in form, it will close the modal */}
             {title && (<h4 className="text-lg">{title}</h4>)}
-            {!hideCloseButton && <button className="btn btn-sm btn-circle btn-ghost">
+            {!hideCloseButton && <Button variant="ghost" size="icon" className="size-8 rounded-full">
               <CloseIcon />
-            </button>}
+            </Button>}
           </form>
           <div className="pt-4">
             {content}

@@ -2,7 +2,7 @@ import {ReactNode, useCallback, useState} from "react";
 import {APP_TITLE} from "#constants/app";
 import { PageFooterContext } from "./context";
 
-const DefaultFooter = ({children}) => <h1 className="text-xl font-semibold">{children}</h1>;
+const DefaultFooter = ({children}) => <h1 className="w-full text-xl font-extrabold font-['Unbounded'] text-center">{children}</h1>;
 
 const normalizeFooter = (footer: ReactNode | null) => {
   if (typeof footer === "string") {
