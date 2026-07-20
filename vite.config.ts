@@ -39,6 +39,10 @@ export default defineConfig({
       },
       strategies: "generateSW",
       workbox: {
+        // Main JS bundle grew past workbox's 2 MiB default after the Slate/Yjs
+        // migration, which made generateSW throw and fail the build. Raise the
+        // precache size limit so the bundle is cached instead of erroring.
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/be\.justworship\.uk\/api\/.*/,
