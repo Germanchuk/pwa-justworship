@@ -1,11 +1,10 @@
-import { useConnectionStatus, useIsReadonly } from "../../redux/selectors";
+import { useConnectionStatus } from "../../redux/selectors";
 
 const COLOR: Record<string, string> = {
   connecting: "bg-yellow-500",
   connected: "bg-green-500",
   disconnected: "bg-red-500",
   error: "bg-red-600",
-  readonly: "bg-gray-400",
 };
 
 const LABEL: Record<string, string> = {
@@ -13,13 +12,10 @@ const LABEL: Record<string, string> = {
   connected: "Live",
   disconnected: "Офлайн",
   error: "Немає доступу",
-  readonly: "Тільки перегляд",
 };
 
 export function ConnectionStatus() {
-  const status = useConnectionStatus();
-  const isReadonly = useIsReadonly();
-  const key = isReadonly ? "readonly" : status;
+  const key = useConnectionStatus();
 
   return (
     <div

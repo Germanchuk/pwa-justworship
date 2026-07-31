@@ -2,6 +2,7 @@ import "./Song.css";
 import {useSongId} from "../redux/selectors";
 import SlateLyricsPlayground from "./SlateLyricsPlayground/SlateLyricsPlayground";
 import {PresenceList} from "./PresenceList/PresenceList";
+import {MigrationGate} from "./MigrationGate/MigrationGate";
 import {memo} from "react";
 
 const Song = () => {
@@ -11,7 +12,9 @@ const Song = () => {
     <div className="flex flex-col gap-4">
       <PresenceList />
       {songId && (
-        <SlateLyricsPlayground key={songId} songId={songId} />
+        <MigrationGate key={songId} songId={songId}>
+          <SlateLyricsPlayground songId={songId} />
+        </MigrationGate>
       )}
     </div>
   );

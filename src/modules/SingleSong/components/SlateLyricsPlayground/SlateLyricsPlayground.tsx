@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { createEditor, type Descendant, type Editor } from "slate";
+import { createEditor, type Editor } from "slate";
 import { Slate, Editable, withReact } from "slate-react";
 import { withYjs, withYHistory, YjsEditor } from "@slate-yjs/core";
 
@@ -15,7 +15,7 @@ import { CommentsFab } from "./comments/CommentsFab";
 import { LostCommentsBlock } from "./comments/LostCommentsBlock";
 import { pushLostComment } from "./comments/lostComments";
 import { useCollabProvider } from "./useCollabProvider";
-import { useConnectionStatus, useIsReadonly, useSlate } from "../../redux/selectors";
+import { useConnectionStatus } from "../../redux/selectors";
 import { useCurrentUsername } from "./elements/hooks";
 import { SlatePlayerBridge } from "./player/SlatePlayerBridge";
 import { usePlayerDecorate } from "./player/usePlayerDecorate";
@@ -26,21 +26,10 @@ interface Props {
   songId: string | number;
 }
 
-const EMPTY_DOCUMENT: Descendant[] = [
-  { type: "empty-line", children: [{ text: "" }] } as unknown as Descendant,
-];
-
-function DecoratedEditable({
-  readOnly,
-  placeholder,
-}: {
-  readOnly?: boolean;
-  placeholder?: string;
-}) {
+function DecoratedEditable({ placeholder }: { placeholder?: string }) {
   const decorate = usePlayerDecorate();
   return (
     <Editable
-      readOnly={readOnly}
       className="slate-editable"
       renderElement={renderElement}
       renderLeaf={(props) => <RenderLeaf {...props} />}
@@ -48,26 +37,6 @@ function DecoratedEditable({
       onContextMenu={(e) => e.preventDefault()}
       placeholder={placeholder}
     />
-  );
-}
-
-function ReadonlyView({ slate }: { slate: Descendant[] | null | undefined }) {
-  const editor = useMemo(() => {
-    let e = withReact(createEditor());
-    e = withMetaSchema(e);
-    e = withHeader(e);
-    e = withSections(e);
-    e = withComments(e);
-    return e;
-  }, []);
-  const value = Array.isArray(slate) && slate.length > 0 ? slate : EMPTY_DOCUMENT;
-
-  return (
-    <Slate editor={editor} initialValue={value}>
-      <SlatePlayerBridge editor={editor}>
-        <DecoratedEditable readOnly />
-      </SlatePlayerBridge>
-    </Slate>
   );
 }
 
@@ -101,11 +70,25 @@ function CollabView({ songId }: { songId: string | number }) {
     return e;
   }, [sharedRoot, ydoc]);
 
+  // Підключаємось ЛИШЕ після синхронізації з сервером. Якщо приєднати
+  // редактор до ще порожнього Y.Doc, Slate одразу нормалізує його і впише
+  // у спільний документ дефолтний хедер (порожня назва, bpm 0, 4/4, C).
+  // Коли слідом приїде справжній стан, у корені стане два хедери, і правило
+  // дедуплікації в withHeader зітре саме той, що з реальними даними.
   useEffect(() => {
+    if (!synced) return;
     const yjsEditor = editor as unknown as Parameters<typeof YjsEditor.connect>[0];
     YjsEditor.connect(yjsEditor);
     return () => YjsEditor.disconnect(yjsEditor);
-  }, [editor]);
+  }, [editor, synced]);
+
+  // DEBUG: логуємо стан Yjs-документа при кожній зміні
+  useEffect(() => {
+    console.log("yjs", sharedRoot.toJSON());
+    const log = () => console.log("yjs", sharedRoot.toJSON());
+    sharedRoot.observeDeep(log);
+    return () => sharedRoot.unobserveDeep(log);
+  }, [sharedRoot]);
 
   if (status === "error") {
     return (
@@ -136,12 +119,5 @@ function CollabView({ songId }: { songId: string | number }) {
 }
 
 export default function SlateLyricsPlayground({ songId }: Props) {
-  const isReadonly = useIsReadonly();
-  const slate = useSlate();
-
-  if (isReadonly) {
-    return <ReadonlyView slate={slate} />;
-  }
-
   return <CollabView songId={songId} />;
 }

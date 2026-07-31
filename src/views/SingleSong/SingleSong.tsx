@@ -1,17 +1,14 @@
-import React, {useCallback, useEffect, useRef} from "react";
+import React from "react";
 import { useParams } from "react-router-dom";
 import Song from "#modules/SingleSong/components/Song";
 import { useDispatch } from "react-redux";
 import {
-  useSong,
   useSetSong,
   useSetPreferences,
-  useEditMode,
 } from "#modules/SingleSong/redux/selectors";
-import {fetchSongThunk} from "#modules/SingleSong/redux/songThunks";
-import {songApi, sPreferencesApi} from "#modules/SingleSong/api";
+import {sPreferencesApi} from "#modules/SingleSong/api";
 import {SongControls} from "#modules/SingleSong/components/SongControls/SongControls";
-import {setEditMode, setStatus} from "#modules/SingleSong/redux/songSlice";
+import {setEditMode} from "#modules/SingleSong/redux/songSlice";
 import {SongHeader} from "#modules/SingleSong/components/SongHeader/SongHeader";
 import {ToPageHeaderArea} from "#layout/PageHeaderArea/ToPageHeaderArea";
 import {ToPageFooterArea} from "#layout/PageFooterArea/ToPageFooterArea";
@@ -20,22 +17,7 @@ export default function SingleSong() {
   const { songId } = useParams();
   const setPreferences = useSetPreferences();
   const dispatch = useDispatch();
-  const song = useSong();
-  const editMode = useEditMode();
   const setSong = useSetSong();
-  const isReadonly = Boolean(song?.readonly);
-  const saveTimeout = useRef<NodeJS.Timeout | null>(null);
-
-  const saveSong = useCallback(song => {
-    dispatch(setStatus("saving"));
-    songApi.updateSong(song.id, song)
-      .then(() => {
-        dispatch(setStatus("saved"));
-      })
-      .catch(() => {
-        dispatch(setStatus("error"));
-      });
-  }, []);
 
   React.useEffect(() => {
     return () => {
@@ -51,45 +33,14 @@ export default function SingleSong() {
     });
   }, [songId]);
 
+  // The song itself is never fetched over HTTP: the collab WebSocket document
+  // (`song:<id>`) is the single source of truth for content *and* header
+  // attributes (name/bpm/key/time signature). All the client needs from the
+  // route is the id to open that document with.
   React.useEffect(() => {
     if (!songId) return;
-    // @ts-ignore
-    dispatch(fetchSongThunk(songId))
+    dispatch(setSong({ id: songId }));
   }, [songId, dispatch]);
-
-  React.useEffect(() => {
-    if (editMode) return;
-    if (!songId) return;
-
-    const intervalId = setInterval(() => {
-      // @ts-ignore
-      dispatch(fetchSongThunk(songId));
-    }, 15000);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [songId, editMode, dispatch]);
-
-  React.useEffect(() => {
-    if (!editMode) return;
-
-    dispatch(setStatus("pending"));
-
-    if (saveTimeout.current) {
-      clearTimeout(saveTimeout.current);
-    }
-
-    saveTimeout.current = setTimeout(() => {
-      saveSong(song);
-    }, 1000);
-
-    return () => {
-      if (saveTimeout.current) {
-        clearTimeout(saveTimeout.current);
-      }
-    };
-  }, [song]);
 
   return (
     <>
@@ -98,7 +49,7 @@ export default function SingleSong() {
       </ToPageHeaderArea>
       <Song />
       <ToPageFooterArea>
-        <SongControls isReadonly={isReadonly} songId={songId} />
+        <SongControls songId={songId} />
       </ToPageFooterArea>
     </>
   );
