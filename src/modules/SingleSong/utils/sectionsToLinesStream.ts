@@ -1,5 +1,5 @@
 import {Section, Line, LineType} from "#models/song";
-import {defineLineType} from "#modules/SingleSong/components/LyricsPlayground/Lines/defineLineType";
+import {defineLineType} from "#modules/SingleSong/utils/defineLineType";
 
 export const sectionsToLinesStream: (sections: Section[]) => Line[] = (sections) => {
   // this function transforms sections array obtained from be/db - to Array<Line>

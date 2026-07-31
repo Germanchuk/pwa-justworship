@@ -76,23 +76,8 @@ const songSlice = createSlice({
     resetSong: (state) => {
       state.song = {};
     },
-    setSongName: (state, action) => {
-      state.song.name = action.payload;
-    },
-    setBpm: (state, action) => {
-      state.song.bpm = action.payload;
-    },
-    setKey: (state, action) => {
-      state.song.key = action.payload;
-    },
-    setTimeSignature: (state, action) => {
-      state.song.timeSignature = action.payload;
-    },
     setEditMode: (state, action) => {
       state.editMode = action.payload;
-    },
-    setSections: (state, action) => {
-      state.song.sections = action.payload;
     },
     setPreferences: (state, action) => {
       state.preferences = {
@@ -135,12 +120,7 @@ const songSlice = createSlice({
 export const {
   setSong,
   resetSong,
-  setSongName,
-  setBpm,
-  setKey,
-  setTimeSignature,
   setEditMode,
-  setSections,
   setPreferences,
   showChordsAgainstPreferences,
   setStatus,

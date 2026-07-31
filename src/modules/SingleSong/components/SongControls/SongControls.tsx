@@ -15,7 +15,6 @@ import {ConnectionStatus} from "../ConnectionStatus/ConnectionStatus";
 import { useCarefulMode, useSetCarefulMode } from "../../redux/selectors";
 
 export const SongControls = ({
-  isReadonly,
   songId
 }) => {
   const [chordsHidden, setChordsHidden] = useState(false);

@@ -11,11 +11,6 @@ export const songApi = {
       }),
     }
   ),
-  getSong: (songId) => (
-    fetchAPI(`/currentBandSongs/${songId}`, {
-      populate: ["sections"],
-    })
-  ),
   updateSong: (songId, song) => fetchAPI(`/currentBandSongs/${songId}`, {}, {
     method: "PUT",
     body: JSON.stringify({data: song}),
@@ -24,5 +19,6 @@ export const songApi = {
     method: "DELETE",
     body: song, // do we need this body ?
   }),
-  copySong: (songId) => fetchAPI(`/copySong/${songId}`, {}, { method: "POST" })
+  copySong: (songId) => fetchAPI(`/copySong/${songId}`, {}, { method: "POST" }),
+  getSong: (songId) => fetchAPI(`/currentBandSongs/${songId}`, {}, {}, true),
 }
