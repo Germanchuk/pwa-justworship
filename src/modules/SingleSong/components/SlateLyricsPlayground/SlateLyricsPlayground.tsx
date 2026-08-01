@@ -15,6 +15,7 @@ import { CommentsFab } from "./comments/CommentsFab";
 import { LostCommentsBlock } from "./comments/LostCommentsBlock";
 import { pushLostComment } from "./comments/lostComments";
 import { useCollabProvider } from "./useCollabProvider";
+import { useFillViewportHeight } from "./useFillViewportHeight";
 import { setActiveSongEditor } from "./songEditorRegistry";
 import { useConnectionStatus } from "../../redux/selectors";
 import { useCurrentUsername } from "./elements/hooks";
@@ -29,8 +30,11 @@ interface Props {
 
 function DecoratedEditable({ placeholder }: { placeholder?: string }) {
   const decorate = usePlayerDecorate();
+  const editableRef = useRef<HTMLDivElement | null>(null);
+  useFillViewportHeight(editableRef);
   return (
     <Editable
+      ref={editableRef}
       className="slate-editable"
       renderElement={renderElement}
       renderLeaf={(props) => <RenderLeaf {...props} />}
