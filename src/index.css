@@ -14,6 +14,8 @@
   --color-delete-base: #fecaca;
   --color-delete-content: #450a0a;
   --color-error: #b91c1c;
+  /* Світліший жовтуватий папір за фон сторінки (#f8f5eb) — секції, порожні рядки */
+  --color-paper-raised: #fdfbf0;
 }
 
 :root {

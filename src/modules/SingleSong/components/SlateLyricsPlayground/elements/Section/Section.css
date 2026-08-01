@@ -1,6 +1,7 @@
 .song-section {
   position: relative;
   padding-left: 8px;
+  background-color: var(--color-paper-raised, #fdfbf0);
   border-radius: 0 4px 4px 0;
   overflow: hidden;
 }

@@ -10,7 +10,6 @@ import CreateSong from "#views/CreateSong/CreateSong";
 import SongsList from "#views/SongsList/SongsList";
 import Login from "#views/Login/Login";
 import Registration from "#views/Registration/Registration";
-import TextToSong from "#views/TextToSong/TextToSong";
 import SingleSong from "#views/SingleSong/SingleSong";
 import FromScratch from "#views/FromScratch/FromScratch";
 import Preferences from "#views/Preferences/Preferences";
@@ -44,7 +43,6 @@ function Router() {
           <Route path={Routes.PublicSongs} element={<SongsList />} />
           <Route path={Routes.SinglePublicSong} element={<SingleSong />} />
           <Route path={Routes.CreateSong} element={<CreateSong />} />
-          <Route path={Routes.AddSongTextToSong} element={<TextToSong />} />
           <Route path={Routes.AddSongFromScratch} element={<FromScratch />} />
           <Route path={Routes.Preferences} element={<Preferences />} />
           <Route path={Routes.JoinChurch} element={<JoinChurch />} />

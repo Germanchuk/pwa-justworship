@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { createEditor, type Editor } from "slate";
+import { createEditor, type Descendant, type Editor } from "slate";
 import { Slate, Editable, withReact } from "slate-react";
 import { withYjs, withYHistory, YjsEditor } from "@slate-yjs/core";
 
@@ -15,6 +15,7 @@ import { CommentsFab } from "./comments/CommentsFab";
 import { LostCommentsBlock } from "./comments/LostCommentsBlock";
 import { pushLostComment } from "./comments/lostComments";
 import { useCollabProvider } from "./useCollabProvider";
+import { setActiveSongEditor } from "./songEditorRegistry";
 import { useConnectionStatus } from "../../redux/selectors";
 import { useCurrentUsername } from "./elements/hooks";
 import { SlatePlayerBridge } from "./player/SlatePlayerBridge";
@@ -82,13 +83,32 @@ function CollabView({ songId }: { songId: string | number }) {
     return () => YjsEditor.disconnect(yjsEditor);
   }, [editor, synced]);
 
-  // DEBUG: логуємо стан Yjs-документа при кожній зміні
+  // Віддаємо редактор споживачам поза деревом <Slate> (експорт у .docx з
+  // футерних SongControls) — див. `songEditorRegistry.ts`.
   useEffect(() => {
-    console.log("yjs", sharedRoot.toJSON());
-    const log = () => console.log("yjs", sharedRoot.toJSON());
-    sharedRoot.observeDeep(log);
-    return () => sharedRoot.unobserveDeep(log);
-  }, [sharedRoot]);
+    setActiveSongEditor(editor);
+    return () => setActiveSongEditor(null);
+  }, [editor]);
+
+  // DEBUG (тільки dev): доступ до Slate-структури пісні з консолі.
+  //   __slate()  — дерево, яке розгортається кліками в консолі
+  //   __json()   — той самий вміст рядком; зручно `copy(__json())`
+  // Це живий стан МОГО редактора: на відміну від колонки `song.slate`, тут
+  // ще присутні per-user дані (коментарі, капо, згорнуті секції), які
+  // `sanitizeSnapshot` вирізає перед записом у REST.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const w = window as unknown as {
+      __slate?: () => Descendant[];
+      __json?: () => string;
+    };
+    w.__slate = () => editor.children;
+    w.__json = () => JSON.stringify(editor.children, null, 2);
+    return () => {
+      delete w.__slate;
+      delete w.__json;
+    };
+  }, [editor]);
 
   if (status === "error") {
     return (
