@@ -58,8 +58,12 @@
 /* Highlight applied via renderLeaf to text leaves carrying a comment mark.
    background-color is set inline (per-comment, semi-transparent) so that
    parallel/overlapping highlights stack visibly via alpha compositing. */
-.comment-highlight {
-  border-radius: 2px;
-  padding: 0 1px;
-}
+/*.comment-highlight {*/
+/*  border-radius: 2px;*/
+/*  !* 1px «повітря» по краях підсвітки, скомпенсований відʼємним марджином:*/
+/*     інакше кожен вкладений highlight-span (по одному на коментар) додавав*/
+/*     би +2px ширини і текст розʼїжджався при кількох виділеннях. *!*/
+/*  padding: 0 1px;*/
+/*  margin: 0 -1px;*/
+/*}*/
 

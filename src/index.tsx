@@ -1,7 +1,6 @@
 import ReactDOM from "react-dom/client";
 
 import "./index.css";
-import "./views/TextToSong/HighlightedOutput/Block/block.css";
 import "./components/MagicInput/MagicInput.css";
 
 import "react-datepicker/dist/react-datepicker.css";

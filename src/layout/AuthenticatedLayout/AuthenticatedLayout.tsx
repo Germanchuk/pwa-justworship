@@ -38,7 +38,7 @@ export default function AuthenticatedLayout({ children }) {
           {children}
         </Container>
       </ErrorBoundary>
-      <HardReloadButton />
+      {/*<HardReloadButton />*/}
     </>
   );
 }

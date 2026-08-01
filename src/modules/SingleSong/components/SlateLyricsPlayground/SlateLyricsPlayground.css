@@ -8,11 +8,49 @@
   -webkit-touch-callout: none;
 }
 
-/*.slate-editable {*/
-/*  min-height: 70vh;*/
-/*  column-count: 2;*/
-/*  column-gap: 4px;*/
-/*}*/
+/* Широкі екрани: пісня розкладається в газетні колонки.
+   Висота колонки прибита до екрана, тож те, що не влізло, іде НЕ вниз,
+   а в наступну колонку праворуч — вертикальний скрол стає горизонтальним.
+   Механіка: фіксована height + column-count змушує браузер створювати
+   «overflow columns» за межами боксу, які й скролить overflow-x. */
+@media (min-width: 1024px) {
+  .slate-editable {
+    /* Дві ручки налаштування.
+       height  — компенсація верхнього меню (sticky BottomBar ~64px) і Container.
+       width   — БАЖАНА ширина колонки: браузер вміщує стільки колонок, скільки
+                 влізе, і розтягує їх на решту місця, тож фактична ширина завжди
+                 трохи більша за задану. Менше значення = вужчі колонки. */
+    --song-column-height: 90dvh;
+    --song-column-width: 16rem;
+
+    height: var(--song-column-height);
+    column-width: var(--song-column-width);
+    column-gap: 24px;
+    column-rule: 1px dashed rgba(0, 0, 0, 0.12);
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+  }
+
+  /* `overflow: hidden` робить секцію монолітною для multicol — браузер не
+     фрагментує скрол-контекст і переносить її в наступну колонку цілком.
+     Знімаємо його, а смужку динаміки з абсолютного ::before (він намалювався
+     б лише в першому фрагменті) переводимо у фон з box-decoration-break:
+     clone — так кожен фрагмент отримує власну смужку на всю свою висоту. */
+  .slate-editable .song-section {
+    overflow: visible;
+    background-image: var(--section-stripe, linear-gradient(#1e3a8a, #1e3a8a));
+    background-repeat: no-repeat;
+    background-position: left top;
+    background-size: 4px 100%;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  .slate-editable .song-section::before {
+    display: none;
+  }
+}
 
 .chord-token {
   cursor: pointer;

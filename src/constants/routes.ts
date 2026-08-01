@@ -15,7 +15,6 @@ export enum Routes {
   SingleBandSong = "/bandSongs/:songId",
   //
   CreateSong = "/songs/create",
-  AddSongTextToSong = "/songs/create/textToSong",
   AddSongFromScratch = "/songs/create/fromScratch",
   //
   ChurchShedule = "/churchShedule",

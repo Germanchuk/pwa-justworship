@@ -6,17 +6,15 @@ import {
   type MidiPlayerState,
   type PlayOptions,
 } from "./playMidiGpt";
-import {getMidiFromSections} from "./getMidiFromSections/getMidiFromSections";
 import {getMidiFromSlate, type SongContentSnapshot} from "./getMidiFromSlate/getMidiFromSlate";
 import type {ChordTimelineEvent} from "./getMidiFromSections/utils/progressionToTimeline";
 
 type StateListener = (state: MidiPlayerState) => void;
 type ChordListener = (event: ChordTimelineEvent | null) => void;
 type SelectionListener = (eventKey: string | null) => void;
-type LegacySelectionListener = (eventId: number | null) => void;
 type ContentProvider = () => SongContentSnapshot | null;
 type PlaybackPlan = {
-  midi: ReturnType<typeof getMidiFromSections>["midi"];
+  midi: ReturnType<typeof getMidiFromSlate>["midi"];
   timeline: ChordTimelineEvent[];
   options: PlayOptions;
 };
@@ -107,25 +105,6 @@ class ChordsProgressionPlayer {
     };
   }
 
-  /** Legacy numeric-id API — kept for `LyricsPlayground`. */
-  setStartChordId(chordId: number | null) {
-    this.setStartChordTokenKey(chordId == null ? null : String(chordId));
-  }
-
-  getStartChordId(): number | null {
-    if (this.selectedKey == null) return null;
-    const n = Number(this.selectedKey);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  onSelectedChordChange(listener: LegacySelectionListener) {
-    return this.onSelectedChordKeyChange((key) => {
-      if (key == null) return listener(null);
-      const n = Number(key);
-      listener(Number.isFinite(n) ? n : null);
-    });
-  }
-
   setContentProvider(provider: ContentProvider | null) {
     if (this.contentProvider === provider) return;
     if (this.contentProvider && provider == null && this.state !== "idle") {
@@ -153,10 +132,15 @@ class ChordsProgressionPlayer {
   };
 
   private buildPlaybackPlan(options: Partial<PlayOptions>): PlaybackPlan | null {
-    const prepared = this.contentProvider
-      ? getMidiFromSlate(this.contentProvider(), this.selectedKey)
-      : getMidiFromSections(this.getStartChordId());
-    const { midi, timeline, bpm, timeSignature } = prepared;
+    if (!this.contentProvider) {
+      this.handlePlaybackComplete();
+      return null;
+    }
+
+    const { midi, timeline, bpm, timeSignature } = getMidiFromSlate(
+      this.contentProvider(),
+      this.selectedKey,
+    );
     const beatsPerBar = timeSignature?.[0] ?? 4;
 
     if (timeline.length === 0) {

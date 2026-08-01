@@ -53,7 +53,9 @@ export const buildDynamicsGradient = (
     .filter(isDynamicsStepKey)
     .map((key) => STEP_BY_KEY[key].color);
   if (colors.length === 0) return undefined;
-  if (colors.length === 1) return colors[0];
+  // Завжди градієнт, навіть для одного кольору: смужка секції вживається і як
+  // background-image (колонковий режим), а туди голий колір підставити не можна.
+  if (colors.length === 1) return `linear-gradient(${colors[0]}, ${colors[0]})`;
   const stops = colors.map((color, index) => {
     const pct = Math.round((index / (colors.length - 1)) * 1000) / 10;
     return `${color} ${pct}%`;
