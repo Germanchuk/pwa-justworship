@@ -10,7 +10,7 @@ const Song = () => {
 
   return (
     <div className="flex flex-col gap-4">
-      <PresenceList />
+      {/*<PresenceList />*/}
       {songId && (
         <MigrationGate key={songId} songId={songId}>
           <SlateLyricsPlayground songId={songId} />
