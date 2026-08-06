@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "pwa-justworship",
+  "name": "pre-prod-pwa-justworship",
   "compatibility_date": "2026-07-20",
   "observability": {
     "enabled": true
