@@ -1,8 +1,12 @@
 import {fetchAPI} from "#utils/fetch-api";
 
+type Id = string | number;
+
+// Пісня завжди належить гурту, тому кожен виклик починається з `bandId` —
+// його дає `useBand()` з URL, а не якийсь прихований "поточний гурт".
 export const songApi = {
-  createSong: (song) => fetchAPI(
-    "/currentBandSongs",
+  createSong: (bandId: Id, song) => fetchAPI(
+    `/bands/${bandId}/songs`,
     {},
     {
       method: "POST",
@@ -11,14 +15,14 @@ export const songApi = {
       }),
     }
   ),
-  updateSong: (songId, song) => fetchAPI(`/currentBandSongs/${songId}`, {}, {
+  updateSong: (bandId: Id, songId: Id, song) => fetchAPI(`/bands/${bandId}/songs/${songId}`, {}, {
     method: "PUT",
     body: JSON.stringify({data: song}),
   }, true),
-  deleteSong: (songId, song) => fetchAPI(`/currentBandSongs/${songId}`, {}, {
+  deleteSong: (bandId: Id, songId: Id) => fetchAPI(`/bands/${bandId}/songs/${songId}`, {}, {
     method: "DELETE",
-    body: song, // do we need this body ?
   }),
-  copySong: (songId) => fetchAPI(`/copySong/${songId}`, {}, { method: "POST" }),
-  getSong: (songId) => fetchAPI(`/currentBandSongs/${songId}`, {}, {}, true),
+  // `bandId` — куди кладемо копію, `songId` — що копіюємо.
+  copySong: (bandId: Id, songId: Id) => fetchAPI(`/bands/${bandId}/songs/${songId}/copy`, {}, { method: "POST" }),
+  getSong: (bandId: Id, songId: Id) => fetchAPI(`/bands/${bandId}/songs/${songId}`, {}, {}, true),
 }

@@ -3,6 +3,7 @@ import { EllipsisHorizontalCircleIcon } from "@heroicons/react/24/outline";
 import { type Element, Node, type Path, Transforms } from "slate";
 import { ReactEditor, useSlate } from "slate-react";
 
+import { useCanEditContent } from "../../../../mode";
 import type { DynamicsStepKey } from "../../constants/dynamicsSteps";
 import type { SectionElement } from "../../types";
 import { SectionMetaModal } from "./SectionMetaModal";
@@ -11,8 +12,10 @@ import "./SectionEditButton.css";
 export const SectionEditButton = ({ lineElement }: { lineElement: Element }) => {
   const editor = useSlate();
   const [open, setOpen] = useState(false);
+  // Атрибути секції (повтори, динаміка) — спільний вміст пісні.
+  const canEditContent = useCanEditContent();
 
-  if (ReactEditor.isReadOnly(editor)) return null;
+  if (!canEditContent) return null;
 
   let section: SectionElement;
   let sectionPath: Path;

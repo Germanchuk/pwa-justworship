@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { onCapoBlocked } from "./capoBlock";
-import "./CapoBlockedTooltip.css";
+import { onModeBlocked } from "./modeBlock";
+import "./ModeBlockedTooltip.css";
 
 // Новий обʼєкт стану щоразу → ре-рендер і перезапуск таймера авто-зникнення,
 // навіть якщо спроба була в тій самій точці.
@@ -10,29 +10,33 @@ interface Pos {
   left: number;
 }
 
-export function CapoBlockedTooltip() {
+export function ModeBlockedTooltip() {
   const [pos, setPos] = useState<Pos | null>(null);
 
   useEffect(
     () =>
-      onCapoBlocked(() => {
+      onModeBlocked(() => {
         const sel = window.getSelection();
         if (!sel || sel.rangeCount === 0) return;
 
         const range = sel.getRangeAt(0);
+        const caretRect = range.getBoundingClientRect();
+        if (caretRect.width > 0 || caretRect.height > 0) {
+          setPos({ top: caretRect.top, left: caretRect.left });
+          return;
+        }
+
+        // Згорнута каретка в порожньому рядку дає нульовий rect — беремо рядок.
         const startEl =
           range.startContainer.nodeType === Node.TEXT_NODE
             ? range.startContainer.parentElement
             : (range.startContainer as Element);
-        const chordEl = startEl?.closest?.(".chord-line") as HTMLElement | null;
-        if (!chordEl) return;
-
-        const lineRect = chordEl.getBoundingClientRect();
-        const caretRect = range.getBoundingClientRect();
-        const hasCaret = caretRect.width > 0 || caretRect.height > 0;
-        const left = hasCaret ? caretRect.left : lineRect.left + lineRect.width / 2;
-
-        setPos({ top: lineRect.top, left });
+        const lineRect = startEl?.getBoundingClientRect();
+        if (!lineRect) return;
+        setPos({
+          top: lineRect.top,
+          left: lineRect.left + lineRect.width / 2,
+        });
       }),
     [],
   );
@@ -47,12 +51,12 @@ export function CapoBlockedTooltip() {
 
   return (
     <div
-      className="capo-blocked-tooltip"
+      className="mode-blocked-tooltip"
       style={{ top: pos.top, left: pos.left }}
       role="status"
     >
-      Капо ввімкнено — акорди показані у вашій тональності й заблоковані. Щоб
-      редагувати, вимкніть капо кнопкою ⏻ біля «Капо».
+      Змінювати пісню можна лише в режимі редагування — перемкніть режим у
+      панелі знизу.
     </div>
   );
 }

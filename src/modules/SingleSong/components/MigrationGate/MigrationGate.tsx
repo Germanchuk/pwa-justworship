@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { songApi } from "../../api";
+import { useBandId } from "#modules/Band/BandLayout";
 
 interface CollabStatus {
   /** Пісня вже має collab-state: `lastCollabSavedAt` виставляється при першому збереженні. */
@@ -27,6 +28,7 @@ export function MigrationGate({ songId, children }: Props) {
   const [status, setStatus] = useState<CollabStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const bandId = useBandId();
 
   useEffect(() => {
     let cancelled = false;
@@ -35,7 +37,7 @@ export function MigrationGate({ songId, children }: Props) {
     setConfirmed(false);
 
     songApi
-      .getSong(songId)
+      .getSong(bandId, songId)
       .then((response) => {
         if (cancelled) return;
         const song = response?.data ?? {};
@@ -51,7 +53,7 @@ export function MigrationGate({ songId, children }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [songId]);
+  }, [bandId, songId]);
 
   if (error) {
     return (

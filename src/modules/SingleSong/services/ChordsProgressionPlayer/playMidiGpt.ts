@@ -295,9 +295,9 @@ export class MidiPlayer {
 }
 
 // ========== Тонка обгортка під старе API (окремі функції) ==========
-// Основний звук плеєра — старий семпл-пед (lotus-pond, пресет "classic"),
-// піаніно-стаб вимкнено: "як було раніше".
-const defaultPlayer = new MidiPlayer({ padPreset: "classic", piano: false });
+// Режим піаніно: семпл-пед (lotus-pond, пресет "classic") лишається підкладкою,
+// поверх нього грає піаніно-стаб.
+const defaultPlayer = new MidiPlayer({ padPreset: "classic", piano: true });
 
 export async function playMidiProgressionGpt(midi: Midi, opts?: PlayOptions) {
   return defaultPlayer.play(midi, opts);

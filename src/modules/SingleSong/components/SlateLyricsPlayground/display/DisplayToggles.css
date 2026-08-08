@@ -1,0 +1,15 @@
+/* Перемикачі показу — той самий вигляд, що в капо: бейдж + свіч, по рядку на
+   фільтр. Класи бейджа беруться з SongMetaRow.css. */
+.display-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  user-select: none;
+}
+
+.display-toggle svg {
+  width: 1em;
+  height: 1em;
+  color: #6b7280;
+}
+

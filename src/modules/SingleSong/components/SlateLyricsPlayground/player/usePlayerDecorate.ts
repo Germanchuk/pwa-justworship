@@ -10,9 +10,8 @@ import {
   isPlayableChordLine,
   tokenizeChordLine,
 } from "../../../services/ChordsProgressionPlayer/getMidiFromSections/utils/chordLineToProgressionMapWithKeys";
-import {useCurrentUsername} from "../elements/hooks";
-import {resolveTransposition} from "../transposition/operations";
 import {transposeChordTextForCapo} from "../transposition/transposeChords";
+import {useTransposition} from "../transposition/useTransposition";
 import {PlayerHighlightContext} from "./PlayerHighlightContext";
 
 const SEPARATORS = new Set(["|", "."]);
@@ -81,11 +80,10 @@ export const usePlayerDecorate = () => {
   const editor = useSlate();
   const {currentTokenKey, selectedTokenKey} = useContext(PlayerHighlightContext);
 
-  // Per-user капо (режим 3): показуємо транспоновані акорди капо-юзеру. Безпечно
-  // й у редагованому в'юері, бо `withCapoGuard` блокує правки chord-line, поки
-  // капо активне (немає поділу edit/view для основного сценарію).
-  const username = useCurrentUsername();
-  const {songKey, myCapo} = resolveTransposition(editor, username);
+  // Per-user капо: показуємо транспоновані акорди капо-юзеру. У режимі
+  // редагування капо не діє (`useTransposition` віддає myCapo=0), тож правки
+  // завжди летять у документ у спільній тональності.
+  const {songKey, myCapo} = useTransposition();
   const capoActive = myCapo > 0;
 
   return useCallback(

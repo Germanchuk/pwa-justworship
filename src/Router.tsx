@@ -1,13 +1,11 @@
 import "./App.css";
 import { Route, Routes as RouterRoutes, useLocation } from "react-router-dom";
-import {useSelector} from "react-redux";
-import classNames from "classnames";
 
 import PublicLayout from "#layout/PublicLayout/PublicLayout";
 import ProtectedRoute from "#layout/ProtectedRoute/ProtectedRoute";
+import BandLayout from "#modules/Band/BandLayout";
 
 import CreateSong from "#views/CreateSong/CreateSong";
-import SongsList from "#views/SongsList/SongsList";
 import Login from "#views/Login/Login";
 import Registration from "#views/Registration/Registration";
 import SingleSong from "#views/SingleSong/SingleSong";
@@ -18,44 +16,45 @@ import { Routes } from "#constants/routes";
 import CreateChurch from "#views/CreateChurch/CreateChurch";
 import SingleChurch from "#views/SingleChurch/SingleChurch";
 import JoinBand from "#views/JoinBand/JoinBand";
-import SingleBand from "#views/SingleBand/SingleBand";
 import CreateBand from "#views/CreateBand/CreateBand";
-import ChurchSongs from "#views/ChurchSongs/ChurchSongs";
-import ChurchShedule from "#views/ChurchShedule/ChurchShedule";
 import BandSongs from "#views/BandSongs/BandSongs";
-import BandShedule from "#views/BandShedule/BandShedule";
+import BandsHome from "#views/BandsHome/BandsHome";
+import BandHome from "#views/BandHome/BandHome";
 import SingleShedule from "#views/SingleSchedule/SingleShedule";
-import WelcomePage from "#views/WelcomePage/WelcomePage";
 import ShadcnDemo from "#views/ShadcnDemo/ShadcnDemo";
 import Landing from "#views/Landing/Landing";
 
 function Router() {
   const location = useLocation();
-  const user = useSelector((state: any) => state.user);
-
-  const Root = user?.currentBand ? BandShedule : WelcomePage;
 
   return (
     <div className={"h-full flex flex-col"}>
       <RouterRoutes location={location}>
         <Route path="/" element={<ProtectedRoute />}>
-          <Route path={Routes.Root} element={<Root />} />
-          <Route path={Routes.PublicSongs} element={<SongsList />} />
-          <Route path={Routes.SinglePublicSong} element={<SingleSong />} />
-          <Route path={Routes.CreateSong} element={<CreateSong />} />
-          <Route path={Routes.AddSongFromScratch} element={<FromScratch />} />
+          {/* Головний екран — усі гурти юзера. */}
+          <Route index element={<BandsHome />} />
           <Route path={Routes.Preferences} element={<Preferences />} />
+          <Route path={Routes.JoinBand} element={<JoinBand />} />
+          <Route path={Routes.CreateBand} element={<CreateBand />} />
           <Route path={Routes.JoinChurch} element={<JoinChurch />} />
           <Route path={Routes.CreateChurch} element={<CreateChurch />} />
           <Route path={Routes.SingleChurch} element={<SingleChurch />} />
-          <Route path={Routes.JoinBand} element={<JoinBand />} />
-          <Route path={Routes.SingleBand} element={<SingleBand />} />
-          <Route path={Routes.CreateBand} element={<CreateBand />} />
-          <Route path={Routes.ChurchSongs} element={<ChurchSongs />} />
-          <Route path={Routes.ChurchShedule} element={<ChurchShedule />} />
-          <Route path={Routes.BandSongs} element={<BandSongs />} />
-          <Route path={Routes.BandShedule} element={<BandShedule />} />
-          <Route path={Routes.SingleBandShedule} element={<SingleShedule />} />
+
+          {/* Усе band-scoped: `BandLayout` звіряє `:bandId` зі списком
+              гуртів юзера й роздає гурт нижче через контекст. */}
+          <Route path={Routes.Band} element={<BandLayout />}>
+            <Route index element={<BandHome />} />
+            <Route path="songs" element={<BandSongs />} />
+            <Route path="songs/new" element={<CreateSong />} />
+            <Route path="songs/new/from-scratch" element={<FromScratch />} />
+            {/* `:mode?` — один і той самий елемент на всі три режими: інакше
+                перемикання режиму розмонтувало б редактор і перепідключало
+                Yjs-документ. Невідомий сегмент `SingleSong` сам зводить на
+                канонічний шлях читання. */}
+            <Route path="songs/:songId/:mode?" element={<SingleSong />} />
+            <Route path="lists/new" element={<SingleShedule />} />
+            <Route path="lists/:listId" element={<SingleShedule />} />
+          </Route>
         </Route>
         <Route element={<PublicLayout />}>
           <Route path="/login" element={<Login />} />

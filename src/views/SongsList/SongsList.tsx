@@ -1,15 +1,20 @@
 import React, { useEffect } from "react";
 import { fetchAPI } from "../../utils/fetch-api";
-import {Link, useNavigate} from "react-router-dom";
+import {useNavigate} from "react-router-dom";
 import { Routes } from "../../constants/routes";
 import {PlusCircleIcon} from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 
+/**
+ * УВАГА: в'юшка більше не підключена до роутера — її замінив
+ * `views/BandSongs`, який працює в контексті гурту з URL. Лишена як мертвий
+ * код до рішення про видалення; ендпоінта, який вона смикає, вже немає.
+ */
 export default function SongsList() {
   const [songs, setSongs] = React.useState([]);
   const navigate = useNavigate();
   useEffect(() => {
-    fetchAPI("/currentBandSongs").then((data) => {
+    fetchAPI("/myBands").then((data) => {
       setSongs(data.data);
     });
   }, []);
@@ -24,7 +29,7 @@ export default function SongsList() {
         <h1 className="text-3xl font-bold tracking-tight">Всі пісні</h1>
         <Button
           variant="ghost"
-          onClick={() => navigate(Routes.CreateSong)}
+          onClick={() => navigate(Routes.Root)}
         >
           <PlusCircleIcon className="w-5 h-5"/>
           Додати
@@ -32,12 +37,9 @@ export default function SongsList() {
       </div>
       {songs.map((song) => {
         return (
-          <Link
-            to={`${Routes.PublicSongs}/${song.id}`}
-            className="bg-muted p-3 rounded block mb-2"
-          >
+          <div key={song.id} className="bg-muted p-3 rounded block mb-2">
           {song.attributes.name}
-          </Link>
+          </div>
         );
       })}
     </>

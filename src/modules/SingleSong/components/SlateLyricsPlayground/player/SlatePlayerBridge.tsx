@@ -4,6 +4,7 @@ import {Element, Node, type Descendant, type Editor} from "slate";
 
 import ChordsProgressionPlayer from "../../../services/ChordsProgressionPlayer/ChordsProgressionPlayer";
 import {PlayerHighlightContext} from "./PlayerHighlightContext";
+import {useCapoApplies} from "../../../mode";
 import {useCurrentUsername} from "../elements/hooks";
 import {resolveTransposition} from "../transposition/operations";
 
@@ -47,13 +48,20 @@ const extractHeader = (nodes: Descendant[]): {bpm: number; timeSignature: [numbe
 export const SlatePlayerBridge = ({editor, children}: Props) => {
   const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
 
-  // Транспозиція плейбеку = per-user капо з документа (capo.valuesBy[username]).
-  // Тримаємо нік у ref, бо provider — стабільне замикання, що читає live-стан.
+  // Транспозиція плейбеку = per-user капо з документа (capo.valuesBy[username]),
+  // але лише в режимах, де капо діє (таблиця в `mode.tsx`). Нік і режим тримаємо
+  // в ref, бо provider — стабільне замикання, що читає live-стан.
   const username = useCurrentUsername();
   const usernameRef = useRef(username);
   useEffect(() => {
     usernameRef.current = username;
   }, [username]);
+
+  const capoApplies = useCapoApplies();
+  const capoAppliesRef = useRef(capoApplies);
+  useEffect(() => {
+    capoAppliesRef.current = capoApplies;
+  }, [capoApplies]);
 
   const [currentTokenKey, setCurrentTokenKey] = useState<string | null>(null);
   const [selectedTokenKey, setSelectedTokenKey] = useState<string | null>(
@@ -69,7 +77,7 @@ export const SlatePlayerBridge = ({editor, children}: Props) => {
         nodes,
         bpm,
         timeSignature,
-        transposition: myCapo,
+        transposition: capoAppliesRef.current ? myCapo : 0,
       };
     };
     player.setContentProvider(provider);

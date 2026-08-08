@@ -1,13 +1,12 @@
 import { useDispatch, useSelector } from 'react-redux';
 import {
   setSong,
-  setEditMode,
+  setNotesAudience,
   setPreferences,
-  setCarefulMode,
 } from './songSlice';
+import { useCanAnnotate } from '../mode';
 
 export const useSong = () => useSelector((state: any) => state.song.song);
-export const useEditMode = () => useSelector((state: any) => state.song.editMode);
 export const useStatus = () => useSelector((state: any) => state.song.status);
 export const useConnectionStatus = () => useSelector((state: any) => state.song.connectionStatus);
 export const usePeers = () => useSelector((state: any) => state.song.peers);
@@ -16,18 +15,11 @@ export const useMyClientId = () => useSelector((state: any) => state.song.myClie
 export const useSongId = () => useSelector((state: any) => state.song.song.id);
 
 export const usePreferences = () => useSelector((state: any) => state.song.preferences);
-export const useShouldHideChords = () => useSelector((state: any) => state.song.preferences.hideChords);
 export const useTransposition = () => useSelector((state: any) => state.song.preferences.transposition);
-export const useShouldShowChordsAgainstPreferences = () => useSelector((state: any) => state.song.showChordsAgainstPreferences);
 
 export const useSetSong = () => {
   const dispatch = useDispatch();
   return (song: any) => dispatch(setSong(song));
-};
-
-export const useSetEditMode = () => {
-  const dispatch = useDispatch();
-  return (mode: boolean) => dispatch(setEditMode(mode));
 };
 
 export const useSetPreferences = () => {
@@ -35,10 +27,31 @@ export const useSetPreferences = () => {
   return (prefs: any) => dispatch(setPreferences(prefs));
 };
 
-export const useCarefulMode = () =>
-  useSelector((state: any) => Boolean(state.song.carefulMode));
+// ---------- адресат приміток (чиїми очима я дивлюсь) ----------
+//
+// Режим пісні тут більше не живе: він читається зі шляху — див.
+// `#modules/SingleSong/mode`.
 
-export const useSetCarefulMode = () => {
+/** Сирий вибір із дропдауна: нік учасника або `null` (= я). */
+export const useNotesAudience = (): string | null =>
+  useSelector((state: any) => state.song.notesAudience as string | null);
+
+export const useSetNotesAudience = () => {
   const dispatch = useDispatch();
-  return (value: boolean) => dispatch(setCarefulMode(value));
+  return (username: string | null) => dispatch(setNotesAudience(username));
+};
+
+/**
+ * Нік, чиї примітки зараз показуються й редагуються — ЄДИНЕ джерело правди
+ * для всієї системи приміток (`isVisibleTo`, картки, FAB, втрачені коментарі).
+ *
+ * У режимі приміток це обраний у дропдауні учасник (за замовчуванням я сам),
+ * у решті режимів — завжди я: поза режимом приміток чужі примітки не
+ * показуються незалежно від того, що лишилось вибраним у дропдауні.
+ */
+export const useNotesViewer = (): string | undefined => {
+  const me = useSelector((state: any) => state.user?.username as string | undefined);
+  const audience = useNotesAudience();
+  const canAnnotate = useCanAnnotate();
+  return canAnnotate ? audience ?? me : me;
 };

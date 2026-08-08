@@ -1,25 +1,28 @@
 import { useCallback, useMemo } from "react";
 import type { MouseEvent } from "react";
 import type { RenderElementProps } from "slate-react";
-import { useSlateStatic } from "slate-react";
 
 import ChordsProgressionPlayer from "../../../../services/ChordsProgressionPlayer/ChordsProgressionPlayer";
-import { useCurrentUsername, useFirstInSectionInfo } from "../hooks";
-import { resolveTransposition } from "../../transposition/operations";
+import { useCanPlay } from "../../../../mode";
+import { NoteCards } from "../../comments/NoteCards";
+import { useNoteHeadsFor } from "../../comments/NoteHeadsContext";
+import { useRowHidden } from "../../display/useRowHidden";
+import { useFirstInSectionInfo } from "../hooks";
 import { SectionControls } from "../SectionControls/SectionControls";
 import "./ChordLine.css";
 
 export const ChordLine = ({ attributes, children, element }: RenderElementProps) => {
   const { isFirst } = useFirstInSectionInfo(element);
   const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
-  const editor = useSlateStatic();
-  const username = useCurrentUsername();
-  // Капо активне → акорди показані у моїй тональності, а редагування заблоковане
-  // (`withCapoGuard`). Даємо візуальний cue, щоб не дивувало "чому не друкується".
-  const capoLocked = resolveTransposition(editor, username).myCapo > 0;
+  // Вибір акорду, з якого продовжити гру, — функція режиму читання.
+  const canPlay = useCanPlay();
+  const hidden = useRowHidden(element);
+  // Картки приміток, чия «голова» — цей рядок (див. `comments/noteHeads.ts`).
+  const notes = useNoteHeadsFor(element);
 
   const handleMouseDown = useCallback(
     (e: MouseEvent<HTMLDivElement>) => {
+      if (!canPlay) return;
       const target = (e.target as HTMLElement | null)?.closest?.(
         "[data-chord-token-key]",
       ) as HTMLElement | null;
@@ -31,20 +34,18 @@ export const ChordLine = ({ attributes, children, element }: RenderElementProps)
       const current = player.getStartChordTokenKey();
       player.setStartChordTokenKey(current === key ? null : key);
     },
-    [player],
+    [canPlay, player],
   );
 
   return (
     <div
-      className={`chord-line ${capoLocked ? "chord-line--capo-locked" : ""}`}
+      className={`chord-line ${notes.length > 0 ? "chord-line--noted" : ""} ${
+        hidden ? "song-row--hidden" : ""
+      }`}
       {...attributes}
       onMouseDown={handleMouseDown}
-      title={
-        capoLocked
-          ? "Капо застосовано — зніміть його, щоб редагувати акорди"
-          : undefined
-      }
     >
+      <NoteCards notes={notes} />
       {children}
       {isFirst && <SectionControls lineElement={element} />}
     </div>

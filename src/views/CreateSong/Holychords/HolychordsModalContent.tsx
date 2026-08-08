@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Routes } from "../../../constants/routes";
+import { bandPath } from "../../../constants/routes";
+import { useBandId } from "#modules/Band/BandLayout";
 import {fetchAPI} from "../../../utils/fetch-api";
 import { Button } from "@/components/ui/button";
 
@@ -8,13 +9,14 @@ import { Button } from "@/components/ui/button";
 export default function HolychordsModalContent() {
   const [url, setUrl] = React.useState();
   const navigate = useNavigate();
+  const bandId = useBandId();
   function handleClick(url) {
-    fetchAPI("/parseHolychords", {}, {
+    fetchAPI(`/bands/${bandId}/parseHolychords`, {}, {
       method: "POST",
       body: JSON.stringify({ data: { url } }),
     })
       .then((data) => {
-        navigate(`${Routes.PublicSongs}/${data.id}`);
+        navigate(bandPath.song(bandId, data.id));
       })
       .catch((e) => {
         console.error(e);

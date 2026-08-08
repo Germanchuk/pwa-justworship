@@ -39,7 +39,7 @@ export default function ChurchSelector({
     }
     return (
       <Link
-        to={Routes.ChurchSongs}
+        to={Routes.JoinChurch}
         className="group flex w-full items-center gap-2.5 rounded-xl border bg-background/60 p-2.5 text-start shadow-xs transition-all hover:border-foreground/30 hover:bg-accent/60 hover:shadow-sm"
       >
         <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-foreground/70 group-hover:text-foreground">

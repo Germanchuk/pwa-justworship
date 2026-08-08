@@ -1,5 +1,5 @@
-/* Тултіп "капо заблокувало редагування акордів" — спливає над кареткою/рядком. */
-.capo-blocked-tooltip {
+/* Тултіп "правка заблокована режимом" — спливає над кареткою. */
+.mode-blocked-tooltip {
   position: fixed;
   transform: translate(-50%, calc(-100% - 8px));
   z-index: 60;
@@ -13,10 +13,10 @@
   text-align: center;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
   pointer-events: none;
-  animation: capo-tip-in 0.12s ease-out;
+  animation: mode-tip-in 0.12s ease-out;
 }
 
-@keyframes capo-tip-in {
+@keyframes mode-tip-in {
   from {
     opacity: 0;
     transform: translate(-50%, calc(-100% - 2px));

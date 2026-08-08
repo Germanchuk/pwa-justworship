@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import { useNotesViewer } from "../../../redux/selectors";
 import { useCurrentUsername } from "../elements/hooks";
 import type { CommentMark, CustomText } from "../types";
 import {
@@ -29,7 +30,7 @@ import {
   addHighlight,
   addNote,
   convertHighlightToNote,
-  hasAnchor,
+  hasNote,
   removeComment,
   removeNoteOnly,
 } from "./withComments";
@@ -47,16 +48,16 @@ const generateId = (): string => {
 
 const getCaretMarks = (
   editor: Editor,
-  me: string | undefined,
+  viewer: string | undefined,
 ): CommentMark[] => {
-  if (!me) return [];
+  if (!viewer) return [];
   const { selection } = editor;
   if (!selection || !Range.isCollapsed(selection)) return [];
   try {
     const [leaf] = Editor.leaf(editor, selection.anchor);
     const arr = (leaf as CustomText).comment;
     if (!Array.isArray(arr)) return [];
-    return arr.filter((m) => isVisibleTo(m, me));
+    return arr.filter((m) => isVisibleTo(m, viewer));
   } catch {
     return [];
   }
@@ -161,7 +162,10 @@ type OpenContext =
 
 export const CommentsFab = () => {
   const editor = useSlate();
+  // `me` — автор нової примітки (завжди я, хто б її не адресат).
+  // `viewer` — чиї примітки зараз показуються й кому адресуються нові.
   const me = useCurrentUsername();
+  const viewer = useNotesViewer();
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<AddPhase>("kind");
   const [openCtx, setOpenCtx] = useState<OpenContext>(null);
@@ -171,8 +175,8 @@ export const CommentsFab = () => {
   useRafPin(wrapRef);
 
   const { selection } = editor;
-  const hasSel = !!me && !!selection && Range.isExpanded(selection);
-  const liveMarksAtCaret = !hasSel ? getCaretMarks(editor, me) : [];
+  const hasSel = !!viewer && !!selection && Range.isExpanded(selection);
+  const liveMarksAtCaret = !hasSel ? getCaretMarks(editor, viewer) : [];
   const hasMarksAtCaret = liveMarksAtCaret.length > 0;
   const visible = hasSel || hasMarksAtCaret || open;
 
@@ -208,20 +212,20 @@ export const CommentsFab = () => {
   };
 
   const applyHighlight = (color: string) => {
-    if (!me) return;
+    if (!viewer) return;
     const sel = restoreSelection();
     if (!sel || !Range.isExpanded(sel)) {
       setOpen(false);
       return;
     }
-    addHighlight(editor, generateId(), privateTo(me), color, me);
+    addHighlight(editor, generateId(), privateTo(viewer), color, me);
     Transforms.deselect(editor);
     savedSel.current = null;
     setOpen(false);
   };
 
   const applyNote = (color: string) => {
-    if (!me) return;
+    if (!viewer) return;
     const sel = restoreSelection();
     if (!sel || !Range.isExpanded(sel)) {
       setOpen(false);
@@ -229,14 +233,14 @@ export const CommentsFab = () => {
     }
     const id = generateId();
     setPendingFocus(id);
-    addNote(editor, id, privateTo(me), color, "", me);
+    addNote(editor, id, privateTo(viewer), color, "", me);
     Transforms.deselect(editor);
     savedSel.current = null;
     setOpen(false);
   };
 
   const applyPublicNote = () => {
-    if (!me) return;
+    if (!viewer) return;
     const sel = restoreSelection();
     if (!sel || !Range.isExpanded(sel)) {
       setOpen(false);
@@ -272,7 +276,7 @@ export const CommentsFab = () => {
       savedSel.current = sel;
       setOpenCtx({ mode: "add" });
     } else {
-      const marks = getCaretMarks(editor, me);
+      const marks = getCaretMarks(editor, viewer);
       if (marks.length > 0) {
         savedSel.current = sel ?? null;
         setOpenCtx({ mode: "manage", marks });
@@ -380,7 +384,7 @@ export const CommentsFab = () => {
 
           {openCtx.mode === "manage" &&
             openCtx.marks.map((m) => {
-              const noted = hasAnchor(editor, m.commentId);
+              const noted = hasNote(editor, m.commentId);
               return (
                 <div
                   key={m.commentId}

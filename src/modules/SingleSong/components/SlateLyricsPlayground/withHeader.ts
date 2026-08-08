@@ -1,5 +1,7 @@
-import { Editor, Element, Transforms, type Descendant } from "slate";
+import { Editor, Element, Node, Transforms, type Descendant, type Path } from "slate";
 import { keys as VALID_KEYS } from "#utils/keyUtils";
+
+import type { SongMetaRowElement } from "./types";
 
 export const DEFAULT_NAME = "";
 export const DEFAULT_BPM = "0";
@@ -11,6 +13,24 @@ const VALID_KEYS_SET = new Set(VALID_KEYS);
 const META_CHILDREN_ORDER: Array<
   "bpm" | "time-signature" | "song-key" | "capo"
 > = ["bpm", "time-signature", "song-key", "capo"];
+
+/**
+ * `song-meta-row` разом з його шляхом. Існування гарантує `withHeader`, але
+ * до першої нормалізації (або в тестових фрагментах) рядка може не бути.
+ *
+ * Живе тут, бо саме цей плагін тримає інваріант «children[1] — song-meta-row».
+ * Це не лише рядок BPM/тональності, а й сховище метаданих документа:
+ * per-user фільтри показу (`display/model.ts`) і примітки
+ * (`comments/noteStore.ts`).
+ */
+export function findMetaRow(editor: Editor): [SongMetaRowElement, Path] | null {
+  for (const [node, path] of Node.elements(editor)) {
+    if ((node as { type?: string }).type === "song-meta-row") {
+      return [node as unknown as SongMetaRowElement, path];
+    }
+  }
+  return null;
+}
 
 export function makeDefaultSongName(text = DEFAULT_NAME): Descendant {
   return { type: "song-name", children: [{ text }] } as Descendant;

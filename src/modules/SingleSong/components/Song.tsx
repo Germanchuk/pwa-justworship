@@ -1,4 +1,3 @@
-import "./Song.css";
 import {useSongId} from "../redux/selectors";
 import SlateLyricsPlayground from "./SlateLyricsPlayground/SlateLyricsPlayground";
 import {PresenceList} from "./PresenceList/PresenceList";

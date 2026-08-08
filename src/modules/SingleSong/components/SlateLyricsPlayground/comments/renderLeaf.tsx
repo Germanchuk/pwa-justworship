@@ -1,7 +1,7 @@
 import type { RenderLeafProps } from "slate-react";
 
-import { useCurrentUsername } from "../elements/hooks";
-import { useCarefulMode } from "../../../redux/selectors";
+import { useCanEditContent } from "../../../mode";
+import { useNotesViewer } from "../../../redux/selectors";
 import type { CommentMark, CustomText } from "../types";
 import {
   DEFAULT_COMMENT_COLOR,
@@ -11,8 +11,12 @@ import {
 import { isVisibleTo } from "./visibility";
 
 export const RenderLeaf = ({ attributes, children, leaf }: RenderLeafProps) => {
-  const me = useCurrentUsername();
-  const carefulMode = useCarefulMode();
+  // Не обовʼязково я: у режимі приміток можна дивитись очима іншого учасника.
+  const viewer = useNotesViewer();
+  // Сірий натяк на чужі примітки виправданий лише там, де правка може їх
+  // зачепити — у режимі редагування. У читанні нічого не видалиш, у примітках
+  // я дивлюсь очима конкретної людини; в обох чужих міток не видно взагалі.
+  const hintOthers = useCanEditContent();
   let node: React.ReactNode = children;
 
   // Per-user капо (режим 3): показуємо транспонований акорд замість збереженого
@@ -33,17 +37,15 @@ export const RenderLeaf = ({ attributes, children, leaf }: RenderLeafProps) => {
   const marks: CommentMark[] = Array.isArray(raw) ? raw : [];
 
   for (const c of marks) {
-    const mine = isVisibleTo(c, me);
-    const realColor = c.color ?? DEFAULT_COMMENT_COLOR;
-    const color = mine
-      ? realColor
-      : carefulMode
-        ? realColor
-        : OTHERS_NEUTRAL_COLOR;
+    const shown = isVisibleTo(c, viewer);
+    if (!shown && !hintOthers) continue;
+    const color = shown
+      ? c.color ?? DEFAULT_COMMENT_COLOR
+      : OTHERS_NEUTRAL_COLOR;
     node = (
       <span
         className="comment-highlight"
-        data-cid={mine ? c.commentId : undefined}
+        data-cid={shown ? c.commentId : undefined}
         style={{ backgroundColor: highlightBg(color) }}
       >
         {node}

@@ -1,10 +1,13 @@
 import { useState } from "react";
 import type { RenderElementProps } from "slate-react";
-import { ReactEditor, useSlateStatic } from "slate-react";
+import { useSlate } from "slate-react";
+import { useCanEditContent } from "../../../../mode";
 import { KeyPickerModal, type KeyChangeMode } from "./KeyPickerModal";
 import type { SongKeyElement } from "../../types";
 import type { SongKeyValue } from "../../transposition/model";
 import { changePlayingKey, relabelKey } from "../../transposition/operations";
+import { keyDisplayName } from "../../transposition/transposeChords";
+import { useTransposition } from "../../transposition/useTransposition";
 
 function display(k: string): string {
   return k.replace("sharp", "#");
@@ -12,10 +15,16 @@ function display(k: string): string {
 
 export function SongKey(props: RenderElementProps) {
   const { attributes, children, element } = props;
-  const editor = useSlateStatic();
+  // useSlate (а не useSlateStatic): підпис «З капою» залежить від капо-елемента,
+  // тож цей рядок має перемальовуватись і на зміни поза власним вузлом.
+  const editor = useSlate();
   const [open, setOpen] = useState(false);
   const songKey = element as SongKeyElement;
-  const isReadonly = ReactEditor.isReadOnly(editor);
+  // Тональність — спільний вміст: правиться лише в режимі редагування.
+  const isReadonly = !useCanEditContent();
+  // myCapo === 0, коли капо не виставлено, вимкнено свічем АБО не діє в цьому
+  // режимі — тож підпис «З капою» сам зникає в усіх трьох випадках.
+  const { myCapo, effectiveKey } = useTransposition();
 
   const handlePick = (newKey: string, mode: KeyChangeMode) => {
     if (mode === "relabel") {
@@ -37,6 +46,11 @@ export function SongKey(props: RenderElementProps) {
           {display(songKey.keyValue || "C")}
         </span>
       </span>
+      {myCapo > 0 && (
+        <span contentEditable={false} className="song-meta-note">
+          З капою: {keyDisplayName(effectiveKey)}
+        </span>
+      )}
       {children}
       {open && (
         <KeyPickerModal

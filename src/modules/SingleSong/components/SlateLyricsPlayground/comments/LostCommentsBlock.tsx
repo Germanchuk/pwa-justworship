@@ -4,7 +4,8 @@ import { ChevronDown, Copy, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-import { useCurrentUsername } from "../elements/hooks";
+import { useCanAnnotate } from "../../../mode";
+import { useNotesViewer } from "../../../redux/selectors";
 import { highlightBg } from "./colors";
 import {
   type LostComment,
@@ -23,7 +24,12 @@ const formatTime = (ts: number): string => {
 };
 
 export const LostCommentsBlock = ({ ydoc }: { ydoc: Y.Doc }) => {
-  const me = useCurrentUsername();
+  // Втрачені коментарі належать тому ж адресатові, що й решта приміток:
+  // дивлюсь очима іншого — бачу його втрачені, не свої.
+  const viewer = useNotesViewer();
+  // Видалення примітки — дія режиму приміток; в інших режимах лишається
+  // перегляд і копіювання.
+  const canAnnotate = useCanAnnotate();
   const [items, setItems] = useState<LostComment[]>([]);
   const [expanded, setExpanded] = useState(true);
 
@@ -36,7 +42,7 @@ export const LostCommentsBlock = ({ ydoc }: { ydoc: Y.Doc }) => {
   }, [ydoc]);
 
   const visible = items
-    .filter((c) => isVisibleTo(c, me))
+    .filter((c) => isVisibleTo(c, viewer))
     .sort((a, b) => b.timestamp - a.timestamp);
 
   if (visible.length === 0) return null;
@@ -102,14 +108,16 @@ export const LostCommentsBlock = ({ ydoc }: { ydoc: Y.Doc }) => {
               >
                 <Copy className="size-3.5" />
               </button>
-              <button
-                type="button"
-                onClick={() => removeLostComment(ydoc, c.commentId)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-                title="Видалити"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
+              {canAnnotate && (
+                <button
+                  type="button"
+                  onClick={() => removeLostComment(ydoc, c.commentId)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                  title="Видалити"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              )}
             </li>
           ))}
         </ul>

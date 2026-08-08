@@ -1,20 +1,22 @@
 import React from "react";
-import { useParams } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 import Song from "#modules/SingleSong/components/Song";
 import { useDispatch } from "react-redux";
 import {
   useSetSong,
   useSetPreferences,
 } from "#modules/SingleSong/redux/selectors";
+import { parseSongMode } from "#modules/SingleSong/mode";
+import { bandPath } from "#constants/routes";
 import {sPreferencesApi} from "#modules/SingleSong/api";
 import {SongControls} from "#modules/SingleSong/components/SongControls/SongControls";
-import {setEditMode} from "#modules/SingleSong/redux/songSlice";
+import {setNotesAudience} from "#modules/SingleSong/redux/songSlice";
 import {SongHeader} from "#modules/SingleSong/components/SongHeader/SongHeader";
 import {ToPageHeaderArea} from "#layout/PageHeaderArea/ToPageHeaderArea";
 import {ToPageFooterArea} from "#layout/PageFooterArea/ToPageFooterArea";
 
 export default function SingleSong() {
-  const { songId } = useParams();
+  const { bandId, songId, mode } = useParams();
   const setPreferences = useSetPreferences();
   const dispatch = useDispatch();
   const setSong = useSetSong();
@@ -22,7 +24,7 @@ export default function SingleSong() {
   React.useEffect(() => {
     return () => {
       dispatch(setSong({})); // reset song
-      dispatch(setEditMode(false));
+      dispatch(setNotesAudience(null)); // своїми примітками, не чужими
     }
   }, []);
 
@@ -42,6 +44,12 @@ export default function SingleSong() {
     dispatch(setSong({ id: songId }));
   }, [songId, dispatch]);
 
+  // Сегмент режиму з чужих рук може бути будь-яким. Це не 404: пісня існує,
+  // просто режим не розпізнали — зводимо на канонічний шлях читання.
+  if (bandId && songId && parseSongMode(mode) === null) {
+    return <Navigate to={bandPath.song(bandId, songId)} replace />;
+  }
+
   return (
     <>
       <ToPageHeaderArea>
@@ -49,7 +57,7 @@ export default function SingleSong() {
       </ToPageHeaderArea>
       <Song />
       <ToPageFooterArea>
-        <SongControls songId={songId} />
+        <SongControls />
       </ToPageFooterArea>
     </>
   );

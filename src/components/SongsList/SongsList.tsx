@@ -1,14 +1,17 @@
 import { Link } from "react-router-dom";
 import { LockClosedIcon } from "@heroicons/react/24/outline";
 import { formatDate } from "../../utils/utils";
-import { Routes } from "../../constants/routes";
+import { bandPath } from "../../constants/routes";
 
 type SongsListProps = {
   list: any;
-  clickable?: boolean;
+  /** Гурт, у контексті якого відкривати список і пісні. */
+  bandId?: number | string;
 };
 
-export function SongsList({ list, clickable = true }: SongsListProps) {
+export function SongsList({ list, bandId }: SongsListProps) {
+  // Без гурту нема куди вести — картка лишається, але лише як прев'ю.
+  const clickable = bandId != null;
   const formattedDate = formatDate(list?.attributes?.date);
   const bandName = list?.attributes?.band?.data?.attributes?.name;
 
@@ -17,7 +20,7 @@ export function SongsList({ list, clickable = true }: SongsListProps) {
       <div
         className="rounded-lg p-3 bg-muted shadow-sm w-full ring-1 ring-border opacity-60 grayscale cursor-not-allowed select-none"
         aria-disabled="true"
-        title="Перемкніть гурт, щоб відкрити цей список"
+        title="Відкрийте цей список зі сторінки його гурту"
       >
         <div className="flex items-center justify-between gap-2">
           <span className="text-xl font-semibold text-neutral-content">
@@ -47,7 +50,7 @@ export function SongsList({ list, clickable = true }: SongsListProps) {
   return (
     <div className="rounded-lg p-3 bg-card-orange shadow-sm w-full ring-1 ring-card-orange-border">
       <Link
-        to={`${Routes.BandShedule}/${list.id}`}
+        to={bandPath.list(bandId, list.id)}
         className="text-xl font-semibold underline"
       >
         {formattedDate}
@@ -58,7 +61,7 @@ export function SongsList({ list, clickable = true }: SongsListProps) {
           <Link
             key={song.id}
             className="block bg-background p-2 rounded"
-            to={`${Routes.PublicSongs}/${song.id}`}
+            to={bandPath.song(bandId, song.id)}
           >
             <li className="flex justify-between">
               <span>{song.attributes.name}</span>

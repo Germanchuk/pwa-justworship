@@ -1,22 +1,22 @@
 @import url("https://fonts.googleapis.com/css2?family=Pangolin&display=swap");
 
-/* Block-level pseudo-row sitting directly above the commented line.
-   No JS coordinate computation, no position: fixed/absolute relative
-   to the viewport — it's just a sibling block in the flow. */
-.comment-anchor {
+/* Картки приміток — перший блок ВСЕРЕДИНІ вузла рядка. Саме тому вони
+   розсовують текст (NOTE-10) і рухаються разом зі своїм рядком: у документі
+   їх немає, є лише мітки на тексті (див. comments/noteHeads.ts).
+   Відʼємний марджин компенсує padding-left рядка, щоб картка йшла на всю
+   ширину, як раніше, коли була окремим блоком. */
+.note-cards {
   display: block;
-  /*margin: 2px 0 0 8px;*/
   user-select: none;
+  margin-left: -16px;
 }
 
-.comment-anchor__card {
+.note-card {
   display: flex;
   align-items: flex-start;
   gap: 6px;
   padding: 4px 16px;
   /* background-color & border-color set inline based on per-comment color */
-  /*border: 1px solid transparent;*/
-  /*border-radius: 6px;*/
   font-family: "Pangolin", cursive;
   font-size: 15px;
   line-height: 1.4;
@@ -25,7 +25,7 @@
   width: 100%;
 }
 
-.comment-anchor__textarea {
+.note-card__textarea {
   flex: 1;
   border: none;
   outline: none;
@@ -38,32 +38,21 @@
   font-size: 16px;
   color: inherit;
   min-height: 1.4em;
+  /* Рядок-предок має user-select: none на блоці карток — повертаємо каретку
+     самому полю вводу (Safari інакше не дає виділяти в ньому текст). */
+  user-select: text;
 }
 
-.comment-anchor__delete {
-  flex-shrink: 0;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  color: #888;
-  padding: 2px 6px;
-  line-height: 1;
-}
-
-.comment-anchor__delete:hover {
-  color: #c00;
+/* Контроли секції позиціонуються по всій висоті рядка. Коли над текстом
+   зʼявилась картка, «по центру» означало б «поверх картки» — тримаємось
+   текстового рядка внизу. Без картки правило не застосовується взагалі. */
+.song-line--noted > .section-controls,
+.chord-line--noted > .section-controls {
+  top: auto;
+  bottom: 0;
+  height: 1.6em;
 }
 
 /* Highlight applied via renderLeaf to text leaves carrying a comment mark.
    background-color is set inline (per-comment, semi-transparent) so that
    parallel/overlapping highlights stack visibly via alpha compositing. */
-/*.comment-highlight {*/
-/*  border-radius: 2px;*/
-/*  !* 1px «повітря» по краях підсвітки, скомпенсований відʼємним марджином:*/
-/*     інакше кожен вкладений highlight-span (по одному на коментар) додавав*/
-/*     би +2px ширини і текст розʼїжджався при кількох виділеннях. *!*/
-/*  padding: 0 1px;*/
-/*  margin: 0 -1px;*/
-/*}*/
-

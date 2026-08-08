@@ -5,7 +5,6 @@ import { sPreferencesApi } from '../api';
 export interface SongPreferences {
   id?: number | string;
   transposition: number;
-  hideChords: boolean;
 }
 
 export type CollabConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
@@ -16,32 +15,36 @@ export interface CollabPeer {
 }
 
 export interface SongState extends Partial<Song> {
-  editMode: boolean;
+  /**
+   * Чиїми очима я дивлюсь на примітки (нік члена гурту). `null` = своїми.
+   *
+   * Діє ЛИШЕ в режимі приміток: там я бачу рівно те, що бачить обраний
+   * учасник, і нові примітки створюю для нього. У режимах читання й
+   * редагування вибір ігнорується — там завжди видно тільки свої примітки
+   * (див. `useNotesViewer`). Стан per-user і локальний, у спільний документ
+   * не пишеться.
+   */
+  notesAudience: string | null;
   status: Status;
   song: Partial<Song>;
   preferences: SongPreferences;
-  showChordsAgainstPreferences: boolean;
   connectionStatus: CollabConnectionStatus;
   peers: CollabPeer[];
   leaderClientId: number | null;
   myClientId: number | null;
-  carefulMode: boolean;
 }
 
 const initialState: SongState = {
-  editMode: false,
+  notesAudience: null,
   status: "pending",
   song: {},
   preferences: {
-    transposition: 0,
-    hideChords: false
+    transposition: 0
   },
-  showChordsAgainstPreferences: false,
   connectionStatus: "connecting",
   peers: [],
   leaderClientId: null,
-  myClientId: null,
-  carefulMode: false
+  myClientId: null
 };
 
 export const savePreferencesThunk = createAsyncThunk<
@@ -76,17 +79,14 @@ const songSlice = createSlice({
     resetSong: (state) => {
       state.song = {};
     },
-    setEditMode: (state, action) => {
-      state.editMode = action.payload;
+    setNotesAudience: (state, action) => {
+      state.notesAudience = action.payload;
     },
     setPreferences: (state, action) => {
       state.preferences = {
         ...state.preferences,
         ...action.payload
       };
-    },
-    showChordsAgainstPreferences: (state, action) => {
-      state.showChordsAgainstPreferences = action.payload;
     },
     setStatus: (state, action) => {
       state.status = action.payload;
@@ -102,9 +102,6 @@ const songSlice = createSlice({
     },
     setMyClientId: (state, action) => {
       state.myClientId = action.payload;
-    },
-    setCarefulMode: (state, action) => {
-      state.carefulMode = action.payload;
     }
   },
   extraReducers: (builder) => {
@@ -120,15 +117,13 @@ const songSlice = createSlice({
 export const {
   setSong,
   resetSong,
-  setEditMode,
+  setNotesAudience,
   setPreferences,
-  showChordsAgainstPreferences,
   setStatus,
   setConnectionStatus,
   setPeers,
   setLeaderClientId,
-  setMyClientId,
-  setCarefulMode
+  setMyClientId
 } = songSlice.actions;
 
 export default songSlice.reducer;

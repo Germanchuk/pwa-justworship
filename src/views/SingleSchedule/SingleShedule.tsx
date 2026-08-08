@@ -6,7 +6,8 @@ import DragDropList from "./DragDropList/DragDropList";
 import { useNavigate, useParams } from "react-router-dom";
 import { fetchAPI } from "#utils/fetch-api";
 import { format } from "date-fns";
-import { Routes } from "#constants/routes";
+import { bandPath } from "#constants/routes";
+import { useBand } from "#modules/Band/BandLayout";
 import { formatDate } from "#utils/utils";
 import DeleteSchedule from "./DeleteSchedule/DeleteSchedule";
 import {addNotificationWithTimeout} from "#layout/slices/notificationsSlice";
@@ -39,10 +40,12 @@ const Trigger = forwardRef(
 );
 
 export default function SingleShedule() {
-  const { scheduleId } = useParams();
+  // `/bands/:bandId/lists/new` — без listId, отже режим створення.
+  const { listId } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch<any>();
-  const isCreateMode = scheduleId === "create";
+  const band = useBand();
+  const isCreateMode = !listId;
 
   const [shedule, setShedule] = useState(null);
 
@@ -53,7 +56,7 @@ export default function SingleShedule() {
       return;
     }
 
-    fetchAPI("/currentBandLists/" + scheduleId, {
+    fetchAPI(`/bands/${band.id}/lists/${listId}`, {
       populate: ["songs"],
     }).then((data) => {
       setShedule(data.data);
@@ -90,7 +93,9 @@ export default function SingleShedule() {
 
   async function saveSchedule() {
     const data = await fetchAPI(
-      isCreateMode ? "/currentBandLists" : `/currentBandLists/${scheduleId}`,
+      isCreateMode
+        ? `/bands/${band.id}/lists`
+        : `/bands/${band.id}/lists/${listId}`,
       {},
       {
         method: isCreateMode ? "POST" : "PUT",
@@ -101,20 +106,20 @@ export default function SingleShedule() {
     );
 
     if (isCreateMode && data) {
-      navigate(`${Routes.BandShedule}/${data.data.id}`);
+      navigate(bandPath.list(band.id, data.data.id));
     }
   }
 
   function deleteSchedule() {
     fetchAPI(
-      `/currentBandLists/${scheduleId}`,
+      `/bands/${band.id}/lists/${listId}`,
       {},
       {
         method: "DELETE"
       }
     )
       .then(() => {
-        navigate(Routes.Root);
+        navigate(bandPath.home(band.id));
         dispatch(addNotificationWithTimeout({
           type: "success",
           message: "Список видалено"
