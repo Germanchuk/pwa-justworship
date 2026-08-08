@@ -6,6 +6,9 @@
     "enabled": true
   },
   "assets": {
+    // Раніше теку підставляв `@cloudflare/vite-plugin`; його прибрано, тож
+    // тепер указуємо явно — це звичайний вивід `vite build`.
+    "directory": "dist",
     "not_found_handling": "single-page-application"
   },
   "compatibility_flags": [
