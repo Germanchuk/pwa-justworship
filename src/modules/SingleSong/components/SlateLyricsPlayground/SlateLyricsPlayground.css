@@ -58,6 +58,12 @@
   }
 }
 
+/* Режими показу (див. display/model.ts). Ховаємо саме CSS-ом: вузол лишається
+   в DOM, бо Slate вимагає відповідності DOM моделі. */
+.song-row--hidden {
+  display: none;
+}
+
 .chord-token {
   cursor: pointer;
 }

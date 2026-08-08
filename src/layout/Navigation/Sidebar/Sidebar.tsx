@@ -1,13 +1,14 @@
 import {
   ArrowLeftEndOnRectangleIcon,
+  HomeIcon,
   UserIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import React from "react";
 import { useSelector } from "react-redux";
 import { Link, useLocation } from "react-router-dom";
-import BandSelector from "./BandSelector/BandSelector";
-import { Routes } from "../../../constants/routes";
+import { Routes, bandPath } from "../../../constants/routes";
+import { useUrlBandId } from "#modules/Band/BandLayout";
 import classNames from "classnames";
 import { Button } from "@/components/ui/button";
 import { DrawerClose } from "@/components/ui/drawer";
@@ -15,8 +16,7 @@ import { DrawerClose } from "@/components/ui/drawer";
 export default function Sidebar() {
   const user = useSelector((state: any) => state.user);
   const { pathname } = useLocation();
-  const hasChurch = !!user?.church?.id;
-  const hasBand = !!user?.currentBand?.id;
+  const bandId = useUrlBandId();
 
   if (!user) {
     return null;
@@ -63,43 +63,39 @@ export default function Sidebar() {
               <ul>
                 <li>
                   <Link
-                    to={Routes.ChurchSongs}
+                    to={Routes.Root}
                     className={classNames({
-                      "bg-accent": pathname.includes(Routes.ChurchSongs),
-                      "pointer-events-none opacity-30": !hasChurch,
+                      "bg-accent": pathname === Routes.Root,
                     })}
                   >
-                    Всі пісні церкви
+                    <HomeIcon className="size-5" />
+                    Мої гурти
                   </Link>
                 </li>
               </ul>
             </li>
             <li>
-              <BandSelector
-                bands={user?.bands}
-                currentBand={user?.currentBand}
-              />
               <ul>
                 <li>
                   <Link
-                    to={Routes.BandSongs}
+                    to={bandId ? bandPath.home(bandId) : Routes.Root}
                     className={classNames({
-                      "bg-accent": pathname.includes(Routes.BandSongs),
-                      "pointer-events-none opacity-30": !hasBand,
+                      "bg-accent": !!bandId && pathname === bandPath.home(bandId),
+                      "pointer-events-none opacity-30": !bandId,
                     })}
                   >
-                    Всі пісні гурту
+                    Дати служінь
                   </Link>
                 </li>
                 <li>
                   <Link
-                    to={Routes.BandShedule}
+                    to={bandId ? bandPath.songs(bandId) : Routes.Root}
                     className={classNames({
-                      "bg-accent": pathname.includes(Routes.BandShedule),
-                      "pointer-events-none opacity-30": !hasBand,
+                      "bg-accent": !!bandId && pathname === bandPath.songs(bandId),
+                      "pointer-events-none opacity-30": !bandId,
                     })}
                   >
-                    Дати служінь
+                    Всі пісні гурту
                   </Link>
                 </li>
               </ul>

@@ -1,9 +1,11 @@
 import {Modal} from "#components";
 import {songApi} from "../../../api";
-import {Routes} from "#constants/routes";
+import {bandPath} from "#constants/routes";
+import {useBandOrNull} from "#modules/Band/BandLayout";
 import {addNotificationWithTimeout} from "#layout/slices/notificationsSlice";
 import {useDispatch} from "react-redux";
-import {useEditMode, useSong} from "../../../redux/selectors";
+import {useCanEditContent} from "../../../mode";
+import {useSong} from "../../../redux/selectors";
 import {useNavigate} from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
@@ -19,10 +21,13 @@ const Content = () => {
   const dispatch = useDispatch<any>();
   const song = useSong();
   const navigate = useNavigate();
+  // Меню живе в нижній панелі — вище band-роутів, тож гурт беремо м'яко.
+  const bandId = useBandOrNull()?.id;
 
   const deleteSong = async () => {
-    songApi.deleteSong(song.id, song).then(() => {
-      navigate(Routes.BandSongs);
+    if (bandId == null) return;
+    songApi.deleteSong(bandId, song.id).then(() => {
+      navigate(bandPath.songs(bandId));
     })
       .catch(() => {
         dispatch(addNotificationWithTimeout({
@@ -42,8 +47,8 @@ const Content = () => {
 }
 
 export default function DeleteSong() {
-  const editMode = useEditMode();
-  if (!editMode) return;
+  const canEditContent = useCanEditContent();
+  if (!canEditContent) return;
   return (
     <Modal
       trigger={<Trigger />}

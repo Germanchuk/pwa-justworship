@@ -3,7 +3,7 @@ import { isChordsLine } from "#utils/keyUtils";
 import ChordLine from "./ChordLine/ChordLine";
 import { transpose } from "chord-transposer";
 import { isSongStructureLine } from "#utils/structureCaptionDetector";
-import { useEditMode } from '#modules/SingleSong/redux/selectors';
+import { useCanEditContent } from '#modules/SingleSong/mode';
 
 function NormalText({ children }) {
   return <div style={{ whiteSpace: "pre-wrap" }}>{children}</div>;
@@ -17,8 +17,8 @@ export function MagicInput({
   transposition = 0,
   useModifiers = false,
 }: any) {
-  const editMode = useEditMode();
-  const actualTransposition = editMode ? 0 : transposition;
+  const canEditContent = useCanEditContent();
+  const actualTransposition = canEditContent ? 0 : transposition;
   return (
     <div className={classNames("MagicInput", wrapperClassName)}>
       <div className={classNames("MagicInput__output", className)}>
@@ -43,7 +43,7 @@ export function MagicInput({
           }
         })}
       </div>
-      {editMode && (
+      {canEditContent && (
         <textarea
           className={classNames(
             "MagicInput__textarea border border-solid border-border",

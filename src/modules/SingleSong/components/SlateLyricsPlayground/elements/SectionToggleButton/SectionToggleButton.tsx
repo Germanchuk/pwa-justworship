@@ -3,6 +3,7 @@ import { ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { type Element, Node, type Path, Transforms } from "slate";
 import { ReactEditor, useSlate } from "slate-react";
 
+import { useCollapseApplies } from "../../../../mode";
 import type { SectionElement } from "../../types";
 import { useCurrentUsername } from "../hooks";
 import "./SectionToggleButton.css";
@@ -10,7 +11,10 @@ import "./SectionToggleButton.css";
 export const SectionToggleButton = ({ lineElement }: { lineElement: Element }) => {
   const editor = useSlate();
   const currentUsername = useCurrentUsername();
-  if (!currentUsername) return null;
+  // Поза читанням секції завжди розгорнуті, тож кнопки нема: контроль, який
+  // нічого не змінює, гірший за відсутній (таблиця в `mode.tsx`).
+  const collapseApplies = useCollapseApplies();
+  if (!currentUsername || !collapseApplies) return null;
 
   // Resolve section path on every render — cached paths go stale when siblings shift.
   let section: SectionElement;

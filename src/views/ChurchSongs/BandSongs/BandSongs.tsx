@@ -1,6 +1,4 @@
 import {Collapsible} from "#components";
-import {Routes} from "#constants/routes";
-import {Link} from "react-router-dom";
 import React from "react";
 import classNames from "classnames";
 
@@ -21,13 +19,11 @@ export default function BandSongs({name, songs}) {
       }
       openByDefault={true}
     >
+      {/* Пісні чужих гуртів більше не відкриваються — лишається лише перелік. */}
       {songs?.map((song) => (
-        <Link
-          to={`${Routes.PublicSongs}/${song.id}`}
-          className="bg-muted px-3 py-2 rounded block mb-2"
-        >
+        <div key={song.id} className="bg-muted px-3 py-2 rounded block mb-2">
           {song.name}
-        </Link>
+        </div>
       ))}
     </Collapsible>
   )

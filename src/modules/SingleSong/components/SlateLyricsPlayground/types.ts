@@ -32,6 +32,28 @@ export type CustomText = {
   displayChord?: string;
 };
 
+/**
+ * Примітка як така: текст картки плюс метадані самого коментаря.
+ * Зберігається в `song-meta-row`, по одному пропу на коментар — див.
+ * `comments/noteStore.ts`. Мітки на тексті (`CommentMark`) лишаються самим
+ * якорем: вони кажуть ДЕ висить примітка, запис — ЩО вона таке.
+ *
+ * `color`/`visibleFor`/`author` навмисно дублюють мітку: коли текст під
+ * приміткою видалили, міток уже немає, а показати втрачену примітку
+ * потрібному адресату треба (`NOTE-29`).
+ */
+export type NoteRecord = {
+  body: string;
+  color: string;
+  visibleFor: string[];
+  author?: string;
+};
+
+/**
+ * @deprecated Старий вузол-якір. Лишається тільки заради міграції існуючих
+ * документів: `withComments` переносить його `body` у метадані й видаляє
+ * вузол. Прибрати разом із міграцією, коли прод дожує старі пісні.
+ */
 export type CommentAnchorElement = {
   type: "comment-anchor";
   commentId: string;
@@ -96,8 +118,8 @@ export type CapoElement = {
   /**
    * Per-user прапорець "капо тимчасово вимкнено" (нік у списку = вимкнено).
    * Дозволяє пам'ятати значення капо (`valuesBy`), але не застосовувати його —
-   * щоб редагувати акорди й не забути, де було капо. Той самий патерн, що
-   * `section.collapsedFor`.
+   * щоб глянути на акорди у тональності пісні й не забути, де було капо. Той
+   * самий патерн, що `section.collapsedFor`.
    */
   disabledFor?: string[];
   children: CustomText[];
@@ -111,6 +133,25 @@ export type SongMetaChild =
 
 export type SongMetaRowElement = {
   type: "song-meta-row";
+  /**
+   * Per-user режими показу (нік у списку = сховано для нього). Той самий
+   * патерн, що `section.collapsedFor` і `capo.disabledFor`.
+   * Правило показу й місце в документі — див. `display/model.ts`.
+   */
+  chordsHiddenFor?: string[];
+  lyricsHiddenFor?: string[];
+  /**
+   * Примітки пісні: ключ `note:<commentId>` → `NoteRecord`.
+   *
+   * ОДИН ПРОП НА КОМЕНТАР, а не один спільний обʼєкт: `@slate-yjs` пише кожен
+   * проп вузла окремим Yjs-атрибутом, тож окремі ключі дають last-writer-wins
+   * у межах одного коментаря. Спільний обʼєкт означав би, що двоє, хто правлять
+   * РІЗНІ примітки одночасно, затирають один одного.
+   *
+   * Ключі формує `comments/noteStore.ts` — літерал тут лише тому, що
+   * шаблонний індексний підпис не бере значення з константи.
+   */
+  [noteKey: `note:${string}`]: NoteRecord | undefined;
   children: SongMetaChild[];
 };
 

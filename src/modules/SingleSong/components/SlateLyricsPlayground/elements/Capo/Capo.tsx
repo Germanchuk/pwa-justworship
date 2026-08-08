@@ -1,24 +1,21 @@
 import { useState } from "react";
 import type { RenderElementProps } from "slate-react";
-import { ReactEditor, useSlateStatic } from "slate-react";
-import { PowerIcon } from "@heroicons/react/24/solid";
+import { useSlateStatic } from "slate-react";
+import { Switch } from "@/components/ui/switch";
+import { useCapoApplies } from "../../../../mode";
 import { useCurrentUsername } from "../hooks";
 import { CapoModal } from "./CapoModal";
 import type { CapoElement } from "../../types";
-import {
-  resolveTransposition,
-  setCapo,
-  setCapoEnabled,
-} from "../../transposition/operations";
-import { keyDisplayName } from "../../transposition/transposeChords";
-import "./Capo.css";
+import { setCapo, setCapoEnabled } from "../../transposition/operations";
 
 export function Capo(props: RenderElementProps) {
   const { attributes, children, element } = props;
   const editor = useSlateStatic();
   const [open, setOpen] = useState(false);
   const username = useCurrentUsername();
-  const isReadonly = ReactEditor.isReadOnly(editor);
+  // У режимі редагування капо не діє (таблиця в `mode.tsx`) — тоді бейдж
+  // показує ефективний стан: приглушений, свіч вимкнений, значення на місці.
+  const capoApplies = useCapoApplies();
 
   const capo = element as CapoElement;
   // Запам'ятане значення капо (показуємо завжди, навіть коли вимкнено).
@@ -26,9 +23,7 @@ export function Capo(props: RenderElementProps) {
   const enabled =
     rawValue > 0 && !(username ? capo.disabledFor?.includes(username) : true);
   const isEmpty = rawValue === 0;
-
-  // effectiveKey з resolveTransposition коректний для обох станів (вимкнено → songKey).
-  const { effectiveKey } = resolveTransposition(editor, username);
+  const active = enabled && capoApplies;
 
   const handleSave = (n: number) => {
     if (!username) return;
@@ -36,52 +31,55 @@ export function Capo(props: RenderElementProps) {
   };
 
   const togglePower = () => {
-    if (!username || isReadonly) return;
+    if (!username) return;
     setCapoEnabled(editor, username, !enabled);
   };
 
+  const title = !capoApplies
+    ? "У режимі редагування капо не діє — акорди показані у тональності пісні"
+    : isEmpty
+      ? "Спочатку виберіть лад капо"
+      : enabled
+        ? "Капо ввімкнено — вимкнути, щоб бачити акорди у тональності пісні"
+        : "Капо вимкнено — ввімкнути";
+
+  // Капо — per-user налаштування показу (не спільний вміст), тож виставляти
+  // його можна й у читанні: музикант має могти поставити своє капо.
   return (
     <div {...attributes} className="song-meta-line">
       <span
         contentEditable={false}
-        className={`song-meta-badge ${isReadonly ? "song-meta-badge--readonly" : ""}`}
-        onClick={() => !isReadonly && setOpen(true)}
+        className={`song-meta-badge ${
+          capoApplies ? "" : "song-meta-badge--readonly song-meta-badge--inert"
+        }`}
+        onClick={() => capoApplies && setOpen(true)}
+        title={capoApplies ? undefined : title}
       >
         <span className="song-meta-badge__label">Капо:</span>
         <span
           className={`song-meta-badge__value ${
             isEmpty ? "song-meta-badge__value--placeholder" : ""
-          }`}
-          style={!isEmpty && !enabled ? { opacity: 0.45 } : undefined}
+          } ${!isEmpty && !active ? "song-meta-badge__value--muted" : ""}`}
         >
           {rawValue}
         </span>
-        {enabled && (
-          <span
-            className="song-meta-badge__value"
-            style={{ opacity: 0.6, fontSize: "0.85em", marginLeft: 4 }}
-          >
-            грає {keyDisplayName(effectiveKey)}
-          </span>
-        )}
       </span>
 
-      {!isEmpty && !isReadonly && (
-        <button
-          type="button"
-          contentEditable={false}
-          className={`capo-power ${enabled ? "capo-power--on" : ""}`}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={togglePower}
-          title={
-            enabled
-              ? "Капо ввімкнено — вимкнути, щоб редагувати акорди"
-              : "Капо вимкнено — ввімкнути"
-          }
-        >
-          <PowerIcon />
-        </button>
-      )}
+      {/* Свіч завжди в DOM: при капо=0 (або коли режим його не застосовує)
+          просто disabled, щоб рядок не стрибав при зміні стану. */}
+      <span
+        contentEditable={false}
+        className="ml-1.5 inline-flex"
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        <Switch
+          checked={active}
+          disabled={isEmpty || !capoApplies}
+          onCheckedChange={togglePower}
+          aria-label="Капо"
+          title={title}
+        />
+      </span>
 
       {children}
       {open && (

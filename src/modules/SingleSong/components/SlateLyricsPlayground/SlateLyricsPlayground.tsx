@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { createEditor, type Descendant, type Editor } from "slate";
+import { createEditor, Transforms, type Descendant, type Editor } from "slate";
 import { Slate, Editable, withReact } from "slate-react";
 import { withYjs, withYHistory, YjsEditor } from "@slate-yjs/core";
 
@@ -8,15 +8,18 @@ import { withSections } from "./withSections";
 import { withHeader } from "./withHeader";
 import { withMetaSchema } from "./withMetaSchema";
 import { withComments } from "./comments/withComments";
-import { withCapoGuard } from "./transposition/withCapoGuard";
-import { CapoBlockedTooltip } from "./transposition/CapoBlockedTooltip";
+import { withModeGuard } from "./mode/withModeGuard";
+import { ModeBlockedTooltip } from "./mode/ModeBlockedTooltip";
 import { RenderLeaf } from "./comments/renderLeaf";
+import { NoteHeadsProvider } from "./comments/NoteHeadsContext";
 import { CommentsFab } from "./comments/CommentsFab";
 import { LostCommentsBlock } from "./comments/LostCommentsBlock";
 import { pushLostComment } from "./comments/lostComments";
+import { isPrivateTo } from "./comments/visibility";
 import { useCollabProvider } from "./useCollabProvider";
 import { useFillViewportHeight } from "./useFillViewportHeight";
 import { setActiveSongEditor } from "./songEditorRegistry";
+import { useCanAnnotate, useCanEditContent, useSongMode } from "../../mode";
 import { useConnectionStatus } from "../../redux/selectors";
 import { useCurrentUsername } from "./elements/hooks";
 import { SlatePlayerBridge } from "./player/SlatePlayerBridge";
@@ -28,18 +31,39 @@ interface Props {
   songId: string | number;
 }
 
-function DecoratedEditable({ placeholder }: { placeholder?: string }) {
+function DecoratedEditable({
+  placeholder,
+  readOnly,
+  canEditContent,
+}: {
+  placeholder?: string;
+  readOnly: boolean;
+  canEditContent: boolean;
+}) {
   const decorate = usePlayerDecorate();
   const editableRef = useRef<HTMLDivElement | null>(null);
   useFillViewportHeight(editableRef);
+
+  // Drag&drop тексту НЕ проходить через `withModeGuard`: slate-react сам
+  // викликає `Transforms.delete` на перетягнутому діапазоні, а вже потім
+  // `insertData` (яку guard відсікає) — вийшло б видалення без вставки.
+  // Тому в режимі приміток гасимо перетягування на рівні DOM-події:
+  // `preventDefault` для slate-react означає "подію вже оброблено".
+  const blockDragWhenNotEditing = (e: React.DragEvent) => {
+    if (!canEditContent) e.preventDefault();
+  };
+
   return (
     <Editable
       ref={editableRef}
       className="slate-editable"
+      readOnly={readOnly}
       renderElement={renderElement}
       renderLeaf={(props) => <RenderLeaf {...props} />}
       decorate={decorate}
       onContextMenu={(e) => e.preventDefault()}
+      onDragStart={blockDragWhenNotEditing}
+      onDrop={blockDragWhenNotEditing}
       placeholder={placeholder}
     />
   );
@@ -54,6 +78,17 @@ function CollabView({ songId }: { songId: string | number }) {
     meRef.current = me;
   }, [me]);
 
+  // Режим — per-user і локальний, тож НЕ входить у deps редактора: пересоздання
+  // Yjs-редактора на кожне перемикання відʼєднало б документ. Guard читає
+  // актуальне значення через ref.
+  const mode = useSongMode();
+  const canEditContent = useCanEditContent();
+  const canAnnotate = useCanAnnotate();
+  const canEditRef = useRef(canEditContent);
+  useEffect(() => {
+    canEditRef.current = canEditContent;
+  }, [canEditContent]);
+
   const editor = useMemo(() => {
     const yjsEditor = withYjs(withReact(createEditor()), sharedRoot);
     let e = withYHistory(yjsEditor) as unknown as Editor;
@@ -61,17 +96,21 @@ function CollabView({ songId }: { songId: string | number }) {
     e = withHeader(e);
     e = withSections(e);
     e = withComments(e, {
-      onAnchorOrphaned: (data) => {
-        // Skip self-orphans: if I am the comment's author and the
-        // orphaning happened on my editor, I deliberately deleted my
-        // own marked text — don't surface it as "lost" to me or peers.
-        if (data.author && data.author === meRef.current) return;
+      onNoteOrphaned: (data) => {
+        // Skip self-orphans: if the note was mine alone and I am its
+        // author, I deliberately deleted my own marked text — don't
+        // surface it as "lost" to me or peers. A note I wrote *for*
+        // somebody else is NOT mine to silently drop: its addressee must
+        // still learn that the text under it is gone.
+        if (data.author === meRef.current && isPrivateTo(data, meRef.current)) {
+          return;
+        }
         pushLostComment(ydoc, data);
       },
     });
-    // Капо активне → акорди показуються транспоновано лише мені, тож блокуємо
-    // редагування chord-line, щоб не писати у спільний документ чужу тональність.
-    e = withCapoGuard(e, () => meRef.current);
+    // Найзовнішній guard: поза режимом редагування вміст пісні незмінний
+    // (у режимі приміток редактор лишається contentEditable заради виділення).
+    e = withModeGuard(e, () => canEditRef.current);
     return e;
   }, [sharedRoot, ydoc]);
 
@@ -93,6 +132,12 @@ function CollabView({ songId }: { songId: string | number }) {
     setActiveSongEditor(editor);
     return () => setActiveSongEditor(null);
   }, [editor]);
+
+  // Режим читання вимикає contentEditable — прибираємо каретку, щоб після
+  // повернення в edit/notes не лишалось "привида" старого селекшна.
+  useEffect(() => {
+    if (mode === "read") Transforms.deselect(editor);
+  }, [editor, mode]);
 
   // DEBUG (тільки dev): доступ до Slate-структури пісні з консолі.
   //   __slate()  — дерево, яке розгортається кліками в консолі
@@ -134,9 +179,17 @@ function CollabView({ songId }: { songId: string | number }) {
     <Slate editor={editor} initialValue={editor.children}>
       <SlatePlayerBridge editor={editor}>
         <LostCommentsBlock ydoc={ydoc} />
-        <DecoratedEditable placeholder="Почніть друкувати..." />
-        <CommentsFab />
-        <CapoBlockedTooltip />
+        {/* Розкладка карток приміток рахується один раз на зміну документа,
+            а не в кожному рядку — див. `comments/NoteHeadsContext.tsx`. */}
+        <NoteHeadsProvider>
+          <DecoratedEditable
+            readOnly={mode === "read"}
+            canEditContent={canEditContent}
+            placeholder={canEditContent ? "Почніть друкувати..." : undefined}
+          />
+        </NoteHeadsProvider>
+        {canAnnotate && <CommentsFab />}
+        <ModeBlockedTooltip />
       </SlatePlayerBridge>
     </Slate>
   );

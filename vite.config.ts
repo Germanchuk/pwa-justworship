@@ -5,8 +5,6 @@ import { VitePWA } from "vite-plugin-pwa";
 import tailwindcss from "@tailwindcss/vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
-import { cloudflare } from "@cloudflare/vite-plugin";
-
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), tsconfigPaths(), VitePWA({
@@ -58,5 +56,5 @@ export default defineConfig({
         },
       ],
     },
-  }), cloudflare()],
+  })],
 });

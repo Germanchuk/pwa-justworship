@@ -5,7 +5,8 @@ import {songApi} from "#modules/SingleSong/api";
 import {useNavigate} from "react-router-dom";
 import {useDispatch} from "react-redux";
 import {addNotificationWithTimeout} from "#layout/slices/notificationsSlice";
-import {Routes} from "#constants/routes";
+import {bandPath} from "#constants/routes";
+import {useBandId} from "#modules/Band/BandLayout";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 
@@ -13,14 +14,15 @@ export default function CreateSong() {
   const navigate = useNavigate();
   const dispatch = useDispatch<any>();
   const [loading, setLoading] = useState(false);
+  const bandId = useBandId();
 
   const createSong = useCallback(() => {
     setLoading(true);
-    songApi.createSong({
+    songApi.createSong(bandId, {
       name: "Нова пісня"
     })
       .then((song) => {
-        navigate(`${Routes.PublicSongs}/${song.data.id}`)
+        navigate(bandPath.song(bandId, song.data.id))
       })
       .catch(() => {
         dispatch(
@@ -30,7 +32,7 @@ export default function CreateSong() {
           })
         );
       });
-  }, [navigate, dispatch]);
+  }, [bandId, navigate, dispatch]);
 
   return (
     <>

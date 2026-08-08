@@ -6,13 +6,18 @@
  *
  *   [0]    song-name
  *   [1]    song-meta-row → bpm | time-signature | song-key (keyValue) | capo
- *   [2…]   section (діти: line | chord-line | comment-anchor) та empty-line
+ *   [2…]   section (діти: line | chord-line) та empty-line
  *
  * Свідомо НЕ експортуємо:
- *   - `comment-anchor` — void-вузли коментарів (per-user, приватні);
- *   - per-user поля `section.collapsedFor`, `capo.valuesBy`, `capo.disabledFor`
+ *   - примітки: `song-meta-row["note:<commentId>"]` (per-user, приватні);
+ *   - per-user поля `section.collapsedFor`, `capo.valuesBy`, `capo.disabledFor`,
+ *     `song-meta-row.chordsHiddenFor` / `.lyricsHiddenFor`
  *     (той самий перелік приватного, що вирізає `sanitizeSnapshot` у
  *     `collab-justworship/src/slateBridge.ts`).
+ *
+ * УВАГА: режими показу (приховані слова/акорди) на експорт НЕ впливають — у
+ * .docx завжди йде повна пісня. Це свідомо: роздруківка потрібна цілісною, а
+ * фільтр — це те, як зручно дивитись на екран під час гри.
  */
 
 import { Document, Packer, Paragraph, TextRun } from "docx";
@@ -124,7 +129,8 @@ function sectionToParagraph(
   for (const child of section.children) {
     if (!Element.isElement(child)) continue;
     const type = (child as ElementNode).type;
-    if (type === "comment-anchor") continue; // приватні коментарі — не в документ
+    // Legacy-вузол коментаря — у ще не мігрованих піснях (див. withComments).
+    if (type === "comment-anchor") continue;
 
     const isChordLine = type === "chord-line";
     const text = isChordLine

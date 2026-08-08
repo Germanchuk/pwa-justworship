@@ -10,12 +10,21 @@ import { Bpm } from "./elements/Bpm/Bpm";
 import { TimeSignature } from "./elements/TimeSignature/TimeSignature";
 import { SongKey } from "./elements/SongKey/SongKey";
 import { Capo } from "./elements/Capo/Capo";
-import { CommentAnchor } from "./comments/CommentAnchor";
-
 export const renderElement = (props: RenderElementProps) => {
   switch (props.element.type) {
+    // Старий вузол-якір: `withComments` мігрує його в метадані й видаляє на
+    // першій же нормалізації. Рендер існує лише щоб не блимнути карткою в
+    // старому місці до того моменту.
     case "comment-anchor":
-      return <CommentAnchor {...props} />;
+      return (
+        <div
+          {...props.attributes}
+          contentEditable={false}
+          style={{ display: "none" }}
+        >
+          {props.children}
+        </div>
+      );
     case "section":
       return <Section {...props} />;
     case "empty-line":

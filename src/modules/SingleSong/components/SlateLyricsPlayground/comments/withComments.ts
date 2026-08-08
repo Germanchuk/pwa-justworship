@@ -4,9 +4,18 @@ import type {
   CommentAnchorElement,
   CommentMark,
   CustomText,
+  NoteRecord,
 } from "../types";
+import {
+  deleteNote,
+  hasNote,
+  readNote,
+  readNotes,
+  writeNote,
+  writeNoteBody,
+} from "./noteStore";
 
-const ANCHOR_TYPE = "comment-anchor";
+const LEGACY_ANCHOR_TYPE = "comment-anchor";
 
 const COMMENTABLE_BLOCK_TYPES = new Set([
   "line",
@@ -16,35 +25,20 @@ const COMMENTABLE_BLOCK_TYPES = new Set([
   "header",
 ]);
 
+/** @deprecated Лише для міграції старих документів — див. `types.ts`. */
 export const isCommentAnchor = (n: unknown): n is CommentAnchorElement =>
-  Element.isElement(n as Element) && (n as Element).type === ANCHOR_TYPE;
+  Element.isElement(n as Element) && (n as Element).type === LEGACY_ANCHOR_TYPE;
 
 const getMarks = (leaf: CustomText): CommentMark[] =>
   Array.isArray(leaf.comment) ? leaf.comment : [];
 
-const makeAnchor = (
-  commentId: string,
-  visibleFor: string[],
-  color: string,
-  body: string,
-  author: string | undefined,
-): CommentAnchorElement => ({
-  type: "comment-anchor",
-  commentId,
-  visibleFor,
-  color,
-  body,
-  author,
-  children: [{ text: "" }],
-});
-
 export type WithCommentsOptions = {
   /**
-   * Called inside `normalizeNode` right before an orphaned anchor (one whose
-   * underlying text marks are all gone) is removed. Lets the caller persist
-   * the anchor's body somewhere safe (e.g. a Y.Map of lost comments).
+   * Викликається в `normalizeNode` перед тим, як прибрати осиротілу примітку
+   * (текст, на якому вона висіла, видалили). Дає змогу зберегти її десь у
+   * безпечному місці — див. `lostComments.ts`.
    */
-  onAnchorOrphaned?: (data: {
+  onNoteOrphaned?: (data: {
     commentId: string;
     body: string;
     color: string;
@@ -54,38 +48,19 @@ export type WithCommentsOptions = {
 };
 
 /**
- * Orphan = no text leaf in the document carries this commentId AND has
- * non-empty text. Empty marked leaves (`{text:"", comment:[...]}`) left
- * over from deletions do NOT count — the user expects the anchor to die
- * when there's nothing visibly highlighted anymore.
+ * Усі commentId, під якими в документі ще є ВИДИМИЙ символ. Порожні позначені
+ * листи (`{text:"", comment:[…]}`) не рахуються: користувач очікує, що примітка
+ * помре, коли підсвічувати вже нічого.
  */
-const isAnchorOrphaned = (editor: Editor, commentId: string): boolean => {
+const collectLiveCommentIds = (editor: Editor): Set<string> => {
+  const live = new Set<string>();
   for (const [n] of Editor.nodes(editor, {
     at: [],
-    match: (m) =>
-      Text.isText(m) &&
-      (m as CustomText).text.length > 0 &&
-      getMarks(m as CustomText).some((c) => c.commentId === commentId),
+    match: (m) => Text.isText(m) && (m as CustomText).text.length > 0,
   })) {
-    if (n) return false;
+    for (const mark of getMarks(n as CustomText)) live.add(mark.commentId);
   }
-  return true;
-};
-
-const reportAndRemoveAnchor = (
-  editor: Editor,
-  anchor: CommentAnchorElement,
-  path: Path,
-  opts: WithCommentsOptions,
-): void => {
-  opts.onAnchorOrphaned?.({
-    commentId: anchor.commentId,
-    body: anchor.body,
-    color: anchor.color,
-    visibleFor: anchor.visibleFor,
-    author: anchor.author,
-  });
-  Transforms.removeNodes(editor, { at: path });
+  return live;
 };
 
 export const withComments = (
@@ -94,16 +69,18 @@ export const withComments = (
 ) => {
   const { isVoid, normalizeNode } = editor;
 
+  // Старі документи ще можуть містити вузол-якір; поки він не мігрував, він
+  // має лишатись void, інакше Slate спробує редагувати його порожній текст.
   editor.isVoid = (element) =>
-    element.type === ANCHOR_TYPE ? true : isVoid(element);
+    element.type === LEGACY_ANCHOR_TYPE ? true : isVoid(element);
 
   editor.normalizeNode = (entry) => {
     const [node, path] = entry;
 
-    // Strip comment marks from empty text leaves. Slate doesn't remove
-    // `{text: ""}` leaves automatically, and a leftover empty marked leaf
-    // (a) shows up as a thin colored "cursor bar" in renderLeaf and
-    // (b) would silently colour-mark anything the user types into it.
+    // Знімаємо мітки з порожніх листів. Slate не прибирає `{text: ""}` сам, а
+    // залишковий позначений порожній лист (а) малюється тонкою кольоровою
+    // «рискою» в renderLeaf і (б) мовчки пофарбував би все, що в нього
+    // надрукують.
     if (Text.isText(node)) {
       const t = node as CustomText;
       if (
@@ -116,27 +93,42 @@ export const withComments = (
       }
     }
 
-    // Direct check: when normalizer iterates over the anchor itself.
+    // МІГРАЦІЯ старих документів: вузол-якір → запис у метаданих.
+    // Ідемпотентна й самовиконувана: спрацьовує на першому ж відкритті пісні
+    // будь-ким. Прибрати разом із `CommentAnchorElement`, коли прод дожує.
     if (isCommentAnchor(node)) {
-      if (isAnchorOrphaned(editor, node.commentId)) {
-        reportAndRemoveAnchor(editor, node, path, opts);
+      const migrated =
+        hasNote(editor, node.commentId) ||
+        writeNote(editor, node.commentId, {
+          body: node.body ?? "",
+          color: node.color,
+          visibleFor: node.visibleFor,
+          author: node.author,
+        });
+      // Рядка метаданих ще немає (його щойно вставить `withHeader`) — вузол не
+      // чіпаємо, інакше текст примітки пропав би. Мігруємо наступним проходом.
+      if (migrated) {
+        Transforms.removeNodes(editor, { at: path });
         return;
       }
     }
 
-    // Indirect check: text-edits dirty the line + the section (ancestors),
-    // not the sibling anchor inside the same section. So when a section
-    // gets normalized we manually iterate its anchor children. Back-to-
-    // front so a removal doesn't invalidate the remaining indices.
-    if (Element.isElement(node) && node.type === "section") {
-      for (let i = node.children.length - 1; i >= 0; i--) {
-        const child = node.children[i];
-        if (
-          isCommentAnchor(child) &&
-          isAnchorOrphaned(editor, child.commentId)
-        ) {
-          reportAndRemoveAnchor(editor, child, [...path, i], opts);
-          return;
+    // Осиротілі примітки: тексту під ними більше немає.
+    //
+    // Перевіряємо на корені, бо саме він — предок будь-якої правки тексту, а
+    // `song-meta-row`, де тепер лежать записи, предком рядків не є і сам би
+    // не «забруднився».
+    if (Editor.isEditor(node)) {
+      const notes = readNotes(editor);
+      const ids = Object.keys(notes);
+      if (ids.length > 0) {
+        const live = collectLiveCommentIds(editor);
+        for (const commentId of ids) {
+          if (live.has(commentId)) continue;
+          const note = notes[commentId];
+          opts.onNoteOrphaned?.({ commentId, ...note });
+          deleteNote(editor, commentId);
+          return; // нормалізація перезапуститься
         }
       }
     }
@@ -180,11 +172,11 @@ const applyMark = (
   }
 };
 
-const targetBlockForSelection = (editor: Editor): Path | null => {
+const hasBlockSelection = (editor: Editor): boolean => {
   const { selection } = editor;
-  if (!selection || Range.isCollapsed(selection)) return null;
+  if (!selection || Range.isCollapsed(selection)) return false;
   const [start] = Range.edges(selection);
-  const entry = Editor.above(editor, {
+  return !!Editor.above(editor, {
     at: start,
     match: (n) =>
       Element.isElement(n) &&
@@ -192,12 +184,11 @@ const targetBlockForSelection = (editor: Editor): Path | null => {
       COMMENTABLE_BLOCK_TYPES.has((n as { type: string }).type),
     mode: "lowest",
   });
-  return entry ? entry[1] : null;
 };
 
 // ---------- public API ----------
 
-/** Apply a color highlight to the current selection. No anchor inserted. */
+/** Кольорове виділення на поточному селекшні. Картки не створює. */
 export const addHighlight = (
   editor: Editor,
   commentId: string,
@@ -205,7 +196,7 @@ export const addHighlight = (
   color: string,
   author?: string,
 ): void => {
-  if (targetBlockForSelection(editor) === null) return;
+  if (!hasBlockSelection(editor)) return;
   const mark: CommentMark = { commentId, visibleFor, color, author };
   Editor.withoutNormalizing(editor, () => {
     applyMark(editor, mark, `__cAdd_${commentId}`);
@@ -213,8 +204,8 @@ export const addHighlight = (
 };
 
 /**
- * Apply a comment mark to the current selection AND insert a comment-anchor
- * pseudo-row above the block containing the selection start.
+ * Виділення на селекшні ПЛЮС запис примітки в метаданих документа.
+ * Де саме зʼявиться картка, тут не вирішується — див. `noteHeads.ts`.
  */
 export const addNote = (
   editor: Editor,
@@ -224,61 +215,49 @@ export const addNote = (
   body = "",
   author?: string,
 ): void => {
-  const blockPath = targetBlockForSelection(editor);
-  if (!blockPath) return;
+  if (!hasBlockSelection(editor)) return;
   const mark: CommentMark = { commentId, visibleFor, color, author };
 
   Editor.withoutNormalizing(editor, () => {
     applyMark(editor, mark, `__cAdd_${commentId}`);
-    Transforms.insertNodes(
-      editor,
-      makeAnchor(commentId, visibleFor, color, body, author),
-      { at: blockPath, select: false },
-    );
+    writeNote(editor, commentId, { body, color, visibleFor, author });
   });
 };
 
 /**
- * Promote an existing highlight (mark-only) into a note by inserting an
- * anchor pseudo-row above the first block carrying this commentId.
- * No-op if an anchor for this commentId already exists.
+ * Перетворити наявне виділення на примітку (`NOTE-4`). Метадані беремо з самої
+ * мітки — вона вже несе колір, адресата й автора.
  */
 export const convertHighlightToNote = (
   editor: Editor,
   commentId: string,
   body = "",
 ): void => {
+  if (hasNote(editor, commentId)) return;
+
   for (const [n] of Editor.nodes(editor, {
-    at: [],
-    match: (m) => isCommentAnchor(m) && m.commentId === commentId,
-  })) {
-    if (n) return;
-  }
-  let leafEntry: [CustomText, Path] | null = null;
-  for (const [n, p] of Editor.nodes(editor, {
     at: [],
     match: (m) =>
       Text.isText(m) &&
+      (m as CustomText).text.length > 0 &&
       getMarks(m as CustomText).some((c) => c.commentId === commentId),
   })) {
-    leafEntry = [n as CustomText, p];
-    break;
+    const mark = getMarks(n as CustomText).find(
+      (c) => c.commentId === commentId,
+    );
+    if (!mark) continue;
+    const record: NoteRecord = {
+      body,
+      color: mark.color,
+      visibleFor: mark.visibleFor,
+      author: mark.author,
+    };
+    writeNote(editor, commentId, record);
+    return;
   }
-  if (!leafEntry) return;
-
-  const [leaf, leafPath] = leafEntry;
-  const mark = getMarks(leaf).find((c) => c.commentId === commentId);
-  if (!mark) return;
-
-  const blockPath = Path.parent(leafPath);
-  Transforms.insertNodes(
-    editor,
-    makeAnchor(commentId, mark.visibleFor, mark.color, body, mark.author),
-    { at: blockPath, select: false },
-  );
 };
 
-/** Remove a comment fully: strip mark from all leaves, remove anchor if any. */
+/** Видалити коментар повністю: мітки з тексту + запис примітки. */
 export const removeComment = (editor: Editor, commentId: string): void => {
   Editor.withoutNormalizing(editor, () => {
     const matches: Array<[CustomText, Path]> = [];
@@ -305,48 +284,16 @@ export const removeComment = (editor: Editor, commentId: string): void => {
       }
     }
 
-    const anchorPaths: Path[] = [];
-    for (const [, p] of Editor.nodes(editor, {
-      at: [],
-      match: (n) => isCommentAnchor(n) && n.commentId === commentId,
-    })) {
-      anchorPaths.push(p);
-    }
-    anchorPaths
-      .sort((a, b) => Path.compare(b, a))
-      .forEach((p) => Transforms.removeNodes(editor, { at: p }));
+    deleteNote(editor, commentId);
   });
 };
 
 /**
- * Remove only the note's anchor (card) while keeping the highlight mark on
- * text. Effectively demotes a note back to a highlight.
+ * Прибрати лише картку, лишивши підсвітку на тексті — тобто понизити примітку
+ * назад до виділення (`NOTE-4`).
  */
 export const removeNoteOnly = (editor: Editor, commentId: string): void => {
-  const anchorPaths: Path[] = [];
-  for (const [, p] of Editor.nodes(editor, {
-    at: [],
-    match: (n) => isCommentAnchor(n) && n.commentId === commentId,
-  })) {
-    anchorPaths.push(p);
-  }
-  if (anchorPaths.length === 0) return;
-  Editor.withoutNormalizing(editor, () => {
-    anchorPaths
-      .sort((a, b) => Path.compare(b, a))
-      .forEach((p) => Transforms.removeNodes(editor, { at: p }));
-  });
-};
-
-/** Returns true iff a comment-anchor exists in the doc for this commentId. */
-export const hasAnchor = (editor: Editor, commentId: string): boolean => {
-  for (const [n] of Editor.nodes(editor, {
-    at: [],
-    match: (m) => isCommentAnchor(m) && m.commentId === commentId,
-  })) {
-    if (n) return true;
-  }
-  return false;
+  deleteNote(editor, commentId);
 };
 
 export const updateCommentBody = (
@@ -354,27 +301,8 @@ export const updateCommentBody = (
   commentId: string,
   body: string,
 ): void => {
-  for (const [, p] of Editor.nodes(editor, {
-    at: [],
-    match: (n) => isCommentAnchor(n) && n.commentId === commentId,
-  })) {
-    Transforms.setNodes(editor, { body } as Partial<CommentAnchorElement>, {
-      at: p,
-    });
-  }
+  writeNoteBody(editor, commentId, body);
 };
 
-export const findAnchorPath = (
-  editor: Editor,
-  commentId: string,
-): Path | null => {
-  for (const [, p] of Editor.nodes(editor, {
-    at: [],
-    match: (n) => isCommentAnchor(n) && n.commentId === commentId,
-  })) {
-    return p;
-  }
-  return null;
-};
-
+export { hasNote, readNote };
 export { Node };

@@ -16,10 +16,11 @@ export const DEFAULT_COMMENT_COLOR = COMMENT_PALETTE[0].hex;
 // Fixed color for public (visible-to-everyone) comments. Always neutral gray.
 export const PUBLIC_COMMENT_COLOR = "#6B7280";
 
-// Neutral tone used to render OTHER users' private marks when the local user
-// can't see their real color (careful-mode OFF). Distinct from
-// PUBLIC_COMMENT_COLOR so users can tell "someone's private note" apart from
-// a public one at a glance.
+// Neutral tone for OTHER users' private marks — drawn ONLY in edit mode, where
+// a deletion could wipe out somebody else's anchor: you see that something is
+// annotated there, but neither the real color nor the note body. Distinct from
+// PUBLIC_COMMENT_COLOR so users can tell "someone's private note" apart from a
+// public one at a glance. In read and notes mode these marks aren't drawn.
 export const OTHERS_NEUTRAL_COLOR = "#9CA3AF";
 
 const HIGHLIGHT_ALPHA = 0.32;

@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useCallback } from "react";
 import debounce from "lodash.debounce";
 import { fetchAPI } from "../../../../../utils/fetch-api";
+import { useBandId } from "#modules/Band/BandLayout";
 
 export default function SearchResults({ searchQuery, addItem, resetInput }) {
   const [results, setResults] = useState([]);
+  const bandId = useBandId();
 
   const handleAddingItem = (item) => {
     addItem(item);
@@ -12,7 +14,7 @@ export default function SearchResults({ searchQuery, addItem, resetInput }) {
 
   const debouncedSearch = useCallback(
     debounce((searchTerm) => {
-      fetchAPI("/currentBandSongs", {
+      fetchAPI(`/bands/${bandId}/songs`, {
         filters: {
           name: {
             $containsi: searchTerm,
@@ -27,7 +29,7 @@ export default function SearchResults({ searchQuery, addItem, resetInput }) {
           console.error("Error fetching data:", error);
         });
     }, 500), // Adjust the delay as needed (e.g., 500ms)
-    [debounce]
+    [debounce, bandId]
   );
 
   useEffect(() => {

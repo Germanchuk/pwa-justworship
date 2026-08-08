@@ -1,7 +1,7 @@
 /**
  * Tiny one-slot registry to hand off "please focus this comment's textarea"
- * intent from the action that creates the note to the CommentAnchor that
- * mounts shortly after. Module-scoped so it works across components without
+ * intent from the action that creates the note to the NoteCard that mounts
+ * shortly after. Module-scoped so it works across components without
  * threading state through props or context.
  */
 

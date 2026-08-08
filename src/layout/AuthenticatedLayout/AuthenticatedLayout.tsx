@@ -18,7 +18,7 @@ export default function AuthenticatedLayout({ children }) {
 
   useEffect(() => {
     fetchAPI("/users/me", {
-      populate: ["bands", "currentBand", "church"],
+      populate: ["bands"],
     })
     .then((data) => {
       dispatch(setUser(data));

@@ -21,5 +21,19 @@ export const isVisibleTo = (
   return list.includes(me);
 };
 
+/**
+ * True iff the comment is addressed to exactly one person — `username`.
+ * Distinguishes "my own private note" from one I wrote *for* somebody else,
+ * which matters when deciding whether a deletion should surface as lost.
+ */
+export const isPrivateTo = (
+  source: { visibleFor?: string[] },
+  username: string | undefined,
+): boolean => {
+  const list = source.visibleFor;
+  if (!username || !Array.isArray(list)) return false;
+  return list.length === 1 && list[0] === username;
+};
+
 export const privateTo = (username: string): string[] => [username];
 export const publicVisibility = (): string[] => [AUDIENCE_ALL];
