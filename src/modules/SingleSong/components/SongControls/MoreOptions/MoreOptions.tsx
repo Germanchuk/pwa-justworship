@@ -1,12 +1,13 @@
 import {EllipsisVerticalIcon} from "@heroicons/react/24/solid";
 import {Dropdown} from "#components";
-import React from "react";
+import React, {useState} from "react";
 import {createDocument} from "../../../services";
-import {DocumentArrowDownIcon} from "@heroicons/react/24/outline";
+import {DocumentArrowDownIcon, MusicalNoteIcon} from "@heroicons/react/24/outline";
 import {getActiveSongEditor} from "../../SlateLyricsPlayground/songEditorRegistry";
 import {useCurrentUsername} from "../../SlateLyricsPlayground/elements/hooks";
 import CopySong from "../CopySong/CopySong";
 import DeleteSong from "../DeleteSong/DeleteSong";
+import {PlayerSettingsDrawer} from "../PlayerSettings/PlayerSettingsDrawer";
 import { Button } from "@/components/ui/button";
 
 const itemClass =
@@ -14,29 +15,41 @@ const itemClass =
 
 export const MoreOptions = () => {
   const username = useCurrentUsername();
+  // Шухляда живе ПОЗА Dropdown: той розмонтовує вміст при закритті.
+  const [playerSettingsOpen, setPlayerSettingsOpen] = useState(false);
 
   return (
-    <Dropdown
-      trigger={() => (
-        <Button variant="ghost" size="icon" className="rounded-full">
-          <EllipsisVerticalIcon className="w-6 h-6"  />
-        </Button>
-      )}
-      position="bottom"
-      className="w-45"
-    >
-      {/* any options zone */}
-      <ul className="rounded-box bg-white w-full shadow-md m-0 p-2">
-        <CopySong className={itemClass} />
-        <li
-          className={itemClass}
-          onClick={() => createDocument(getActiveSongEditor(), username)}
-        >
-          <DocumentArrowDownIcon className="w-5"/>
-          .docx
-        </li>
-        <DeleteSong />
-      </ul>
-    </Dropdown>
+    <>
+      <Dropdown
+        trigger={() => (
+          <Button variant="ghost" size="icon" className="rounded-full">
+            <EllipsisVerticalIcon className="w-6 h-6"  />
+          </Button>
+        )}
+        position="bottom"
+        className="w-45"
+      >
+        {/* any options zone */}
+        <ul className="rounded-box bg-white w-full shadow-md m-0 p-2">
+          <li className={itemClass} onClick={() => setPlayerSettingsOpen(true)}>
+            <MusicalNoteIcon className="w-5" />
+            Плеєр
+          </li>
+          <CopySong className={itemClass} />
+          <li
+            className={itemClass}
+            onClick={() => createDocument(getActiveSongEditor(), username)}
+          >
+            <DocumentArrowDownIcon className="w-5"/>
+            .docx
+          </li>
+          <DeleteSong />
+        </ul>
+      </Dropdown>
+      <PlayerSettingsDrawer
+        open={playerSettingsOpen}
+        onClose={() => setPlayerSettingsOpen(false)}
+      />
+    </>
   );
 }

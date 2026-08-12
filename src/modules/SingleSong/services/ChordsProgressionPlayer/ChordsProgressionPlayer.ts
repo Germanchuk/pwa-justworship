@@ -7,7 +7,12 @@ import {
   type PlayOptions,
 } from "./playMidiGpt";
 import {getMidiFromSlate, type SongContentSnapshot} from "./getMidiFromSlate/getMidiFromSlate";
-import type {ChordTimelineEvent} from "./getMidiFromSections/utils/progressionToTimeline";
+import type {
+  ChordBeatEvent,
+  ChordTimelineEvent,
+} from "./getMidiFromSections/utils/progressionToTimeline";
+import {DEFAULT_BPM, DEFAULT_TIME_SIGNATURE} from "./songDefaults";
+import {getHumanizeFactor, getPlayerSettings} from "./playerSettings";
 
 type StateListener = (state: MidiPlayerState) => void;
 type ChordListener = (event: ChordTimelineEvent | null) => void;
@@ -18,6 +23,9 @@ type PlaybackPlan = {
   timeline: ChordTimelineEvent[];
   options: PlayOptions;
 };
+
+const sanitizeBpm = (bpm: number | undefined, fallback: number): number =>
+  typeof bpm === "number" && Number.isFinite(bpm) && bpm > 0 ? bpm : fallback;
 
 const tokenKeyFromEvent = (event: ChordTimelineEvent | null): string | null => {
   if (!event) return null;
@@ -137,23 +145,39 @@ class ChordsProgressionPlayer {
       return null;
     }
 
-    const { midi, timeline, bpm, timeSignature } = getMidiFromSlate(
-      this.contentProvider(),
-      this.selectedKey,
-    );
-    const beatsPerBar = timeSignature?.[0] ?? 4;
+    // Налаштування пристрою (пресет педа, піаніно, гуманізація) — базовий шар;
+    // явні опції виклику сильніші. Читаються на кожен play(), тож зміна в меню
+    // діє з наступного запуску.
+    const settings = getPlayerSettings();
+
+    const {
+      midi,
+      timeline,
+      bpm: songBpm,
+      timeSignature: songTimeSignature,
+    } = getMidiFromSlate(this.contentProvider(), this.selectedKey, {
+      humanize: getHumanizeFactor(settings.humanize),
+    });
 
     if (timeline.length === 0) {
       this.handlePlaybackComplete();
       return null;
     }
 
+    // Темп і розмір визначаються тут — один раз, із документа (з можливістю
+    // перекрити викликом). Далі вони йдуть у плеєр як опції; хедер MIDI на
+    // відтворення не впливає, тож розсинхрону між ним і транспортом бути не може.
+    const bpm = sanitizeBpm(options.bpm, sanitizeBpm(songBpm, DEFAULT_BPM));
+    const timeSignature = options.timeSignature ?? songTimeSignature ?? DEFAULT_TIME_SIGNATURE;
     const introBars = Math.max(0, options.introBars ?? 1);
-    const timelineWithIntro = this.shiftTimelineForIntro(timeline, introBars, beatsPerBar, bpm);
 
     const mergedOptions: PlayOptions = {
-      bpm,
+      padPreset: settings.padPreset,
+      piano: settings.piano,
+      pianoVolume: settings.pianoVolume,
       ...options,
+      bpm,
+      timeSignature,
       introBars,
       onEnded: () => {
         this.handlePlaybackComplete();
@@ -161,24 +185,33 @@ class ChordsProgressionPlayer {
       },
     };
 
-    return { midi, timeline: timelineWithIntro, options: mergedOptions };
+    return {
+      midi,
+      timeline: this.timelineInSeconds(timeline, introBars * timeSignature[0], bpm),
+      options: mergedOptions,
+    };
   }
 
-  private shiftTimelineForIntro(
-    timeline: ChordTimelineEvent[],
-    introBars: number,
-    beatsPerBar: number,
+  /**
+   * Долі — джерело правди для підсвітки; секунди виводимо з того самого bpm,
+   * що поїде в транспорт, і зі зсувом на такти вступного кліку.
+   */
+  private timelineInSeconds(
+    timeline: ChordBeatEvent[],
+    introBeats: number,
     bpm: number,
-  ) {
-    if (introBars === 0) return timeline;
-    const introSeconds = introBars * beatsPerBar * (60 / bpm);
-    const introBeats = introBars * beatsPerBar;
+  ): ChordTimelineEvent[] {
+    const beatSeconds = 60 / bpm;
 
-    return timeline.map((event) => ({
-      ...event,
-      start: event.start + introSeconds,
-      startBeats: event.startBeats + introBeats,
-    }));
+    return timeline.map((event) => {
+      const startBeats = event.startBeats + introBeats;
+      return {
+        ...event,
+        startBeats,
+        start: startBeats * beatSeconds,
+        duration: event.durationBeats * beatSeconds,
+      };
+    });
   }
 
   // Keeps the chord highlight timeline aligned with the Tone transport clock.

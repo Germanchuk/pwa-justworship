@@ -1,38 +1,28 @@
 import * as Tone from "tone";
 import { Midi } from "@tonejs/midi";
-import {createPad} from "./createPad/createPad";
-import {createWorshipPad} from "./createPad/createWorshipPad";
+import {getPadPresetDef, type PadPreset, type PadVoice} from "./createPad/padPresets";
 import {createPiano} from "./createPiano/createPiano";
+import {DEFAULT_BPM, DEFAULT_TIME_SIGNATURE} from "./songDefaults";
 
-type BBSTime = string; // "bars:beats:sixteenths"
-
-export type PadPreset = "classic" | "worship";
-
-/**
- * Anything that exposes Tone's note-trigger interface. Lets us swap between the
- * sample-based `createPad` and the synth-based `createWorshipPad` without
- * leaking concrete types through the player.
- */
-type PadVoice = {
-  triggerAttackRelease(
-    notes: string | string[],
-    duration: BBSTime | number,
-    time?: number,
-    velocity?: number,
-  ): unknown;
-  volume: Tone.Param<"decibels"> | {value: number};
-  dispose(): unknown;
-};
+/** Tone-ове позначення часу; ми вживаємо тільки тікову форму `"<n>i"`. */
+type ToneTime = string | number;
 
 interface MidiEvent {
-  time: BBSTime;
+  time: ToneTime;
   name: string;
-  duration: BBSTime;
+  duration: ToneTime;
   velocity: number;
 }
 
 export interface PlayOptions {
+  /**
+   * Темп і розмір — вхідні дані плеєра, а не властивість MIDI. Джерело правди
+   * одне: документ пісні (див. `SlatePlayerBridge`), звідки вони приходять сюди
+   * через `ChordsProgressionPlayer`. Хедер MIDI лишається валідною метаданою
+   * для експорту, але на відтворення не впливає.
+   */
   bpm?: number;
+  timeSignature?: [number, number];
   metronome?: boolean;     // default: true
   metronomePan?: number;   // -1..1; 1 — правий
   introBars?: number;      // кількість тактів вступного кліку перед відтворенням
@@ -44,7 +34,7 @@ export interface PlayOptions {
 }
 
 interface MetronomeCtrl {
-  start(at?: BBSTime | number): void;
+  start(at?: ToneTime): void;
   stop(): void;
   dispose(): void;
 }
@@ -59,14 +49,13 @@ export interface MidiPlaybackControls {
   getState(): MidiPlayerState;
 }
 
-function toBBS(sec: number): BBSTime {
-  return Tone.Time(sec).toBarsBeatsSixteenths();
-}
-
-function extractSignatureAndTempo(midi: Midi, fallbackBpm = 70) {
-  const [num, den] = (midi.header.timeSignatures?.[0]?.timeSignature as [number, number]) || [4, 4];
-  const bpm = midi.header.tempos?.[0]?.bpm ?? fallbackBpm;
-  return { num, den, bpm };
+/**
+ * Долі → тіки транспорту. Доля = чверть (так само рахує `createMidiFromProgression`).
+ * Плануємо все в тіках, тому таймінг нот не залежить від темпу: bpm застосовується
+ * рівно один раз — на транспорті.
+ */
+function beatsToTicks(beats: number): ToneTime {
+  return `${Math.round(beats * Tone.Transport.PPQ)}i`;
 }
 
 function setupTransport(num: number, den: number, bpm: number) {
@@ -79,12 +68,17 @@ function setupTransport(num: number, den: number, bpm: number) {
   return Transport;
 }
 
-function midiToBBSEvents(midi: Midi): MidiEvent[] {
+/**
+ * Читаємо ноти в тіках (`n.ticks`), а не в секундах (`n.time`): секунди @tonejs/midi
+ * рахує через темп із хедера, а він тут не авторитет.
+ */
+function midiToPartEvents(midi: Midi): MidiEvent[] {
+  const ppq = midi.header.ppq;
   return midi.tracks.flatMap((t) =>
     t.notes.map((n) => ({
-      time: toBBS(n.time),
+      time: beatsToTicks(n.ticks / ppq),
       name: Tone.Frequency(n.midi, "midi").toNote(),
-      duration: toBBS(n.duration),
+      duration: beatsToTicks(n.durationTicks / ppq),
       velocity: n.velocity ?? 0.7,
     }))
   );
@@ -122,15 +116,18 @@ function createMetronome({ num, den, pan = 1 }: { num: number; den: number; pan?
   }, beatSubdivision);
 
   return {
-    start(at: BBSTime | number = 0) { loop.start(at); },
+    start(at: ToneTime = 0) { loop.start(at); },
     stop() { loop.stop(); },
     dispose() { loop.dispose(); tick.dispose(); panner.dispose(); },
   };
 }
 
-function computeEndBBS(midi: Midi): BBSTime {
-  const maxEndSec = Math.max(0, ...midi.tracks.flatMap((t) => t.notes.map((n) => n.time + n.duration)));
-  return toBBS(maxEndSec);
+function computeEndBeats(midi: Midi): number {
+  const ppq = midi.header.ppq;
+  return Math.max(
+    0,
+    ...midi.tracks.flatMap((t) => t.notes.map((n) => (n.ticks + n.durationTicks) / ppq)),
+  );
 }
 
 function setDestinationVolumeImmediately(volume: number) {
@@ -183,15 +180,19 @@ export class MidiPlayer {
     }
     this.dispose(); // чистий старт
 
-    const { num, den, bpm } = extractSignatureAndTempo(midi, opts.bpm ?? this.defaults.bpm ?? 70);
+    const bpm = opts.bpm ?? this.defaults.bpm ?? DEFAULT_BPM;
+    const [num, den] = opts.timeSignature ?? this.defaults.timeSignature ?? DEFAULT_TIME_SIGNATURE;
     const Transport = setupTransport(num, den, bpm);
 
     const introBars = Math.max(0, opts.introBars ?? this.defaults.introBars ?? 1);
-    const introOffset = introBars > 0 ? `${introBars}m` : 0;
-    const introOffsetSeconds = Tone.Time(introOffset).toSeconds();
+    // Такт вступу рахуємо в долях (num), а не через Tone-ове `"1m"`: воно міряє
+    // такт відносно знаменника, і на розмірах на кшталт 6/8 розійшлося б із тим,
+    // як такт розуміє лексер акордів.
+    const introBeats = introBars * num;
+    const introOffset = beatsToTicks(introBeats);
 
-    const preset = opts.padPreset ?? this.defaults.padPreset ?? "worship";
-    this.pad = preset === "worship" ? createWorshipPad() : createPad();
+    const preset = opts.padPreset ?? this.defaults.padPreset ?? "classic";
+    this.pad = getPadPresetDef(preset).create();
     if (typeof opts.padVolume === "number") {
       this.pad.volume.value = opts.padVolume;
     }
@@ -206,12 +207,11 @@ export class MidiPlayer {
 
     await Tone.loaded();
 
-    const events = midiToBBSEvents(midi);
+    const events = midiToPartEvents(midi);
     this.part = createPart(events, { pad: this.pad, piano: this.piano ?? undefined });
     this.part.start(introOffset);
 
-    const endBBS = computeEndBBS(midi);
-    const endWithIntroSeconds = Tone.Time(endBBS).toSeconds() + introOffsetSeconds;
+    const endWithIntro = beatsToTicks(introBeats + computeEndBeats(midi));
 
     if ((opts.metronome ?? this.defaults.metronome) !== false) {
       this.metro = createMetronome({ num, den, pan: opts.metronomePan ?? this.defaults.metronomePan ?? 1 });
@@ -223,7 +223,7 @@ export class MidiPlayer {
       this.endEventId = null;
       this.stop({ hard: true });
       opts.onEnded?.();
-    }, endWithIntroSeconds);
+    }, endWithIntro);
 
     this.clearFadeTimer();
     setDestinationVolumeImmediately(0);
