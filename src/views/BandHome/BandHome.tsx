@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { fetchAPI } from "#utils/fetch-api";
 import { ActionCard, SongsList } from "#components";
@@ -44,6 +44,12 @@ export default function BandHome() {
       </SubHeaderArea>
       <div className="mt-6 mb-3 flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-2xl font-bold">Списки пісень</h2>
+        <Link
+          to={bandPath.members(band.id)}
+          className="text-sm font-semibold text-blue-900 hover:underline"
+        >
+          Склад гурту →
+        </Link>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {lists?.length

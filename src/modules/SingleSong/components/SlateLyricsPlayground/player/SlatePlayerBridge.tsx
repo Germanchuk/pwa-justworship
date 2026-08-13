@@ -1,84 +1,46 @@
-import {useEffect, useMemo, useRef, useState} from "react";
+import {useEffect, useMemo, useState} from "react";
 import type {ReactNode} from "react";
-import {Element, Node, type Descendant, type Editor} from "slate";
+import type {Descendant, Editor} from "slate";
 
 import ChordsProgressionPlayer from "../../../services/ChordsProgressionPlayer/ChordsProgressionPlayer";
+import {extractHeader} from "../../../services/ChordsProgressionPlayer/extractHeader";
 import {PlayerHighlightContext} from "./PlayerHighlightContext";
-import {useCapoApplies} from "../../../mode";
-import {useCurrentUsername} from "../elements/hooks";
-import {resolveTransposition} from "../transposition/operations";
+import {useAudioHostStatus} from "#modules/Band/audio/useBandAudio";
+import {useSongId} from "../../../redux/selectors";
 
 interface Props {
   editor: Editor;
   children: ReactNode;
 }
 
-const DEFAULT_BPM = 70;
-const DEFAULT_TS: [number, number] = [4, 4];
-
-const parseTimeSig = (text: string): [number, number] => {
-  const [a, b] = text.split("/").map((v) => parseInt(v, 10));
-  const num = Number.isFinite(a) && a > 0 ? a : DEFAULT_TS[0];
-  const den = Number.isFinite(b) && b > 0 ? b : DEFAULT_TS[1];
-  return [num, den];
-};
-
-const extractHeader = (nodes: Descendant[]): {bpm: number; timeSignature: [number, number]} => {
-  let bpm = DEFAULT_BPM;
-  let timeSignature: [number, number] = DEFAULT_TS;
-
-  const metaRow = nodes.find(
-    (n) => Element.isElement(n) && (n as {type?: string}).type === "song-meta-row",
-  );
-  if (!metaRow || !Element.isElement(metaRow)) return {bpm, timeSignature};
-
-  for (const child of (metaRow as {children?: Descendant[]}).children ?? []) {
-    if (!Element.isElement(child)) continue;
-    const t = (child as {type?: string}).type;
-    if (t === "bpm") {
-      const parsed = Number(Node.string(child));
-      if (Number.isFinite(parsed) && parsed > 0) bpm = parsed;
-    } else if (t === "time-signature") {
-      timeSignature = parseTimeSig(Node.string(child) || "4/4");
-    }
-  }
-  return {bpm, timeSignature};
-};
-
 export const SlatePlayerBridge = ({editor, children}: Props) => {
   const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
 
-  // Транспозиція плейбеку = per-user капо з документа (capo.valuesBy[username]),
-  // але лише в режимах, де капо діє (таблиця в `mode.tsx`). Нік і режим тримаємо
-  // в ref, бо provider — стабільне замикання, що читає live-стан.
-  const username = useCurrentUsername();
-  const usernameRef = useRef(username);
-  useEffect(() => {
-    usernameRef.current = username;
-  }, [username]);
-
-  const capoApplies = useCapoApplies();
-  const capoAppliesRef = useRef(capoApplies);
-  useEffect(() => {
-    capoAppliesRef.current = capoApplies;
-  }, [capoApplies]);
-
-  const [currentTokenKey, setCurrentTokenKey] = useState<string | null>(null);
+  const [localTokenKey, setLocalTokenKey] = useState<string | null>(null);
+  const [localPlayerState, setLocalPlayerState] = useState(player.getState());
   const [selectedTokenKey, setSelectedTokenKey] = useState<string | null>(
     player.getStartChordTokenKey(),
   );
 
+  // Підсвітка від хоста звуку: коли він грає ЦЮ пісню, весь гурт бачить
+  // поточний акорд. Локальне програвання (фолбек) має пріоритет.
+  const hostStatus = useAudioHostStatus();
+  const songId = useSongId();
+  const remoteTokenKey =
+    hostStatus?.armed &&
+    hostStatus.songId != null &&
+    String(hostStatus.songId) === String(songId)
+      ? hostStatus.currentTokenKey
+      : null;
+  const currentTokenKey = localPlayerState !== "idle" ? localTokenKey : remoteTokenKey;
+
   useEffect(() => {
+    // Капо свідомо НЕ впливає на звук (рішення 2026-08-09): воно змінює лише
+    // відображення акордів. Плеєр завжди грає пісню як записано.
     const provider = () => {
       const nodes = editor.children as Descendant[];
       const {bpm, timeSignature} = extractHeader(nodes);
-      const {myCapo} = resolveTransposition(editor, usernameRef.current);
-      return {
-        nodes,
-        bpm,
-        timeSignature,
-        transposition: capoAppliesRef.current ? myCapo : 0,
-      };
+      return {nodes, bpm, timeSignature};
     };
     player.setContentProvider(provider);
     return () => {
@@ -89,10 +51,12 @@ export const SlatePlayerBridge = ({editor, children}: Props) => {
   useEffect(
     () =>
       player.onChordChange((event) => {
-        setCurrentTokenKey(event?.tokenKey ?? null);
+        setLocalTokenKey(event?.tokenKey ?? null);
       }),
     [player],
   );
+
+  useEffect(() => player.onStateChange(setLocalPlayerState), [player]);
 
   useEffect(
     () => player.onSelectedChordKeyChange((key) => setSelectedTokenKey(key)),

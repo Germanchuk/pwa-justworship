@@ -1,3 +1,4 @@
 export * from "./song";
 export * from "./sPreferences";
-export * from "./band";
+// Band-api переїхав до модуля гурту; реекспорт тримає старі імпорти живими.
+export * from "#modules/Band/api/band";

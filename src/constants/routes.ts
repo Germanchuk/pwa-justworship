@@ -13,6 +13,8 @@ export enum Routes {
   // Усе, що належить гурту, живе під ним. Гурт у шляху — єдине джерело
   // правди про контекст: жодного "поточного гурту" в юзері більше немає.
   Band = "/bands/:bandId",
+  BandMembers = "/bands/:bandId/members",
+  AudioHost = "/bands/:bandId/audio-host",
   BandSongs = "/bands/:bandId/songs",
   CreateSong = "/bands/:bandId/songs/new",
   AddSongFromScratch = "/bands/:bandId/songs/new/from-scratch",
@@ -34,6 +36,8 @@ type Id = string | number;
 /** Побудова band-scoped шляхів. Рядки руками не склеюємо. */
 export const bandPath = {
   home: (bandId: Id) => `/bands/${bandId}`,
+  members: (bandId: Id) => `/bands/${bandId}/members`,
+  audioHost: (bandId: Id) => `/bands/${bandId}/audio-host`,
   songs: (bandId: Id) => `/bands/${bandId}/songs`,
   // Читання лишає шлях пісні коротким: посилання на пісню не змінилось.
   song: (bandId: Id, songId: Id, mode: SongMode = "read") =>

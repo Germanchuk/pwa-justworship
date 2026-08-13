@@ -5,20 +5,22 @@ import {
   chordLineToProgressionMapWithKeys,
   isPlayableChordLine,
 } from "../getMidiFromSections/utils/chordLineToProgressionMapWithKeys";
-import {createMidiFromProgression, type ChordEvent} from "../getMidiFromSections/utils/createMidiFromProgression";
-import {progressionToTimeline, type ChordTimelineEvent} from "../getMidiFromSections/utils/progressionToTimeline";
+import {createMidiFromProgression, isRest, type ChordEvent} from "../getMidiFromSections/utils/createMidiFromProgression";
+import {dynamicsIntensityAt} from "../getMidiFromSections/utils/dynamicsIntensity";
+import {progressionToTimeline, type ChordBeatEvent} from "../getMidiFromSections/utils/progressionToTimeline";
+import {DEFAULT_BPM, DEFAULT_TIME_SIGNATURE} from "../songDefaults";
 
 export interface SongContentSnapshot {
   nodes: Descendant[];
   bpm: number;
   timeSignature: [number, number];
-  transposition: number;
 }
 
 export interface PreparedSlateMidiData {
   midi: Midi;
   progression: ChordEvent[];
-  timeline: ChordTimelineEvent[];
+  /** Долі, не секунди — у секунди їх переводить плеєр, коли фіксує bpm транспорту. */
+  timeline: ChordBeatEvent[];
   bpm: number;
   timeSignature: [number, number];
 }
@@ -50,12 +52,13 @@ const nodeText = (node: unknown): string => {
 export function getMidiFromSlate(
   snapshot: SongContentSnapshot | null,
   startTokenKey: string | null,
+  options: {humanize?: number} = {},
 ): PreparedSlateMidiData {
   if (!snapshot || !Array.isArray(snapshot.nodes) || snapshot.nodes.length === 0) {
-    return emptyResult(70, [4, 4]);
+    return emptyResult(DEFAULT_BPM, DEFAULT_TIME_SIGNATURE);
   }
 
-  const {bpm, timeSignature, transposition} = snapshot;
+  const {bpm, timeSignature} = snapshot;
   const beatsPerBar = timeSignature?.[0] ?? 4;
 
   // Walk root children, counting only `section` elements (skip song-name / song-meta-row).
@@ -66,13 +69,23 @@ export function getMidiFromSlate(
     if (!isElement(root) || root.type !== "section") continue;
     sectionIndex += 1;
 
-    const sectionEl = root as unknown as {repeat?: number; children?: unknown[]};
+    const sectionEl = root as unknown as {
+      repeat?: number;
+      dynamicsSteps?: unknown;
+      children?: unknown[];
+    };
     const repeat = Math.max(1, Math.floor(sectionEl.repeat ?? 1) || 1);
     const sectionBase: ChordEvent[] = [];
 
+    // Смуга динаміки — це висота секції, тож позицію рядка міряємо серед усіх
+    // її рядків; comment-anchor нульової висоти не рахуємо.
+    const lines = (sectionEl.children ?? [])
+      .filter(isElement)
+      .filter((child) => child.type !== "comment-anchor");
+
     let chordLineIndex = -1;
-    for (const child of sectionEl.children ?? []) {
-      if (!isElement(child)) continue;
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const child = lines[lineIndex];
       if (child.type !== "chord-line") continue;
       chordLineIndex += 1;
 
@@ -86,8 +99,22 @@ export function getMidiFromSlate(
         chordLineIndex,
         beatsPerBar,
       );
+
+      // Динаміку читаємо в центрі рядка — так гучність повторює градієнт смуги.
+      const intensity = dynamicsIntensityAt(
+        sectionEl.dynamicsSteps,
+        (lineIndex + 0.5) / lines.length,
+      );
+      if (intensity != null) {
+        for (const event of events) event.intensity = intensity;
+      }
+
       sectionBase.push(...events);
     }
+
+    // Акцент початку секції — на перший звучний акорд (паузи пропускаємо).
+    const firstSounding = sectionBase.find((event) => !isRest(event.chord));
+    if (firstSounding) firstSounding.sectionStart = true;
 
     for (let pass = 0; pass < repeat; pass++) {
       progression.push(...sectionBase);
@@ -103,8 +130,12 @@ export function getMidiFromSlate(
       : indexed.findIndex((event) => event.tokenKey === startTokenKey);
   const slice = startIndex > 0 ? indexed.slice(startIndex) : indexed;
 
-  const midi = createMidiFromProgression(slice, bpm, timeSignature, transposition);
-  const timeline = progressionToTimeline(slice, bpm);
+  // Транспозиція завжди 0: капо — річ відображення, не звуку. Параметр
+  // createMidiFromProgression лишається для майбутнього «грати в іншій тональності».
+  const midi = createMidiFromProgression(slice, bpm, timeSignature, 0, {
+    humanize: options.humanize,
+  });
+  const timeline = progressionToTimeline(slice);
 
   return {midi, progression: slice, timeline, bpm, timeSignature};
 }

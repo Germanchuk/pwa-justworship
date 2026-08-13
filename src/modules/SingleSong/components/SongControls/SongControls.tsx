@@ -1,6 +1,7 @@
 import {
   PauseIcon,
   PlayIcon,
+  SpeakerWaveIcon,
   StopIcon,
 } from "@heroicons/react/24/outline";
 import {MoreOptions} from "./MoreOptions/MoreOptions";
@@ -12,6 +13,11 @@ import { Loader2 } from "lucide-react";
 import {ConnectionStatus} from "../ConnectionStatus/ConnectionStatus";
 import {NotesAudienceSelect} from "../SlateLyricsPlayground/comments/NotesAudienceSelect";
 import { useCanAnnotate, useCanPlay } from "../../mode";
+import { useBandOrNull } from "#modules/Band/BandLayout";
+import BandAudioChannel from "#modules/Band/audio/bandAudioChannel";
+import { useAudioHostStatus } from "#modules/Band/audio/useBandAudio";
+import { useCurrentUsername } from "../SlateLyricsPlayground/elements/hooks";
+import { useSongId } from "../../redux/selectors";
 
 export const SongControls = () => {
   // Програвання акордів — функція режиму читання.
@@ -20,16 +26,49 @@ export const SongControls = () => {
   // й ця не перетинаються в часі, тож ділять те саме місце в панелі.
   const canAnnotate = useCanAnnotate();
   const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
-  const [playbackState, setPlaybackState] = useState(player.getState());
+  const [localState, setLocalState] = useState(player.getState());
 
-  useEffect(() => player.onStateChange(setPlaybackState), [player]);
+  const band = useBandOrNull();
+  const username = useCurrentUsername();
+  const songId = useSongId();
+  const hostStatus = useAudioHostStatus();
 
-  // Вийшли з режиму читання — глушимо звук: керувати ним звідти вже нічим.
+  // Хост онлайн і озброєний → кнопки стають пультом: команди їдуть у
+  // band-кімнату, звук грає планшет за пультом. Інакше — локально, як завжди.
+  const remoteActive = hostStatus?.armed === true;
+  const hostOnMySong =
+    remoteActive && hostStatus.songId != null && String(hostStatus.songId) === String(songId);
+  // Хост грає ІНШУ пісню → мої кнопки в idle; мій плей перехоплює («останній перемагає»).
+  const playbackState = remoteActive ? (hostOnMySong ? hostStatus.state : "idle") : localState;
+
+  const hostDesignated =
+    (band as {audioHostUserId?: number | null} | null)?.audioHostUserId != null;
+
+  useEffect(() => player.onStateChange(setLocalState), [player]);
+
+  // Вийшли з режиму читання — глушимо СВІЙ звук. Хоста не чіпаємо: він грає
+  // для всього гурту, а не для цього екрана.
   useEffect(() => {
     if (!canPlay) player.stop();
   }, [canPlay, player]);
 
+  const sendCommand = useCallback(
+    (action: "play" | "pause" | "resume" | "stop") => {
+      BandAudioChannel.getInstance().sendCommand({
+        action,
+        songId: songId ?? null,
+        startTokenKey: action === "play" ? player.getStartChordTokenKey() : null,
+        issuedBy: username ?? null,
+      });
+    },
+    [songId, player, username],
+  );
+
   const handlePrimaryAction = useCallback(() => {
+    if (remoteActive) {
+      sendCommand(hostOnMySong && playbackState === "paused" ? "resume" : "play");
+      return;
+    }
     if (playbackState === "paused") {
       player.resume();
       return;
@@ -37,15 +76,23 @@ export const SongControls = () => {
     player.play().catch((error) => {
       console.error("Failed to start chord progression playback", error);
     });
-  }, [player, playbackState]);
+  }, [remoteActive, hostOnMySong, playbackState, player, sendCommand]);
 
   const handlePause = useCallback(() => {
+    if (remoteActive) {
+      sendCommand("pause");
+      return;
+    }
     player.pause();
-  }, [player]);
+  }, [remoteActive, player, sendCommand]);
 
   const handleStop = useCallback(() => {
+    if (remoteActive) {
+      sendCommand("stop");
+      return;
+    }
     player.stop();
-  }, [player]);
+  }, [remoteActive, player, sendCommand]);
 
   const isLoading = playbackState === "loading";
   const isPlaying = playbackState === "playing";
@@ -56,7 +103,21 @@ export const SongControls = () => {
       <ConnectionStatus />
       <div className="flex gap-1 items-center">
         {canPlay && (
-          <div className="flex gap-1">
+          <div className="flex gap-1 items-center">
+            {/* Куди йде звук: на хоста чи з цього пристрою (хост офлайн). */}
+            {remoteActive ? (
+              <span
+                className="flex items-center gap-0.5 text-[10px] font-semibold text-blue-900 max-w-24"
+                title={`Звук грає: ${hostStatus?.username ?? "хост"}`}
+              >
+                <SpeakerWaveIcon className="size-3.5 shrink-0" />
+                <span className="truncate">{hostStatus?.username ?? "хост"}</span>
+              </span>
+            ) : hostDesignated ? (
+              <span className="text-[10px] font-semibold text-stone-400" title="Хост звуку офлайн">
+                звук тут
+              </span>
+            ) : null}
             <Button
               variant="outline"
               size="icon"

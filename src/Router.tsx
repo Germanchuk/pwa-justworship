@@ -20,6 +20,8 @@ import CreateBand from "#views/CreateBand/CreateBand";
 import BandSongs from "#views/BandSongs/BandSongs";
 import BandsHome from "#views/BandsHome/BandsHome";
 import BandHome from "#views/BandHome/BandHome";
+import BandMembers from "#views/BandMembers/BandMembers";
+import AudioHost from "#views/AudioHost/AudioHost";
 import SingleShedule from "#views/SingleSchedule/SingleShedule";
 import ShadcnDemo from "#views/ShadcnDemo/ShadcnDemo";
 import Landing from "#views/Landing/Landing";
@@ -44,6 +46,8 @@ function Router() {
               гуртів юзера й роздає гурт нижче через контекст. */}
           <Route path={Routes.Band} element={<BandLayout />}>
             <Route index element={<BandHome />} />
+            <Route path="members" element={<BandMembers />} />
+            <Route path="audio-host" element={<AudioHost />} />
             <Route path="songs" element={<BandSongs />} />
             <Route path="songs/new" element={<CreateSong />} />
             <Route path="songs/new/from-scratch" element={<FromScratch />} />
