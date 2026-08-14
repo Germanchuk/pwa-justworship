@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { UserGroupIcon } from "@heroicons/react/24/outline";
+import { Cog6ToothIcon, UserGroupIcon } from "@heroicons/react/24/outline";
 
 import { fetchAPI } from "#utils/fetch-api";
 import { Routes, bandPath } from "#constants/routes";
@@ -69,7 +69,11 @@ export default function BandsHome() {
       <SubHeaderArea>
         <div className="col-span-2 grid grid-cols-2 gap-2">
           <ActionCard label="Створити новий гурт" to={Routes.CreateBand} />
-          <ActionCard label="Приєднатися до гурту" to={Routes.JoinBand} />
+          <ActionCard
+            label="Налаштування"
+            to={Routes.Preferences}
+            icon={<Cog6ToothIcon className="size-5" />}
+          />
         </div>
       </SubHeaderArea>
 

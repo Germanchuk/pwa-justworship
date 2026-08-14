@@ -27,6 +27,12 @@ export type CustomText = {
   chordPlayingNow?: boolean;
   chordSelected?: boolean;
   chordInvalid?: boolean;
+  /** Такт, поділений нечисто — підкреслюється цілком, від риски до риски. */
+  barInvalid?: boolean;
+  /** Слот, що не звучить: `!` і все після нього в такті — показуємо приглушено. */
+  barMark?: boolean;
+  /** Доля тиші (`_`) — звучить нічим, але місце в такті займає. */
+  chordSilence?: boolean;
   // Per-user капо (режим 3): транспонований акорд для показу замість збереженого
   // тексту. Інжектиться лише у read-only для капо-юзера. Ніколи не персиститься.
   displayChord?: string;

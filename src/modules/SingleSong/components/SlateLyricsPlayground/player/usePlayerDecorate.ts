@@ -7,9 +7,14 @@ import {useSlate} from "slate-react";
 
 import {isChord} from "#utils/keyUtils";
 import {
+  findBarDivisionIssues,
+  findSilentTails,
   isPlayableChordLine,
   tokenizeChordLine,
 } from "../../../services/ChordsProgressionPlayer/getMidiFromSections/utils/chordLineToProgressionMapWithKeys";
+import {SILENCE_MARK} from "#utils/chordSyntax";
+import {extractHeader} from "../../../services/ChordsProgressionPlayer/extractHeader";
+import {useCanEditContent} from "../../../mode";
 import {transposeChordTextForCapo} from "../transposition/transposeChords";
 import {useTransposition} from "../transposition/useTransposition";
 import {PlayerHighlightContext} from "./PlayerHighlightContext";
@@ -80,11 +85,17 @@ export const usePlayerDecorate = () => {
   const editor = useSlate();
   const {currentTokenKey, selectedTokenKey} = useContext(PlayerHighlightContext);
 
-  // Per-user капо: показуємо транспоновані акорди капо-юзеру. У режимі
-  // редагування капо не діє (`useTransposition` віддає myCapo=0), тож правки
-  // завжди летять у документ у спільній тональності.
+  // Per-user капо: показуємо транспоновані акорди капо-юзеру. Поза читанням
+  // капо не діє (`useTransposition` віддає myCapo=0): правки летять у
+  // документ у спільній тональності, а виділення під примітку не з'їжджає
+  // через різницю довжин показаного й документного акорду.
   const {songKey, myCapo} = useTransposition();
   const capoActive = myCapo > 0;
+
+  // Нечистий поділ такту — підказка авторові, а не інформація для гурту:
+  // читач її не виправить, а рядок вона засмічує. Тому лише в режимі правки.
+  const showBarIssues = useCanEditContent();
+  const pulsesPerBar = extractHeader(editor.children).timeSignature[0];
 
   return useCallback(
     (entry: NodeEntry): Range[] => {
@@ -105,26 +116,67 @@ export const usePlayerDecorate = () => {
       const playable = isPlayableChordLine(text);
 
       const ranges: Range[] = [];
+
+      // Такти, поділені нечисто: підкреслюємо такт **цілком**, від риски до
+      // риски. Помилка стосується всього такту, а не тієї риски, біля якої її
+      // помітили, — і по підкресленню одразу видно межі проблемного місця.
+      if (showBarIssues && playable) {
+        for (const bar of findBarDivisionIssues(text, pulsesPerBar)) {
+          ranges.push({
+            anchor: offsetToPoint(path, children, bar.charStart),
+            focus: offsetToPoint(path, children, bar.charEnd),
+            barInvalid: true,
+          } as unknown as Range);
+        }
+
+      }
+
+      // Хвіст після `!` не звучить — глушимо його в усіх режимах, бо це не
+      // помилка автора, а факт про пісню: гурт теж має бачити, де такт стих.
+      // Ці слоти акордами плеєра не стають, навіть якщо там написано акорд.
+      const silent = new Set<number>();
+      if (playable) {
+        for (const tk of findSilentTails(text, pulsesPerBar)) {
+          silent.add(tk.charStart);
+          ranges.push({
+            anchor: offsetToPoint(path, children, tk.charStart),
+            focus: offsetToPoint(path, children, tk.charEnd),
+            barMark: true,
+          } as unknown as Range);
+        }
+      }
+
       for (const tk of tokens) {
         if (SEPARATORS.has(tk.token)) continue;
+        if (silent.has(tk.charStart)) continue;
 
         const anchor = offsetToPoint(path, children, tk.charStart);
         const focus = offsetToPoint(path, children, tk.charEnd);
 
+        // Тиша — не «нерозпізнаний акорд»: вона займає долю свідомо, тож
+        // червоне підкреслення тут було б звинуваченням на порожньому місці.
+        // Токеном плеєра лишається: під час гри видно, як тиша проходить.
+        // Капо її, певна річ, не транспонує — транспонувати нема чого.
+        const isSilence = tk.token === SILENCE_MARK;
         const isValid = isChord(tk.token);
         const displayChord =
           capoActive && isValid
             ? transposeChordTextForCapo(tk.token, songKey, myCapo)
             : undefined;
 
-        // Non-playable line (no bars → no duration semantics): underline every
-        // chord token, but do not expose it as a clickable/highlightable token
-        // — the player won't include it in the progression anyway.
+        // Рядок без тактових рисок синтаксису не заявляє — це просто акорди
+        // над словами (`SONG-18`), і судити його нема за чим: не підкреслюємо
+        // нічого. Діапазон усе одно віддаємо — на ньому їде показ капо.
+        //
+        // А от рядок, який риски має, але не закритий, синтаксис заявив і не
+        // витримав: там підкреслення доречне. Токеном плеєра він не стає в
+        // жодному разі — у прогресію такий рядок не потрапляє.
         if (!playable) {
+          const attemptsSyntax = text.includes("|");
           ranges.push({
             anchor,
             focus,
-            chordInvalid: true,
+            ...(attemptsSyntax ? {chordInvalid: true} : {}),
             ...(displayChord ? {displayChord} : {}),
           } as unknown as Range);
           continue;
@@ -139,13 +191,23 @@ export const usePlayerDecorate = () => {
           chordTokenKey: tokenKey,
           chordPlayingNow: tokenKey === currentTokenKey,
           chordSelected: tokenKey === selectedTokenKey,
-          chordInvalid: !isValid,
+          chordInvalid: !isValid && !isSilence,
+          ...(isSilence ? {chordSilence: true} : {}),
           ...(displayChord ? {displayChord} : {}),
         } as unknown as Range);
       }
 
       return ranges;
     },
-    [editor, currentTokenKey, selectedTokenKey, capoActive, songKey, myCapo],
+    [
+      editor,
+      currentTokenKey,
+      selectedTokenKey,
+      capoActive,
+      songKey,
+      myCapo,
+      showBarIssues,
+      pulsesPerBar,
+    ],
   );
 };

@@ -1,3 +1,9 @@
+/**
+ * Робоча площа сторінки. Ширина — вся, що є (без max-width брейкпойнтів), а
+ * `flex-1` у колонці Router-а віддає сторінці все вертикальне місце, яке
+ * лишилось від шапки — зокрема те, що звільняється, коли шапку сховали.
+ * `min-h-0` тримає можливість власного скролу всередині сторінки.
+ */
 export const Container = ({children}) => {
-  return (<div className="container mx-auto p-2">{children}</div>)
+  return (<div className="w-full flex-1 min-h-0 p-2">{children}</div>)
 }

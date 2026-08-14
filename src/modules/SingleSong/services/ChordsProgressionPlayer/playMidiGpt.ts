@@ -50,20 +50,24 @@ export interface MidiPlaybackControls {
 }
 
 /**
- * Долі → тіки транспорту. Доля = чверть (так само рахує `createMidiFromProgression`).
- * Плануємо все в тіках, тому таймінг нот не залежить від темпу: bpm застосовується
- * рівно один раз — на транспорті.
+ * Імпульси → тіки транспорту (про імпульс див. модель часу в `songDefaults`).
+ * Імпульс лягає на чверть транспорту, бо BPM рахує саме імпульси. Плануємо все
+ * в тіках, тому таймінг нот не залежить від темпу: bpm застосовується рівно
+ * один раз — на транспорті.
  */
 function beatsToTicks(beats: number): ToneTime {
   return `${Math.round(beats * Tone.Transport.PPQ)}i`;
 }
 
-function setupTransport(num: number, den: number, bpm: number) {
+function setupTransport(num: number, bpm: number) {
   const Transport = Tone.Transport;
   Transport.cancel();
   Transport.stop();
   Transport.position = 0;
-  Transport.timeSignature = [num, den];
+  // Розмір віддаємо одним числом — це «стільки чвертей у такті». Пара
+  // `[num, den]` тут була б хибною: Tone порахував би такт 6/8 як три чверті,
+  // тоді як у нашій моделі це шість імпульсів, тобто шість чвертей транспорту.
+  Transport.timeSignature = num;
   Transport.bpm.value = bpm;
   return Transport;
 }
@@ -93,7 +97,20 @@ function createPart(events: MidiEvent[], players: { pad?: PadVoice; piano?: Tone
   return part;
 }
 
-function createMetronome({ num, den, pan = 1 }: { num: number; den: number; pan?: number }): MetronomeCtrl {
+/**
+ * Клацає на кожен імпульс, тож інтервал завжди `"4n"` — імпульс і є чверть
+ * транспорту.
+ *
+ * Усі кліки однакові — без сильної долі (рішення Германа 2026-08-13). Акценти
+ * пробували двома способами, обидва звучали чужорідно: інша висота читається
+ * як нота в тональності пісні (MembraneSynth виражено тональний), а сама ідея
+ * сильної долі вимагає знати, де такт починається — чого метроном не знає,
+ * бо рахує фіксований цикл, а не тактові риски пісні.
+ */
+const TICK_PITCH = "C4";
+const TICK_VELOCITY = 0.7;
+
+function createMetronome({ pan = 1 }: { pan?: number }): MetronomeCtrl {
   const tick = new Tone.MembraneSynth({
     octaves: 2,
     envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 },
@@ -102,18 +119,9 @@ function createMetronome({ num, den, pan = 1 }: { num: number; den: number; pan?
   const panner = new Tone.Panner(pan).toDestination();
   tick.connect(panner);
 
-  const beatSubdivision = `${den}n`;
-
   const loop = new Tone.Loop((time) => {
-    const Transport = Tone.Transport;
-    const ticksPerBeat = Transport.PPQ;
-    const ticksPerBar = ticksPerBeat * num;
-    const ticks = Transport.ticks;
-    const isBarStart = ticks % ticksPerBar === 0;
-    const pitch = isBarStart ? "C5" : "C4";
-    const velocity = isBarStart ? 1 : 0.55;
-    tick.triggerAttackRelease(pitch, "16n", time, velocity);
-  }, beatSubdivision);
+    tick.triggerAttackRelease(TICK_PITCH, "16n", time, TICK_VELOCITY);
+  }, "4n");
 
   return {
     start(at: ToneTime = 0) { loop.start(at); },
@@ -181,13 +189,14 @@ export class MidiPlayer {
     this.dispose(); // чистий старт
 
     const bpm = opts.bpm ?? this.defaults.bpm ?? DEFAULT_BPM;
-    const [num, den] = opts.timeSignature ?? this.defaults.timeSignature ?? DEFAULT_TIME_SIGNATURE;
-    const Transport = setupTransport(num, den, bpm);
+    const timeSignature = opts.timeSignature ?? this.defaults.timeSignature ?? DEFAULT_TIME_SIGNATURE;
+    const [num] = timeSignature;
+    const Transport = setupTransport(num, bpm);
 
     const introBars = Math.max(0, opts.introBars ?? this.defaults.introBars ?? 1);
-    // Такт вступу рахуємо в долях (num), а не через Tone-ове `"1m"`: воно міряє
-    // такт відносно знаменника, і на розмірах на кшталт 6/8 розійшлося б із тим,
-    // як такт розуміє лексер акордів.
+    // Такт вступу рахуємо в імпульсах (num), а не через Tone-ове `"1m"`: воно
+    // міряє такт відносно знаменника, і на розмірах на кшталт 6/8 розійшлося б
+    // із тим, як такт розуміє лексер акордів.
     const introBeats = introBars * num;
     const introOffset = beatsToTicks(introBeats);
 
@@ -214,7 +223,9 @@ export class MidiPlayer {
     const endWithIntro = beatsToTicks(introBeats + computeEndBeats(midi));
 
     if ((opts.metronome ?? this.defaults.metronome) !== false) {
-      this.metro = createMetronome({ num, den, pan: opts.metronomePan ?? this.defaults.metronomePan ?? 1 });
+      this.metro = createMetronome({
+        pan: opts.metronomePan ?? this.defaults.metronomePan ?? 1,
+      });
       this.metro.start(0);
     }
 

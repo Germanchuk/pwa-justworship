@@ -30,7 +30,9 @@ function Router() {
   const location = useLocation();
 
   return (
-    <div className={"h-full flex flex-col"}>
+    // Колонка на всю висоту екрана: шапка займає свою висоту, решту (а коли
+    // шапку сховали — весь екран) забирає Container сторінки.
+    <div className={"min-h-dvh flex flex-col"}>
       <RouterRoutes location={location}>
         <Route path="/" element={<ProtectedRoute />}>
           {/* Головний екран — усі гурти юзера. */}

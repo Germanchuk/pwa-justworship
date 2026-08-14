@@ -1,6 +1,11 @@
 import * as Transposer from "chord-transposer";
 import XRegExp from "xregexp";
 
+import { INCOMPLETE_BAR_MARK, SILENCE_MARK } from "./chordSyntax";
+
+/** Символи акордового рядка, які не є акордами, але й текстом пісні не є. */
+const SYNTAX_MARKS = new Set([SILENCE_MARK, INCOMPLETE_BAR_MARK]);
+
 
 // Regex for recognizing chords
 const TRIAD_PATTERN = "(M|maj|major|m|min|minor|dim|sus|dom|aug|\\+|-)";
@@ -85,8 +90,11 @@ export function isChordsLine(line) {
   // Split the string by spaces and check if each part matches the chord pattern
   const chords = str.trim().split(/\s+/);
 
-  // Test each chord in the string against the chord regex
-  return chords.every(isChord);
+  // Позначки синтаксису — теж словник акордового рядка, а не текст пісні.
+  // Без цього рядок `| C . _ . |` редактор вважав би словами й перемальовував
+  // би його як текст: у синтаксис символ додали, а в розпізнавання типу — ні.
+  // Викидати їх зі `str` не можна — тоді `| _ |` лишився б зовсім порожнім.
+  return chords.every((token) => isChord(token) || SYNTAX_MARKS.has(token));
 }
 
 export function isChordsLine2(line) {

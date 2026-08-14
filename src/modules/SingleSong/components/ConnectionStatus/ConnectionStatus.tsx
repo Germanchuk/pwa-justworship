@@ -1,10 +1,23 @@
+import { usePageBarStatus } from "#layout/PageFooterArea/hooks";
 import { useConnectionStatus } from "../../redux/selectors";
 
+/**
+ * Стан звʼязку з документом показує САМА панель — рамка тієї центральної
+ * плитки, у якій живуть елементи пісні. Місця в шапці обмаль (режими, плеєр,
+ * примітки), а індикатор, який 99% часу каже «все добре», найдорожчий на
+ * цьому місці: він займає кнопку, не будучи кнопкою. Рамка не займає нічого
+ * й читається бічним зором — саме так, як цей стан і дивляться: не
+ * вчитуючись, під час гри.
+ *
+ * Самі барви — у токенах теми (`index.css`), поруч з рештою паперової
+ * палітри: теплі й приглушені, бо стан звʼязку супроводжує роботу, а не
+ * кричить про себе. Чим гірший стан, тим колір темніший і щільніший.
+ */
 const COLOR: Record<string, string> = {
-  connecting: "bg-yellow-500",
-  connected: "bg-green-500",
-  disconnected: "bg-red-500",
-  error: "bg-red-600",
+  connected: "var(--color-status-live)",
+  connecting: "var(--color-status-pending)",
+  disconnected: "var(--color-status-off)",
+  error: "var(--color-status-error)",
 };
 
 const LABEL: Record<string, string> = {
@@ -16,18 +29,13 @@ const LABEL: Record<string, string> = {
 
 export function ConnectionStatus() {
   const key = useConnectionStatus();
+  usePageBarStatus(COLOR[key] ?? null);
 
+  // Колір — єдиний носій стану для ока, тож текст лишається для читалок:
+  // місця він не займає, а без нього стан для них просто зник би.
   return (
-    <div
-      className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-dashed border-input bg-background text-muted-foreground"
-      role="status"
-      aria-label={LABEL[key] ?? key}
-      title={LABEL[key] ?? key}
-    >
-      <span
-        className={`w-2 h-2 rounded-full ${COLOR[key] ?? "bg-gray-400"}`}
-        aria-hidden
-      />
-    </div>
+    <span className="sr-only" role="status">
+      {LABEL[key] ?? key}
+    </span>
   );
 }

@@ -11,13 +11,29 @@ import {
 interface Props {
   open: boolean;
   current: number;
+  /**
+   * Стеля темпу. Залежить від розміру такту: BPM рахує імпульси, тому пісня в
+   * 6/8 записується темпом вісімок і вимагає більшого діапазону, ніж 4/4.
+   */
+  max?: number;
+  /** Що саме рахує BPM у цьому розмірі — «чвертей/хв» проти «вісімок/хв». */
+  unitLabel?: string;
   onSave: (value: number) => void;
   onClose: () => void;
 }
 
-export function BpmModal({ open, current, onSave, onClose }: Props) {
-  // Clamp initial value between 40 and 160. Default to 80 if current is 0 or out of range.
-  const initialValue = current && current >= 40 && current <= 160 ? current : 80;
+const BPM_MIN = 40;
+
+export function BpmModal({
+  open,
+  current,
+  max = 160,
+  unitLabel = "уд/хв (BPM)",
+  onSave,
+  onClose,
+}: Props) {
+  // Clamp initial value to the allowed range. Default to 80 if current is 0 or out of range.
+  const initialValue = current && current >= BPM_MIN && current <= max ? current : 80;
   const [draft, setDraft] = useState<number>(initialValue);
 
   // The Drawer stays mounted (so vaul can animate close); re-sync the draft and
@@ -38,9 +54,14 @@ export function BpmModal({ open, current, onSave, onClose }: Props) {
     onClose();
   };
 
-  const ticks = [40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160];
-  // Drop the first/last ticks — endpoints sit at the rounded track ends.
+  // Позначки — кожні 10, а на широкому діапазоні (6/8) кожні 20, щоб підписи
+  // не злиплися. Крайні прибираємо: вони сидять на заокруглених кінцях доріжки.
+  const tickStep = max - BPM_MIN > 120 ? 20 : 10;
+  const ticks: number[] = [];
+  for (let t = BPM_MIN; t <= max; t += tickStep) ticks.push(t);
   const shownTicks = ticks.slice(1, -1);
+
+  const percentOf = (value: number) => ((value - BPM_MIN) / (max - BPM_MIN)) * 100;
 
   return (
     <Drawer open={open} onOpenChange={(o) => !o && onClose()}>
@@ -58,7 +79,7 @@ export function BpmModal({ open, current, onSave, onClose }: Props) {
             <button
               type="button"
               className="size-10 rounded-full border border-stone-200 flex items-center justify-center text-2xl hover:bg-stone-50 active:scale-90 transition-all font-semibold text-stone-700 cursor-pointer shadow-sm select-none p-0 m-0 bg-transparent"
-              onClick={() => setDraft((v) => Math.max(40, v - 1))}
+              onClick={() => setDraft((v) => Math.max(BPM_MIN, v - 1))}
             >
               –
             </button>
@@ -67,13 +88,13 @@ export function BpmModal({ open, current, onSave, onClose }: Props) {
                 {draft}
               </span>
               <span className="text-[10px] text-stone-500 uppercase tracking-wider block font-bold mt-0.5">
-                уд/хв (BPM)
+                {unitLabel}
               </span>
             </div>
             <button
               type="button"
               className="size-10 rounded-full border border-stone-200 flex items-center justify-center text-2xl hover:bg-stone-50 active:scale-90 transition-all font-semibold text-stone-700 cursor-pointer shadow-sm select-none p-0 m-0 bg-transparent"
-              onClick={() => setDraft((v) => Math.min(160, v + 1))}
+              onClick={() => setDraft((v) => Math.min(max, v + 1))}
             >
               +
             </button>
@@ -85,7 +106,7 @@ export function BpmModal({ open, current, onSave, onClose }: Props) {
               {/* Tick labels (left) */}
               <div className="relative h-full w-12 text-stone-500 select-none py-1">
                 {shownTicks.map((t) => {
-                  const percent = ((t - 40) / 120) * 100;
+                  const percent = percentOf(t);
                   const isActive = draft === t;
                   return (
                     <button
@@ -107,8 +128,8 @@ export function BpmModal({ open, current, onSave, onClose }: Props) {
               <div className="h-full py-1">
                 <Slider
                   orientation="vertical"
-                  min={40}
-                  max={160}
+                  min={BPM_MIN}
+                  max={max}
                   step={1}
                   value={[draft]}
                   onValueChange={(val) => setDraft(val[0])}

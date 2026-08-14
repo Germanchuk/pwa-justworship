@@ -2,7 +2,6 @@
 
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "./styles/_drawer.css";
 @plugin "@tailwindcss/typography";
 
 @theme {
@@ -16,6 +15,13 @@
   --color-error: #b91c1c;
   /* Світліший жовтуватий папір за фон сторінки (#f8f5eb) — секції, порожні рядки */
   --color-paper-raised: #fdfbf0;
+  /* Стан звʼязку (рамка панелі, `COLLAB-5`). Барви теплі й приглушені —
+     тон паперу, а не світлофор: насиченість тримаємо низькою, а помітність
+     дає сама несподіванка кольору на нейтральній рамці. */
+  --color-status-live: oklch(0.72 0.075 145);
+  --color-status-pending: oklch(0.76 0.095 80);
+  --color-status-off: oklch(0.66 0.105 35);
+  --color-status-error: oklch(0.56 0.12 30);
 }
 
 :root {
@@ -71,6 +77,9 @@
 
 .glass {
   @apply bg-white/60 backdrop-blur-sm border border-black/20;
+  /* Рамку може перефарбовувати сторінка під свій стан (див. `statusColor`
+     у BottomBar) — перехід, щоб зміна стану не мигала. */
+  transition: border-color 0.35s ease;
 }
 
 .shadow-inner-left-top {

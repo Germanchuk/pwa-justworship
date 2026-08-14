@@ -13,6 +13,7 @@ const normalizeFooter = (footer: ReactNode | null) => {
 
 export const PageFooterProvider = ({ children }: { children: ReactNode }) => {
   const [footer, _setFooter] = useState<ReactNode>(<DefaultFooter>{APP_TITLE}</DefaultFooter>);
+  const [statusColor, setStatusColor] = useState<string | null>(null);
 
   const setFooter = useCallback((footer: ReactNode | null) => {
     const normalized = normalizeFooter(footer);
@@ -20,7 +21,7 @@ export const PageFooterProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   return (
-    <PageFooterContext.Provider value={{ footer, setFooter }}>
+    <PageFooterContext.Provider value={{ footer, setFooter, statusColor, setStatusColor }}>
       {children}
     </PageFooterContext.Provider>
   );
