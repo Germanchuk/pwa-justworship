@@ -5,7 +5,13 @@ export interface Song {
   name: string;
   bpm: number;
   key: "A" | "B" | "C" | "D" | "E" | "F" | "G";
-  timeSignature?: "fourFour" | "threeFour";
+  timeSignature?:
+    | "fourFour"
+    | "threeFour"
+    | "sixEight"
+    | "twoFour"
+    | "fiveFour"
+    | "twelveEight";
   sections: Section[];
   slate?: Descendant[];
   // there is field 'owner' with detailed info, it's better to refactor it to isMy or something

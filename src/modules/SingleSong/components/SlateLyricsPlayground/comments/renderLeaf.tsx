@@ -54,11 +54,21 @@ export const RenderLeaf = ({ attributes, children, leaf }: RenderLeafProps) => {
   }
 
   const t = leaf as CustomText;
+
+  if (t.barInvalid) {
+    node = <span className="bar-invalid">{node}</span>;
+  }
+
+  if (t.barMark) {
+    node = <span className="bar-mark">{node}</span>;
+  }
+
   if (t.chordToken || t.chordInvalid) {
     const classes = ["chord-token"];
     if (t.chordPlayingNow) classes.push("chord-playing-now");
     if (t.chordSelected) classes.push("chord-selected");
     if (t.chordInvalid) classes.push("chord-invalid");
+    if (t.chordSilence) classes.push("chord-silence");
     node = (
       <span
         className={classes.join(" ")}

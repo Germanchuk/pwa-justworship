@@ -24,7 +24,14 @@ export const ModeSwitch = () => {
     <div
       role="radiogroup"
       aria-label="Режим пісні"
-      className="flex items-center gap-0.5 rounded-full border border-dashed border-input bg-background p-0.5"
+      // Пунктирна пігулка лишається — вона й показує, що це ОДИН перемикач,
+      // а не три окремі кнопки. Але рамка не має права піднімати панель:
+      // кнопки вже 36px, тобто рівно у висоту рядка, тож рамка (2px) виїжджає
+      // за межі розмітки через `-my-px`. Для потоку група лишається 36px, а
+      // намальоване кільце йде в поле `p-1` самої панелі — там воно вільно
+      // вміщається. Відступів усередині немає з тієї ж причини: кільце
+      // обтягує кнопки впритул.
+      className="-my-px flex items-center gap-0.5 rounded-full border border-dashed border-input bg-background"
     >
       {MODES.map(({ key, label, Icon }) => {
         const active = mode === key;
@@ -38,15 +45,17 @@ export const ModeSwitch = () => {
             title={label}
             onClick={() => setMode(key)}
             className={cn(
-              // Компактно: у шапці поруч ще статус, транспорт і "три крапки" —
-              // на 375px усе має вміщатись в один рядок.
-              "inline-flex size-7 items-center justify-center rounded-full transition-colors cursor-pointer",
+              // 36px — рівно як транспорт і «три крапки» поруч, тож панель
+              // не стає вищою. Режим перемикають пальцем на сцені, і дрібна
+              // ціль тут коштує найдорожче; місце по ширині звільнив
+              // індикатор звʼязку, що переїхав у рамку панелі.
+              "inline-flex size-9 items-center justify-center rounded-full transition-colors cursor-pointer",
               active
                 ? "bg-primary text-primary-foreground shadow-xs"
                 : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
-            <Icon className="size-3.5" />
+            <Icon className="size-5" />
           </button>
         );
       })}

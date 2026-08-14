@@ -13,8 +13,8 @@ export function Capo(props: RenderElementProps) {
   const editor = useSlateStatic();
   const [open, setOpen] = useState(false);
   const username = useCurrentUsername();
-  // У режимі редагування капо не діє (таблиця в `mode.tsx`) — тоді бейдж
-  // показує ефективний стан: приглушений, свіч вимкнений, значення на місці.
+  // Поза читанням капо не діє (таблиця в `mode.tsx`) — тоді бейдж показує
+  // ефективний стан: приглушений, свіч вимкнений, значення на місці.
   const capoApplies = useCapoApplies();
 
   const capo = element as CapoElement;
@@ -36,7 +36,7 @@ export function Capo(props: RenderElementProps) {
   };
 
   const title = !capoApplies
-    ? "У режимі редагування капо не діє — акорди показані у тональності пісні"
+    ? "Капо діє лише в режимі читання — тут акорди показані у тональності пісні"
     : isEmpty
       ? "Спочатку виберіть лад капо"
       : enabled

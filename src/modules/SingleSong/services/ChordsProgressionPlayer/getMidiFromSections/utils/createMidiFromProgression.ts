@@ -3,12 +3,13 @@ import * as Chord from "@tonaljs/chord";
 import * as Note from "@tonaljs/note";
 import { toMidi } from "@tonaljs/midi";
 import { voiceChord } from "./voiceChord";
+import { SILENCE_MARK } from "#utils/chordSyntax";
 
 export interface ChordEvent {
   id?: number;
   tokenKey?: string | null;
   chord: string | null; // null/REST/N.C. = пауза
-  duration: number;     // у долях (beats)
+  duration: number;     // в імпульсах — див. модель часу в `songDefaults`
   /** 0..1 — рівень динаміки секції в рядку цього акорду; undefined = кроків немає. */
   intensity?: number;
   /** Перший звучний акорд секції — дістає акцент. */
@@ -28,9 +29,10 @@ const TIMING_JITTER_MS = 12;   // ± на ноту
 
 export function isRest(ch: string | null | undefined): boolean {
   if (ch == null) return true;
-  const s = ch.trim().toLowerCase();
-  // підтримка різних нотацій відсутності акорду
-  return s === "" || s === "rest" || s === "r" || s === "n.c." || s === "nc" || s === "-";
+  const s = ch.trim();
+  // Тиша має рівно одне написання — `_` (див. `chordSyntax`). Порожній рядок
+  // сюди теж потрапляє: так лексер позначає долі, що лишились без акорду.
+  return s === "" || s === SILENCE_MARK;
 }
 
 /** Імена нот (без октави) → pitch class-и 0–11; невалідні мовчки відкидаємо. */
@@ -63,24 +65,33 @@ export function createMidiFromProgression(
   // Темп і розмір тут — метадані для експорту (`downloadMidiFile`), щоб файл був
   // валідним самостійно. Відтворення їх НЕ читає: плеєр бере bpm/розмір з опцій,
   // а ноти — з тіків. Не роби цей хедер джерелом правди для звуку.
+  //
+  // Знаменник свідомо замінюємо на 4: тіки нот міряні в імпульсах, а імпульс у
+  // MIDI-файлі — це чверть. Пісня в 6/8 виїде як 6/4 — звучатиме тотожно, лише
+  // запишеться іншими нотами. Це чесніше, ніж написати «6/8» і дістати вдвічі
+  // довші такти, ніж грає плеєр.
   midi.header.setTempo(bpm);
-  midi.header.timeSignatures = [{ ticks: 0, timeSignature }];
+  midi.header.timeSignatures = [{ ticks: 0, timeSignature: [timeSignature[0], 4] }];
 
   const track = midi.addTrack();
   const ppq = midi.header.ppq;
 
-  let currentTick = 0; // завжди цілий
+  // Позицію тримаємо в долях і округляємо ЩОРАЗУ від початку треку, а не
+  // накопичуємо округлені тіки: тривалості бувають дробові (вісім слотів у 4/4
+  // — по пів долі), і накопичення похибки з'їхало б на довгій пісні.
+  let elapsedBeats = 0;
   // Верхні голоси попереднього акорду — якір голосоведення. Паузи його
   // навмисно не скидають: акорд після паузи продовжує рух, а не стрибає.
   let prevUpper: number[] | null = null;
 
   for (const evt of progression) {
     const beats = Math.max(0, evt.duration || 0);
-    const ticks = Math.round(beats * ppq); // приводимо до цілого значення
+    const currentTick = Math.round(elapsedBeats * ppq);
+    const ticks = Math.round((elapsedBeats + beats) * ppq) - currentTick;
 
     // Пауза / відсутність акорду
     if (isRest(evt.chord)) {
-      currentTick += ticks;
+      elapsedBeats += beats;
       continue;
     }
 
@@ -143,7 +154,7 @@ export function createMidiFromProgression(
       }
     }
 
-    currentTick += ticks;
+    elapsedBeats += beats;
   }
 
   return midi;

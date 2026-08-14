@@ -39,6 +39,9 @@ export function SongKey(props: RenderElementProps) {
       <span
         contentEditable={false}
         className={`song-meta-badge ${isReadonly ? "song-meta-badge--readonly" : ""}`}
+        title={
+          isReadonly ? "Тональність змінюється в режимі редагування" : undefined
+        }
         onClick={() => !isReadonly && setOpen(true)}
       >
         <span className="song-meta-badge__label">Тональність:</span>
