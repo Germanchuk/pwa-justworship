@@ -2,7 +2,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import {
   setSong,
   setNotesAudience,
-  setPreferences,
 } from './songSlice';
 import { useCanAnnotate } from '../mode';
 
@@ -14,17 +13,9 @@ export const useLeaderClientId = () => useSelector((state: any) => state.song.le
 export const useMyClientId = () => useSelector((state: any) => state.song.myClientId);
 export const useSongId = () => useSelector((state: any) => state.song.song.id);
 
-export const usePreferences = () => useSelector((state: any) => state.song.preferences);
-export const useTransposition = () => useSelector((state: any) => state.song.preferences.transposition);
-
 export const useSetSong = () => {
   const dispatch = useDispatch();
   return (song: any) => dispatch(setSong(song));
-};
-
-export const useSetPreferences = () => {
-  const dispatch = useDispatch();
-  return (prefs: any) => dispatch(setPreferences(prefs));
 };
 
 // ---------- адресат приміток (чиїми очима я дивлюсь) ----------

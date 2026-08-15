@@ -2,13 +2,9 @@ import React from "react";
 import { Navigate, useParams } from "react-router-dom";
 import Song from "#modules/SingleSong/components/Song";
 import { useDispatch } from "react-redux";
-import {
-  useSetSong,
-  useSetPreferences,
-} from "#modules/SingleSong/redux/selectors";
+import { useSetSong } from "#modules/SingleSong/redux/selectors";
 import { parseSongMode } from "#modules/SingleSong/mode";
 import { bandPath } from "#constants/routes";
-import {sPreferencesApi} from "#modules/SingleSong/api";
 import {SongControls} from "#modules/SingleSong/components/SongControls/SongControls";
 import {setNotesAudience} from "#modules/SingleSong/redux/songSlice";
 import {SongHeader} from "#modules/SingleSong/components/SongHeader/SongHeader";
@@ -17,7 +13,6 @@ import {ToPageFooterArea} from "#layout/PageFooterArea/ToPageFooterArea";
 
 export default function SingleSong() {
   const { bandId, songId, mode } = useParams();
-  const setPreferences = useSetPreferences();
   const dispatch = useDispatch();
   const setSong = useSetSong();
 
@@ -27,13 +22,6 @@ export default function SingleSong() {
       dispatch(setNotesAudience(null)); // своїми примітками, не чужими
     }
   }, []);
-
-  React.useEffect(() => {
-    if (!songId) return;
-    sPreferencesApi.getPreferences(songId).then((response) => {
-      setPreferences(response.data);
-    });
-  }, [songId]);
 
   // The song itself is never fetched over HTTP: the collab WebSocket document
   // (`song:<id>`) is the single source of truth for content *and* header

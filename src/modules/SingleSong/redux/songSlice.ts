@@ -1,11 +1,5 @@
-import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { createSlice } from '@reduxjs/toolkit';
 import { Song, Status } from '../../../models';
-import { sPreferencesApi } from '../api';
-
-export interface SongPreferences {
-  id?: number | string;
-  transposition: number;
-}
 
 export type CollabConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 
@@ -27,7 +21,6 @@ export interface SongState extends Partial<Song> {
   notesAudience: string | null;
   status: Status;
   song: Partial<Song>;
-  preferences: SongPreferences;
   connectionStatus: CollabConnectionStatus;
   peers: CollabPeer[];
   leaderClientId: number | null;
@@ -38,36 +31,11 @@ const initialState: SongState = {
   notesAudience: null,
   status: "pending",
   song: {},
-  preferences: {
-    transposition: 0
-  },
   connectionStatus: "connecting",
   peers: [],
   leaderClientId: null,
   myClientId: null
 };
-
-export const savePreferencesThunk = createAsyncThunk<
-  SongPreferences,
-  {
-    songId: string | number;
-    preferences: SongPreferences;
-  }
->(
-  'song/savePreferences',
-  async (
-    {
-      songId,
-      preferences,
-    }
-  ) => {
-    const response = preferences?.id
-      ? await sPreferencesApi.updatePreferences(preferences.id, preferences)
-      : await sPreferencesApi.createPreferences(songId, preferences);
-
-    return response?.data ?? preferences;
-  }
-);
 
 const songSlice = createSlice({
   name: 'song',
@@ -81,12 +49,6 @@ const songSlice = createSlice({
     },
     setNotesAudience: (state, action) => {
       state.notesAudience = action.payload;
-    },
-    setPreferences: (state, action) => {
-      state.preferences = {
-        ...state.preferences,
-        ...action.payload
-      };
     },
     setStatus: (state, action) => {
       state.status = action.payload;
@@ -103,14 +65,6 @@ const songSlice = createSlice({
     setMyClientId: (state, action) => {
       state.myClientId = action.payload;
     }
-  },
-  extraReducers: (builder) => {
-    builder.addCase(savePreferencesThunk.fulfilled, (state, action) => {
-      state.preferences = {
-        ...state.preferences,
-        ...action.payload
-      };
-    });
   }
 });
 
@@ -118,7 +72,6 @@ export const {
   setSong,
   resetSong,
   setNotesAudience,
-  setPreferences,
   setStatus,
   setConnectionStatus,
   setPeers,
