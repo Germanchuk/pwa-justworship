@@ -1,0 +1,59 @@
+/**
+ * Версія застосунку і список змін.
+ *
+ * ЄДИНЕ ДЖЕРЕЛО ПРАВДИ про версію: номер не дублюється в `package.json` —
+ * він тут, у першому записі. Список збирається в бандл, тож застосунок
+ * завжди знає, що приїхало саме з ним.
+ *
+ * Як додати версію: новий запис ЗВЕРХУ, `changes` — людською мовою, про
+ * те, що змінилось для музиканта, а не про рефактор.
+ */
+export type ChangelogEntry = {
+  /** `major.minor.patch`, лише цифри й крапки. */
+  version: string;
+  /** ISO-дата релізу, `YYYY-MM-DD`. */
+  date: string;
+  changes: string[];
+};
+
+export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.1.0",
+    date: "2026-08-16",
+    changes: [
+      "Застосунок сам помічає нову версію й пропонує оновитись банером на головному екрані.",
+      "Після оновлення показує, що саме змінилось.",
+      "У «Налаштуваннях» видно номер версії та історію змін.",
+      "Пошук пісні одразу по всіх твоїх гуртах — результати згруповані по гуртах.",
+      "На головному екрані з'явилось посилання на підтримку в телеграмі.",
+    ],
+  },
+  {
+    version: "1.0.0",
+    date: "2026-08-15",
+    changes: ["Перша пронумерована версія застосунку."],
+  },
+];
+
+/** Версія, яка зараз крутиться в браузері користувача. */
+export const APP_VERSION = CHANGELOG[0].version;
+
+/** `1.10.0` новіше за `1.9.3`: порівнюємо числами, а не рядками. */
+function compareVersions(a: string, b: string): number {
+  const left = a.split(".").map(Number);
+  const right = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    const diff = (left[i] ?? 0) - (right[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+/**
+ * Записи, новіші за версію, яку користувач уже бачив. Якщо між його
+ * попереднім запуском і цим вийшло три версії — покажемо всі три.
+ */
+export function changesSince(seenVersion: string | null): ChangelogEntry[] {
+  if (!seenVersion) return [];
+  return CHANGELOG.filter((entry) => compareVersions(entry.version, seenVersion) > 0);
+}

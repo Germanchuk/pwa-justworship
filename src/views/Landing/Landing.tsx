@@ -11,6 +11,7 @@ import {
   ArrowRightIcon,
 } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
+import { SUPPORT_TELEGRAM_URL } from "#components";
 
 const features = [
   {
@@ -297,7 +298,7 @@ export default function Landing() {
             <span>Just Worship · © {new Date().getFullYear()}</span>
           </div>
           <a
-            href="https://t.me/w_platform_support"
+            href={SUPPORT_TELEGRAM_URL}
             target="_blank"
             rel="noreferrer"
             className="hover:text-foreground transition-colors"

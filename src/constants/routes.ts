@@ -5,6 +5,8 @@ export enum Routes {
   Login = "/login",
   Register = "/register",
   Preferences = "/preferences",
+  // Пошук пісні по всіх гуртах юзера — поки що лише екран з полем вводу.
+  SearchSongs = "/search",
   //
   // Гурти: статичні сегменти йдуть перед `:bandId`, react-router ранжує їх вище.
   JoinBand = "/bands/join",

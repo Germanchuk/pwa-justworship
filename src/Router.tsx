@@ -25,6 +25,7 @@ import AudioHost from "#views/AudioHost/AudioHost";
 import SingleShedule from "#views/SingleSchedule/SingleShedule";
 import ShadcnDemo from "#views/ShadcnDemo/ShadcnDemo";
 import Landing from "#views/Landing/Landing";
+import SearchSongs from "#views/SearchSongs/SearchSongs";
 
 function Router() {
   const location = useLocation();
@@ -38,6 +39,7 @@ function Router() {
           {/* Головний екран — усі гурти юзера. */}
           <Route index element={<BandsHome />} />
           <Route path={Routes.Preferences} element={<Preferences />} />
+          <Route path={Routes.SearchSongs} element={<SearchSongs />} />
           <Route path={Routes.JoinBand} element={<JoinBand />} />
           <Route path={Routes.CreateBand} element={<CreateBand />} />
           <Route path={Routes.JoinChurch} element={<JoinChurch />} />
