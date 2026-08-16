@@ -8,8 +8,13 @@ import tsconfigPaths from "vite-tsconfig-paths";
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), tsconfigPaths(), VitePWA({
-    registerType: "autoUpdate",
-    injectRegister: "auto",
+    // `prompt`, а не `autoUpdate`: нова версія чекає, поки користувач сам
+    // натисне «Оновити» в банері на головному екрані (`src/lib/appUpdate.ts`).
+    // Мовчазний перезапуск міг би зловити музиканта посеред служіння.
+    registerType: "prompt",
+    // Реєструємо SW самі через `virtual:pwa-register` — власний скрипт
+    // реєстрації тут лише подвоїв би реєстрацію.
+    injectRegister: null,
     devOptions: {
       enabled: true,
     },

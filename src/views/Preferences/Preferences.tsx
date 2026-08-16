@@ -3,6 +3,9 @@ import {ArrowLeftEndOnRectangleIcon, ArrowPathIcon} from "@heroicons/react/24/ou
 import {Link} from "react-router-dom";
 import {Routes} from "#constants/routes";
 import {Button} from "@/components/ui/button";
+import {UpdateBanner} from "#components";
+import {APP_VERSION, CHANGELOG} from "#constants/changelog";
+import {formatDate} from "#utils/utils";
 import {hardResetApp} from "./hardReset";
 
 export default function Preferences() {
@@ -25,7 +28,29 @@ export default function Preferences() {
 
       <section className="mt-4">
         <h2 className="text-base font-medium">Версія застосунку</h2>
-        <p className="mt-1 text-sm opacity-70">
+        <p className="mt-1 font-['JetBrains_Mono'] text-sm">{APP_VERSION}</p>
+
+        <UpdateBanner />
+
+        <ul className="mt-3 flex list-none flex-col gap-4 p-0">
+          {CHANGELOG.map((entry) => (
+            <li key={entry.version}>
+              <p className="text-sm font-semibold">
+                {entry.version}
+                <span className="ms-2 font-normal text-muted-foreground">
+                  {formatDate(entry.date)}
+                </span>
+              </p>
+              <ul className="mt-1 flex list-disc flex-col gap-1 ps-5 text-sm text-muted-foreground">
+                {entry.changes.map((change) => (
+                  <li key={change}>{change}</li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+
+        <p className="mt-6 text-sm opacity-70">
           Якщо застосунок працює як стара версія — скинь кеш. Це прибере
           збережену офлайн-копію й перезавантажить останню версію з сервера.
           З акаунта не вийде.
