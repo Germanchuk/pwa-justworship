@@ -2,7 +2,6 @@ import {useEffect, useMemo, useState} from "react";
 import {useSelector} from "react-redux";
 import {SpeakerWaveIcon, StopIcon} from "@heroicons/react/24/outline";
 
-import {ToPageHeaderArea} from "#layout/PageHeaderArea/ToPageHeaderArea";
 import {useBand} from "#modules/Band/BandLayout";
 import AudioHostEngine, {
   type AudioHostEngineState,
@@ -90,7 +89,6 @@ export default function AudioHost() {
 
   return (
     <>
-      <ToPageHeaderArea>{`Звук гурту "${band.name}"`}</ToPageHeaderArea>
 
       <div className="mt-6 flex flex-col items-center gap-5 text-center">
         {!isDesignatedHost && (

@@ -3,22 +3,27 @@ import { ChevronDownIcon, ChevronUpIcon, HomeIcon } from "@heroicons/react/24/ou
 import { Routes } from "#constants/routes";
 import { useSelector } from "react-redux";
 import classNames from "classnames";
-import {PageFooterArea} from "#layout/PageFooterArea/PageFooterArea";
-import {usePageFooter} from "#layout/PageFooterArea/hooks";
+import {PageBar} from "#layout/PageBar/PageBar";
+import {usePageBar} from "#layout/PageBar/hooks";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 
+/**
+ * Верхній бар оболонки: кнопка «додому», слот сторінки (`PageBar`) і кнопка
+ * згортання. Живе ВИЩЕ роутів, тому вміст, який сторінки кладуть у слот,
+ * не бачить їхніх React-контекстів — band беруть через `useBandOrNull()`.
+ */
 type Props = {
   visible: boolean;
   onToggle: () => void;
 };
 
-export default function BottomBar({ visible, onToggle }: Props) {
+export default function TopBar({ visible, onToggle }: Props) {
   const isLoading = useSelector((state: any) => state.viewConfig.globalLoader);
   // Стан сторінки світиться рамкою центральної панелі — тієї самої, у якій
   // живуть її елементи. Бічні кнопки (додому, згортання) глобальні, тож
   // лишаються нейтральними: колір стосується сторінки, а не всієї оболонки.
-  const { statusColor } = usePageFooter();
+  const { statusColor } = usePageBar();
   return (
     <>
       {/* Схований бар зникає з потоку цілком — саме його висоту й забирає
@@ -47,7 +52,7 @@ export default function BottomBar({ visible, onToggle }: Props) {
                 // панель починає виглядати як попередження, а не як панель.
                 style={statusColor ? { borderColor: statusColor } : undefined}
               >
-                <PageFooterArea />
+                <PageBar />
               </div>
             </div>
           </div>

@@ -33,6 +33,29 @@ export function SongSearchTrigger({ className }: { className?: string }) {
   );
 }
 
+/**
+ * Фільтр по вже завантаженому списку — бібліотека гурту, служіння. На відміну
+ * від `SongSearchInput`, фокус не забирає: сюди приходять дивитись список, а
+ * не шукати, і клавіатура на мобільному з'їла б половину екрана одразу.
+ */
+export function SongFilterInput({
+  className,
+  placeholder = "Фільтр за назвою",
+  ...props
+}: React.ComponentProps<"input">) {
+  return (
+    <label className={cn(fieldClass, className)}>
+      <MagnifyingGlassIcon className="size-5 shrink-0 text-muted-foreground" />
+      <input
+        type="search"
+        placeholder={placeholder}
+        className="grow bg-transparent text-base outline-none placeholder:text-muted-foreground md:text-sm"
+        {...props}
+      />
+    </label>
+  );
+}
+
 /** Справжнє поле вводу — живе на сторінці пошуку й фокусується саме. */
 export function SongSearchInput({
   className,

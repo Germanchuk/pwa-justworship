@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import debounce from "lodash.debounce";
 import { fetchAPI } from "../../../../../utils/fetch-api";
 import { useBandId } from "#modules/Band/BandLayout";
@@ -22,7 +22,6 @@ export default function SearchResults({ searchQuery, addItem, resetInput }) {
         },
       })
         .then((data) => {
-          console.log(data);
           setResults(data.data); // Update state with API results
         })
         .catch((error) => {
@@ -42,11 +41,21 @@ export default function SearchResults({ searchQuery, addItem, resetInput }) {
     debouncedSearch(searchQuery);
   }, [searchQuery]);
 
+  if (results.length === 0) {
+    return (
+      <div className="px-3 py-2.5 text-sm text-muted-foreground">
+        Нічого не знайшли
+      </div>
+    );
+  }
+
   return (
-    <ul className="flex flex-col gap-1 h-48 overflow-scroll">
+    // Без flex-контейнера свідомо: у flex-колонці з `max-h` рядки стискаються
+    // (`flex-shrink` за замовчуванням) і текст ріжеться по висоті.
+    <ul className="m-0 max-h-64 list-none overflow-y-auto p-0">
       {results.map((song) => (
         <li
-          className="rounded bg-muted px-2 py-1 hover:bg-accent cursor-pointer"
+          className="cursor-pointer truncate rounded-lg px-3 py-2.5 text-base transition-colors hover:bg-accent/60"
           key={song.id}
           onClick={() => handleAddingItem({ id: song.id, ...song.attributes })}
         >

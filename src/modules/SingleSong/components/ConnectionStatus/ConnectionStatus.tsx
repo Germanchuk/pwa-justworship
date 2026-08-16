@@ -1,4 +1,4 @@
-import { usePageBarStatus } from "#layout/PageFooterArea/hooks";
+import { usePageBarStatus } from "#layout/PageBar/hooks";
 import { useConnectionStatus } from "../../redux/selectors";
 
 /**

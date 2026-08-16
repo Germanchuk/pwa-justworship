@@ -5,17 +5,20 @@ import { SpeakerWaveIcon } from "@heroicons/react/24/outline";
 
 import { fetchAPI } from "#utils/fetch-api";
 import { setUser } from "#modules/AuthenticatedUser/userSlice";
-import { ToPageHeaderArea } from "#layout/PageHeaderArea/ToPageHeaderArea";
 import { useBand } from "#modules/Band/BandLayout";
-import { bandApi, type BandMember } from "#modules/Band/api/band";
+import {
+  bandApi,
+  BAND_ROLE_LABEL,
+  type BandMember,
+} from "#modules/Band/api/band";
+import DeleteBand from "./DeleteBand";
 import { useCurrentUsername } from "#modules/SingleSong/components/SlateLyricsPlayground/elements/hooks";
 import { bandPath } from "#constants/routes";
 import { Button } from "@/components/ui/button";
 
 /**
- * Склад гурту. Поки що єдина дія — призначити хоста звуку: акаунт (планшет за
- * пультом), чий пристрій грає фон для всіх. Ролей у гурті немає (ACC-19),
- * тож призначати може будь-який учасник.
+ * Склад гурту з ролями. Роль поки ні на що не впливає — жодна дія за нею не
+ * закрита, — тож призначити хоста звуку так само може будь-який учасник.
  */
 export default function BandMembers() {
   const band = useBand();
@@ -65,8 +68,6 @@ export default function BandMembers() {
 
   return (
     <>
-      <ToPageHeaderArea>{`Склад гурту "${band.name}"`}</ToPageHeaderArea>
-
       <p className="mt-4 mb-3 text-sm text-stone-500">
         Хост звуку — акаунт пристрою, підключеного до звукового обладнання:
         коли будь-хто з гурту тисне «грати», фон звучить саме з нього.
@@ -86,9 +87,16 @@ export default function BandMembers() {
                   isHost ? "border-blue-900 bg-blue-50/60" : "border-stone-200"
                 }`}
               >
-                <span className="flex-1 min-w-0 text-sm font-semibold text-stone-800 truncate">
-                  {member.username}
-                  {isMe && <span className="text-stone-400 font-normal"> (я)</span>}
+                <span className="flex-1 min-w-0 flex flex-col">
+                  <span className="text-sm font-semibold text-stone-800 truncate">
+                    {member.username}
+                    {isMe && (
+                      <span className="text-stone-400 font-normal"> (я)</span>
+                    )}
+                  </span>
+                  <span className="text-xs text-stone-500">
+                    {BAND_ROLE_LABEL[member.role] ?? BAND_ROLE_LABEL.member}
+                  </span>
                 </span>
                 {isHost && (
                   <span className="flex items-center gap-1 text-xs font-semibold text-blue-900 shrink-0">
@@ -118,6 +126,11 @@ export default function BandMembers() {
           })}
         </ul>
       )}
+
+      {/* Видалення гурту бачить лише лідер. Сервер перевіряє це незалежно. */}
+      {members.some(
+        (member) => member.username === username && member.role === "leader",
+      ) && <DeleteBand bandId={band.id} bandName={band.name} />}
     </>
   );
 }

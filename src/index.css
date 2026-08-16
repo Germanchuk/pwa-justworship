@@ -78,7 +78,7 @@
 .glass {
   @apply bg-white/60 backdrop-blur-sm border border-black/20;
   /* Рамку може перефарбовувати сторінка під свій стан (див. `statusColor`
-     у BottomBar) — перехід, щоб зміна стану не мигала. */
+     у TopBar) — перехід, щоб зміна стану не мигала. */
   transition: border-color 0.35s ease;
 }
 
@@ -177,7 +177,7 @@ select {
 
 /* DatePicker overrides */
 
-.Bridge .react-datepicker-wrapper {
+.ScheduleDate .react-datepicker-wrapper {
   display: block;
 }
 

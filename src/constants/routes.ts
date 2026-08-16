@@ -24,8 +24,12 @@ export enum Routes {
   // порожній = читання, `edit` і `notes` — решта (див. `SingleSong/mode.tsx`).
   SingleSong = "/bands/:bandId/songs/:songId",
   SingleSongMode = "/bands/:bandId/songs/:songId/:mode",
+  BandLists = "/bands/:bandId/lists",
   CreateList = "/bands/:bandId/lists/new",
+  // Як і в пісні: порожній останній сегмент = читання, `edit` = правка.
+  // Читання лишається основною адресою списку — саме її дають музикантам.
   SingleList = "/bands/:bandId/lists/:listId",
+  EditList = "/bands/:bandId/lists/:listId/edit",
   //
   // Церква поки без входів з UI — лишається під майбутні фічі.
   JoinChurch = "/churches",
@@ -48,6 +52,8 @@ export const bandPath = {
       : `/bands/${bandId}/songs/${songId}/${mode}`,
   createSong: (bandId: Id) => `/bands/${bandId}/songs/new`,
   songFromScratch: (bandId: Id) => `/bands/${bandId}/songs/new/from-scratch`,
+  lists: (bandId: Id) => `/bands/${bandId}/lists`,
   createList: (bandId: Id) => `/bands/${bandId}/lists/new`,
   list: (bandId: Id, listId: Id) => `/bands/${bandId}/lists/${listId}`,
+  editList: (bandId: Id, listId: Id) => `/bands/${bandId}/lists/${listId}/edit`,
 };

@@ -20,6 +20,7 @@ import CreateBand from "#views/CreateBand/CreateBand";
 import BandSongs from "#views/BandSongs/BandSongs";
 import BandsHome from "#views/BandsHome/BandsHome";
 import BandHome from "#views/BandHome/BandHome";
+import BandLists from "#views/BandLists/BandLists";
 import BandMembers from "#views/BandMembers/BandMembers";
 import AudioHost from "#views/AudioHost/AudioHost";
 import SingleShedule from "#views/SingleSchedule/SingleShedule";
@@ -60,8 +61,12 @@ function Router() {
                 Yjs-документ. Невідомий сегмент `SingleSong` сам зводить на
                 канонічний шлях читання. */}
             <Route path="songs/:songId/:mode?" element={<SingleSong />} />
+            <Route path="lists" element={<BandLists />} />
             <Route path="lists/new" element={<SingleShedule />} />
-            <Route path="lists/:listId" element={<SingleShedule />} />
+            {/* `:mode?` — один елемент на читання і правку, як у пісні: інакше
+                перемикання режиму розмонтувало б сторінку й перечитувало
+                список із сервера. Невідомий сегмент = читання. */}
+            <Route path="lists/:listId/:mode?" element={<SingleShedule />} />
           </Route>
         </Route>
         <Route element={<PublicLayout />}>
