@@ -70,7 +70,7 @@ type SongRouteParams = Partial<Record<"bandId" | "songId" | "mode", string>>;
  *
  * Свідомо `useMatch` по всьому URL, а не `useParams()` — та сама причина, що
  * й у `useUrlBandId`: `SongControls` (а з ними й перемикач режимів) оголошені
- * в `SingleSong`, але РЕНДЕРЯТЬСЯ в `PageFooterArea` всередині `BottomBar`,
+ * в `SingleSong`, але РЕНДЕРЯТЬСЯ в `PageBar` всередині `TopBar`,
  * тобто вище пісенного `<Route>`, і route-контекст там про пісню не знає.
  */
 const useSongRouteParams = (): SongRouteParams | undefined => {

@@ -7,9 +7,7 @@ import { parseSongMode } from "#modules/SingleSong/mode";
 import { bandPath } from "#constants/routes";
 import {SongControls} from "#modules/SingleSong/components/SongControls/SongControls";
 import {setNotesAudience} from "#modules/SingleSong/redux/songSlice";
-import {SongHeader} from "#modules/SingleSong/components/SongHeader/SongHeader";
-import {ToPageHeaderArea} from "#layout/PageHeaderArea/ToPageHeaderArea";
-import {ToPageFooterArea} from "#layout/PageFooterArea/ToPageFooterArea";
+import {ToPageBar} from "#layout/PageBar/ToPageBar";
 
 export default function SingleSong() {
   const { bandId, songId, mode } = useParams();
@@ -40,13 +38,10 @@ export default function SingleSong() {
 
   return (
     <>
-      <ToPageHeaderArea>
-        <SongHeader />
-      </ToPageHeaderArea>
       <Song />
-      <ToPageFooterArea>
+      <ToPageBar>
         <SongControls />
-      </ToPageFooterArea>
+      </ToPageBar>
     </>
   );
 }

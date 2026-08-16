@@ -10,8 +10,7 @@ import {BrowserRouter } from "react-router-dom";
 import { Provider } from "react-redux";
 import store from "./store";
 import NotificationsCenter from "#layout/NotificationsCenter/NotificationsCenter";
-import {PageHeaderProvider} from "#layout/PageHeaderArea/PageHeaderAreaProvider";
-import {PageFooterProvider} from "#layout/PageFooterArea/PageFooterAreaProvider";
+import {PageBarProvider} from "#layout/PageBar/PageBarProvider";
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement
@@ -20,12 +19,10 @@ const root = ReactDOM.createRoot(
 root.render(
     <Provider store={store}>
       <BrowserRouter>
-        <PageHeaderProvider>
-          <PageFooterProvider>
-            <Router />
-            <NotificationsCenter />
-          </PageFooterProvider>
-        </PageHeaderProvider>
+        <PageBarProvider>
+          <Router />
+          <NotificationsCenter />
+        </PageBarProvider>
       </BrowserRouter>
     </Provider>
 );

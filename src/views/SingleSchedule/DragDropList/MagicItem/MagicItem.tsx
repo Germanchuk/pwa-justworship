@@ -1,8 +1,14 @@
-import { PlusSmallIcon } from "@heroicons/react/24/outline";
+import { PlusIcon } from "@heroicons/react/24/outline";
 import { useCallback, useRef, useState } from "react";
 import SearchResults from "./SearchResults/SearchResults";
-import { Button } from "@/components/ui/button";
 
+/**
+ * Останній рядок списку — додавання пісні. Виглядає як рядок «Створити новий
+ * гурт» на головному екрані: пунктирний кружечок і поле замість назви.
+ *
+ * Окремої кнопки «додати» немає свідомо: пісня додається лише кліком по
+ * знайденому результату — вводом з клавіатури пісню не створиш.
+ */
 export default function MagicItem({ addItem }) {
   const [isFocused, setIsFocused] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -22,26 +28,27 @@ export default function MagicItem({ addItem }) {
   }, [setSearchQuery]);
 
   return (
-    <li className="flex gap-4 items-center py-1 border-b border-border relative">
-      <div className="w-10 h-8" />
-      <form className="flex grow gap-2" onSubmit={(e) => e.preventDefault()}>
-        <input
-          type="text"
-          placeholder="Новий пункт"
-          className="outline-0 grow appearance-none"
-          onFocus={() => setIsFocused(true)}
-          onBlur={handleBlur}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-        <Button size="sm" className="size-8 p-0" type="submit">
-          <PlusSmallIcon className="w-5 h-5" />
-        </Button>
-      </form>
+    <li className="relative flex w-full items-center gap-3 rounded-b-xl border-t border-border p-3">
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-foreground/50">
+        <PlusIcon className="size-5" />
+      </span>
+
+      <input
+        type="text"
+        placeholder="Додати пісню"
+        className="min-w-0 grow appearance-none bg-transparent text-base outline-0 placeholder:text-muted-foreground"
+        onFocus={() => setIsFocused(true)}
+        onBlur={handleBlur}
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+      />
+
       {isFocused && (
         <div
           ref={dropdownRef}
-          className="absolute -bottom-1 right-0 left-0 translate-y-full p-2 rounded shadow-lg ring-1 ring-muted"
+          // z-20 і власне тло: без них випадайка просвічувала наскрізь і
+          // ховалася під кнопкою видалення списку.
+          className="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl border border-border bg-background p-1 shadow-lg"
           onMouseDown={(e) => e.preventDefault()}
         >
           <SearchResults

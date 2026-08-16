@@ -5,7 +5,7 @@ import { setUser } from "#modules/AuthenticatedUser/userSlice";
 import {ErrorBoundary} from "react-error-boundary";
 import { ErrorBoundaryFallback } from "#components";
 import { useLocation } from "react-router-dom";
-import BottomBar from "../BottomBar/BottomBar";
+import TopBar from "../TopBar/TopBar";
 import HardReloadButton from "../HardReloadButton/HardReloadButton";
 import {Container} from "#components";
 
@@ -49,7 +49,7 @@ export default function AuthenticatedLayout({ children }) {
 
   return (
     <>
-      <BottomBar
+      <TopBar
         visible={headerVisible}
         onToggle={() => setHeaderVisible((visible) => !visible)}
       />
