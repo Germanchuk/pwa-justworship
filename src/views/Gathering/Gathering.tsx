@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { Descendant } from "slate";
 
@@ -9,8 +9,8 @@ import { useBand } from "#modules/Band/BandLayout";
 import { ToPageBar } from "#layout/PageBar/ToPageBar";
 import { SongModeProvider, StaticSongProvider } from "#modules/SingleSong/mode";
 import { StaticSong } from "#modules/SingleSong/components/StaticSong/StaticSong";
-import { numberSongs, type ListPoint } from "#models/listPoint";
 import { fromApi } from "#models/listPoint";
+import { buildGathering, type GatheringPoint } from "#modules/Gathering/buildGathering";
 
 /**
  * РЕЖИМ ЗІБРАННЯ — усе служіння одним екраном.
@@ -31,14 +31,30 @@ import { fromApi } from "#models/listPoint";
  * `StaticSong`). Міняти їх тут не можна: змінам нікуди подітись. Хто хоче
  * інше капо — заходить у пісню.
  *
- * ─── ЧОГО ЩЕ НЕМАЄ ─────────────────────────────────────────────────────────
- * Плеєра. Зібрання має грати все служіння безшовно, з програшами між піснями,
- * і саме під це вже перероблений плеєр (рулонна черга сегментів). Тут поки
- * тільки показ.
+ * ─── ЩО ПОКАЗУЄ, А ЧОГО ЩЕ НЕ РОБИТЬ ───────────────────────────────────────
+ * Ряд елементів рахує `buildGathering` — він же збирає чергу сегментів і
+ * відповідність токенів. Тут поки використана лише перша з трьох: програш
+ * ВИДНО (згенерований документ поруч із піснями), але ще не чутно. Плеєр —
+ * наступні тікети.
  */
 
-/** Пункт списку плюс вміст пісні, як його віддає ендпоінт зібрання. */
-type GatheringPoint = ListPoint & { slate?: Descendant[] | null };
+/**
+ * `fromApi` дає чистий union, але вміст пісні (`slate`) живе поруч із пунктом —
+ * зшиваємо по id пісні, а НЕ по індексу: межа відсіює пункти (пісня без пісні,
+ * порожня примітка), тож порядки двох рядів не збігаються, і зсув на один тихо
+ * підклав би не той документ.
+ */
+const pointsOf = (list: any): GatheringPoint[] => {
+  const rawPoints: any[] = Array.isArray(list?.points) ? list.points : [];
+  const slateBySongId = new Map<string, Descendant[] | null | undefined>(
+    rawPoints
+      .filter((raw) => raw?.__component === "list.song-point" && raw?.song?.id != null)
+      .map((raw) => [String(raw.song.id), raw.slate])
+  );
+  return fromApi(rawPoints).map((point) =>
+    point.kind === "song" ? { ...point, slate: slateBySongId.get(String(point.songId)) } : point
+  ) as GatheringPoint[];
+};
 
 export default function Gathering() {
   const { listId } = useParams();
@@ -60,6 +76,11 @@ export default function Gathering() {
     };
   }, [band.id, listId]);
 
+  // Хук стоїть ДО ранніх виходів — інакше він викликався б через раз.
+  // Знімок міняється рівно раз (коли приїхав), а збірка проганяє лексером усі
+  // документи служіння: без пам'яті це рахувалось би на кожен ререндер екрана.
+  const { items } = useMemo(() => buildGathering(pointsOf(list)), [list]);
+
   if (failed) {
     return (
       <div className="p-4 text-sm text-destructive">
@@ -69,21 +90,6 @@ export default function Gathering() {
   }
 
   if (!list) return null;
-
-  // `fromApi` дає чистий union, але вміст пісні (`slate`) живе поруч із
-  // пунктом — зшиваємо по id пісні, а НЕ по індексу: межа відсіює пункти
-  // (пісня без пісні, порожня примітка), тож порядки двох рядів не збігаються,
-  // і зсув на один тихо підклав би не той документ.
-  const rawPoints: any[] = Array.isArray(list.points) ? list.points : [];
-  const slateBySongId = new Map<string, Descendant[] | null | undefined>(
-    rawPoints
-      .filter((raw) => raw?.__component === "list.song-point" && raw?.song?.id != null)
-      .map((raw) => [String(raw.song.id), raw.slate])
-  );
-  const points = fromApi(rawPoints).map((point) =>
-    point.kind === "song" ? { ...point, slate: slateBySongId.get(String(point.songId)) } : point
-  ) as GatheringPoint[];
-  const numbers = numberSongs(points);
 
   return (
     // Режим форсуємо: у зібранні пісні в адресі немає, а від режиму залежить,
@@ -104,43 +110,39 @@ export default function Gathering() {
         </div>
 
         <div className="flex flex-col">
-          {points.map((point, index) => (
+          {items.map((item) => (
             <section
-              key={point.key}
+              key={item.key}
               className="border-t border-dashed border-border/70 py-4 first:border-t-0 first:pt-0"
             >
-              {point.kind === "song" && (
+              {item.kind === "song" && (
                 <>
                   {/* Номер над піснею: єдина навігаційна підказка на екрані,
                       де гортають пальцем. На репетиції домовляються саме
                       номерами. */}
                   <div className="mb-1 text-sm font-semibold text-muted-foreground">
-                    {numbers[index]}
+                    {item.number}
                   </div>
-                  <StaticSong songId={point.songId} slate={point.slate ?? []} />
+                  <StaticSong docId={item.point.songId} slate={item.nodes} />
                 </>
               )}
 
-              {/* Примітка, що звучить, — це програш. Показувати тут поки нема
-                  чого крім її тексту: акорди зʼявляться разом з генератором
-                  (тікет `03`), і саме цей текст стане заголовком їхньої
-                  секції. */}
-              {point.kind === "note" && (
-                <p
-                  className={
-                    point.sounding
-                      ? "px-3 py-2 text-base text-muted-foreground"
-                      : "rounded-lg bg-muted/60 px-3 py-2 text-base text-foreground/80"
-                  }
-                >
-                  {point.text}
+              {/* Програш — такий самий документ, як пісня: акорди, згенеровані
+                  зі стику сусідів, під текстом примітки. Свого вмісту він не
+                  має й мати не може (`LIST-26`). */}
+              {item.kind === "sounding" && <StaticSong docId={item.key} slate={item.nodes} />}
+
+              {/* Примітка без програша — просто рядок: тут говорить ведучий. */}
+              {item.kind === "note" && (
+                <p className="rounded-lg bg-muted/60 px-3 py-2 text-base text-foreground/80">
+                  {item.text}
                 </p>
               )}
             </section>
           ))}
         </div>
 
-        {points.length === 0 && (
+        {items.length === 0 && (
           <div className="text-sm text-muted-foreground">
             У цьому служінні ще нічого немає.
           </div>

@@ -13,26 +13,14 @@
 import { createMidiFromProgression } from "../getMidiFromSections/utils/createMidiFromProgression";
 import { progressionToTimeline } from "../getMidiFromSections/utils/progressionToTimeline";
 import type { PlannedChord, PlannedNote, PlannedPass, PlaybackSegment } from "./model";
-import { progressionBeats } from "./model";
+import { prefixTokenKey, progressionBeats } from "./model";
 
 export interface PlanPassOptions {
   /** Множник гуманізації (0 — механічно). */
   humanize?: number;
   /** Джерело випадковості — заради детермінованих тестів. */
   random?: () => number;
-  /**
-   * Префікс ключа токена. У зібранні один і той самий `sectionIndex` існує в
-   * кожній пісні, тож без префікса пункту підсвітка спалахнула б одразу в
-   * кількох. На сторінці пісні префікса немає — і мережевий протокол
-   * підсвітки лишається таким самим, як був.
-   */
-  tokenKeyPrefix?: string;
 }
-
-const prefixTokenKey = (tokenKey: string | null, prefix: string | undefined): string | null => {
-  if (tokenKey == null) return null;
-  return prefix ? `${prefix}:${tokenKey}` : tokenKey;
-};
 
 /**
  * @param startBeats абсолютний імпульс, з якого прохід починається.
@@ -69,7 +57,7 @@ export function planPass(
     beats: startBeats + event.startBeats,
     durationBeats: event.durationBeats,
     chord: event.chord,
-    tokenKey: prefixTokenKey(event.tokenKey, options.tokenKeyPrefix),
+    tokenKey: prefixTokenKey(event.tokenKey, segment.tokenKeyPrefix),
   }));
 
   return {

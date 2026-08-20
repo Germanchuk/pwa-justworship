@@ -30,6 +30,12 @@ import "../SlateLyricsPlayground/SlateLyricsPlayground.css";
  * без жодного окремого рендера. Головне — щоб знімок був НЕзнеособлений:
  * джерело тут `slateFull`, а не публічна колонка (див. ендпоінт зібрання).
  *
+ * ─── НЕ ТІЛЬКИ ПІСНЯ ───────────────────────────────────────────────────────
+ * Тим самим шляхом показується й програш: генератор віддає його документом
+ * (`buildGathering`), і ряд зібрання лишається однорідним — кожен пункт це один
+ * статичний документ (ADR-0001). Документ програша йде без шапки: чужої назви
+ * й перемикачів показу в ньому бути не має.
+ *
  * ─── ПЛАГІНИ ───────────────────────────────────────────────────────────────
  * Ті самі, що й у бойовому редакторі, мінус `withYjs`/`withYHistory`: схема
  * має лишатись тією ж, інакше документ, зроблений там, показувався б тут
@@ -37,8 +43,11 @@ import "../SlateLyricsPlayground/SlateLyricsPlayground.css";
  */
 
 interface Props {
-  /** Потрібен лише як ключ пересоздання редактора — і як зачіпка під плеєр. */
-  songId: string | number;
+  /**
+   * Тотожність документа: пісня це чи згенерований програш — байдуже. Потрібен
+   * лише як ключ пересоздання редактора — і як зачіпка під плеєр.
+   */
+  docId: string | number;
   slate: Descendant[];
 }
 
@@ -60,7 +69,7 @@ function StaticEditable() {
   );
 }
 
-export function StaticSong({ songId, slate }: Props) {
+export function StaticSong({ docId, slate }: Props) {
   const editor = useMemo(() => {
     let e = withReact(createEditor()) as unknown as Editor;
     e = withMetaSchema(e);
@@ -72,7 +81,7 @@ export function StaticSong({ songId, slate }: Props) {
     // Замкнено назавжди: у зібранні пісню не правлять узагалі.
     e = withModeGuard(e, () => false);
     return e;
-  }, [songId]);
+  }, [docId]);
 
   if (!Array.isArray(slate) || slate.length === 0) {
     return (
