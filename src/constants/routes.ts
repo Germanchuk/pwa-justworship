@@ -30,6 +30,10 @@ export enum Routes {
   // Читання лишається основною адресою списку — саме її дають музикантам.
   SingleList = "/bands/:bandId/lists/:listId",
   EditList = "/bands/:bandId/lists/:listId/edit",
+  // Режим зібрання — окремий екран, а не режим списку: він показує не порядок,
+  // а самі пісні поспіль. Статичний сегмент react-router ранжує вище за
+  // `:mode?`, тож адреси списку він не перехоплює.
+  Gathering = "/bands/:bandId/lists/:listId/gathering",
   //
   // Церква поки без входів з UI — лишається під майбутні фічі.
   JoinChurch = "/churches",
@@ -56,4 +60,6 @@ export const bandPath = {
   createList: (bandId: Id) => `/bands/${bandId}/lists/new`,
   list: (bandId: Id, listId: Id) => `/bands/${bandId}/lists/${listId}`,
   editList: (bandId: Id, listId: Id) => `/bands/${bandId}/lists/${listId}/edit`,
+  gathering: (bandId: Id, listId: Id) =>
+    `/bands/${bandId}/lists/${listId}/gathering`,
 };

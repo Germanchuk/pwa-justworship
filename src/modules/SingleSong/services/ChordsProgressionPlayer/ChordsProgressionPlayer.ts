@@ -1,41 +1,31 @@
-import * as Tone from "tone";
 import {
   getMidiPlayerState,
-  playMidiProgressionGpt,
+  playSegments,
   type MidiPlaybackControls,
   type MidiPlayerState,
   type PlayOptions,
 } from "./playMidiGpt";
-import {getMidiFromSlate, type SongContentSnapshot} from "./getMidiFromSlate/getMidiFromSlate";
-import type {
-  ChordBeatEvent,
-  ChordTimelineEvent,
-} from "./getMidiFromSections/utils/progressionToTimeline";
+import {getProgressionFromSlate, type SongContentSnapshot} from "./getMidiFromSlate/getMidiFromSlate";
+import type {PlannedChord, PlaybackSegment} from "./segments/model";
 import {DEFAULT_BPM, DEFAULT_TIME_SIGNATURE} from "./songDefaults";
 import {getHumanizeFactor, getPlayerSettings} from "./playerSettings";
 
 type StateListener = (state: MidiPlayerState) => void;
-type ChordListener = (event: ChordTimelineEvent | null) => void;
+type ChordListener = (event: PlannedChord | null) => void;
 type SelectionListener = (eventKey: string | null) => void;
 type ContentProvider = () => SongContentSnapshot | null;
-type PlaybackPlan = {
-  midi: ReturnType<typeof getMidiFromSlate>["midi"];
-  timeline: ChordTimelineEvent[];
-  options: PlayOptions;
-};
 
 const sanitizeBpm = (bpm: number | undefined, fallback: number): number =>
   typeof bpm === "number" && Number.isFinite(bpm) && bpm > 0 ? bpm : fallback;
 
-const tokenKeyFromEvent = (event: ChordTimelineEvent | null): string | null => {
-  if (!event) return null;
-  if (event.tokenKey != null) return event.tokenKey;
-  if (event.id != null) return String(event.id);
-  return null;
-};
-
 /**
- * Singleton that orchestrates MIDI playback and keeps chord highlights in sync with Tone.Transport.
+ * Singleton, що керує відтворенням і тримає підсвітку акордів у синхроні з
+ * транспортом Tone.
+ *
+ * Планування часу тут більше НЕ живе: рулонний `MidiPlayer` сам розкладає
+ * матеріал у тіки й повідомляє, що зараз звучить. Раніше підсвітка рахувалась
+ * тут у СЕКУНДАХ з єдиного bpm — під плавною зміною темпу така арифметика
+ * розсипалась би, тож вона пішла разом із «одна пісня = один темп».
  */
 class ChordsProgressionPlayer {
   static instance: ChordsProgressionPlayer;
@@ -44,8 +34,7 @@ class ChordsProgressionPlayer {
   private stateListeners = new Set<StateListener>();
   private chordListeners = new Set<ChordListener>();
   private selectionListeners = new Set<SelectionListener>();
-  private scheduledChordEvents: number[] = [];
-  private currentChordEvent: ChordTimelineEvent | null = null;
+  private currentChordEvent: PlannedChord | null = null;
   private selectedKey: string | null = null;
   private contentProvider: ContentProvider | null = null;
 
@@ -56,14 +45,45 @@ class ChordsProgressionPlayer {
     return ChordsProgressionPlayer.instance;
   };
 
+  /** Пісня зі сторінки пісні: черга з одного сегмента. */
   play = async (options: Partial<PlayOptions> = {}) => {
+    const segments = this.buildSongSegments();
+    if (!segments) return;
+    await this.playQueue(segments, options);
+  };
+
+  /**
+   * Загальний вхід: зіграти довільну чергу сегментів.
+   *
+   * Саме сюди прийде режим зібрання — пісня, програш-луп, наступна пісня —
+   * не змінюючи більше нічого в цьому класі.
+   */
+  playQueue = async (segments: PlaybackSegment[], options: Partial<PlayOptions> = {}) => {
     this.stopIfActive();
-    const plan = this.buildPlaybackPlan(options);
-    if (!plan) return;
+    if (segments.length === 0) {
+      this.handlePlaybackComplete();
+      return;
+    }
+
+    // Налаштування пристрою (пресет педа, піаніно, гуманізація) — базовий шар;
+    // явні опції виклику сильніші. Читаються на кожен запуск, тож зміна в меню
+    // діє з наступного разу.
+    const settings = getPlayerSettings();
+
     this.setState("loading");
     try {
-      this.controls = await playMidiProgressionGpt(plan.midi, plan.options);
-      this.scheduleChordHighlights(plan.timeline);
+      this.controls = await playSegments(segments, {
+        padPreset: settings.padPreset,
+        piano: settings.piano,
+        pianoVolume: settings.pianoVolume,
+        humanize: getHumanizeFactor(settings.humanize),
+        ...options,
+        onChord: (chord) => this.emitChord(chord),
+        onEnded: () => {
+          this.handlePlaybackComplete();
+          options.onEnded?.();
+        },
+      });
       this.setState("playing");
     } catch (error) {
       this.handlePlaybackComplete();
@@ -77,6 +97,16 @@ class ChordsProgressionPlayer {
 
   getCurrentChord() {
     return this.currentChordEvent;
+  }
+
+  /** Чи крутиться зараз луп — тобто чи є сенс у кнопці «далі». */
+  isOnLoop() {
+    return this.controls?.isOnLoop() ?? false;
+  }
+
+  /** «Далі»: вийти з поточного лупа наприкінці його проходу. */
+  next() {
+    this.controls?.next();
   }
 
   onStateChange(listener: StateListener) {
@@ -139,113 +169,32 @@ class ChordsProgressionPlayer {
     this.handlePlaybackComplete();
   };
 
-  private buildPlaybackPlan(options: Partial<PlayOptions>): PlaybackPlan | null {
+  /** Документ відкритої пісні → один сегмент `once`. */
+  private buildSongSegments(): PlaybackSegment[] | null {
     if (!this.contentProvider) {
       this.handlePlaybackComplete();
       return null;
     }
 
-    // Налаштування пристрою (пресет педа, піаніно, гуманізація) — базовий шар;
-    // явні опції виклику сильніші. Читаються на кожен play(), тож зміна в меню
-    // діє з наступного запуску.
-    const settings = getPlayerSettings();
+    const {progression, bpm, timeSignature} = getProgressionFromSlate(
+      this.contentProvider(),
+      this.selectedKey,
+    );
 
-    const {
-      midi,
-      timeline,
-      bpm: songBpm,
-      timeSignature: songTimeSignature,
-    } = getMidiFromSlate(this.contentProvider(), this.selectedKey, {
-      humanize: getHumanizeFactor(settings.humanize),
-    });
-
-    if (timeline.length === 0) {
+    if (progression.length === 0) {
       this.handlePlaybackComplete();
       return null;
     }
 
-    // Темп і розмір визначаються тут — один раз, із документа (з можливістю
-    // перекрити викликом). Далі вони йдуть у плеєр як опції; хедер MIDI на
-    // відтворення не впливає, тож розсинхрону між ним і транспортом бути не може.
-    const bpm = sanitizeBpm(options.bpm, sanitizeBpm(songBpm, DEFAULT_BPM));
-    const timeSignature = options.timeSignature ?? songTimeSignature ?? DEFAULT_TIME_SIGNATURE;
-    const introBars = Math.max(0, options.introBars ?? 1);
-
-    const mergedOptions: PlayOptions = {
-      padPreset: settings.padPreset,
-      piano: settings.piano,
-      pianoVolume: settings.pianoVolume,
-      ...options,
-      bpm,
-      timeSignature,
-      introBars,
-      onEnded: () => {
-        this.handlePlaybackComplete();
-        options.onEnded?.();
+    return [
+      {
+        id: "song",
+        progression,
+        bpm: sanitizeBpm(bpm, DEFAULT_BPM),
+        timeSignature: timeSignature ?? DEFAULT_TIME_SIGNATURE,
+        kind: "once",
       },
-    };
-
-    return {
-      midi,
-      timeline: this.timelineInSeconds(timeline, introBars * timeSignature[0], bpm),
-      options: mergedOptions,
-    };
-  }
-
-  /**
-   * Долі — джерело правди для підсвітки; секунди виводимо з того самого bpm,
-   * що поїде в транспорт, і зі зсувом на такти вступного кліку.
-   */
-  private timelineInSeconds(
-    timeline: ChordBeatEvent[],
-    introBeats: number,
-    bpm: number,
-  ): ChordTimelineEvent[] {
-    const beatSeconds = 60 / bpm;
-
-    return timeline.map((event) => {
-      const startBeats = event.startBeats + introBeats;
-      return {
-        ...event,
-        startBeats,
-        start: startBeats * beatSeconds,
-        duration: event.durationBeats * beatSeconds,
-      };
-    });
-  }
-
-  // Keeps the chord highlight timeline aligned with the Tone transport clock.
-  private scheduleChordHighlights(timeline: ChordTimelineEvent[]) {
-    this.clearScheduledChordEvents();
-
-    if (timeline.length === 0) {
-      this.emitChord(null);
-      return;
-    }
-
-    const transport = Tone.Transport;
-    const now = transport.seconds;
-    this.seedCurrentChord(timeline, now);
-
-    timeline.forEach((event) => {
-      const timeUntilStart = event.start - now;
-      if (timeUntilStart <= 0) return;
-
-      const id = transport.scheduleOnce(() => {
-        this.emitChord(event);
-      }, `+${timeUntilStart}`);
-      this.scheduledChordEvents.push(id);
-    });
-  }
-
-  private seedCurrentChord(timeline: ChordTimelineEvent[], now: number) {
-    const activeEvent =
-      [...timeline].reverse().find((event) => {
-        const end = event.start + event.duration;
-        return now >= event.start && now < end;
-      }) ?? null;
-
-    this.emitChord(activeEvent);
+    ];
   }
 
   private stopIfActive() {
@@ -260,9 +209,9 @@ class ChordsProgressionPlayer {
     this.stateListeners.forEach((listener) => listener(state));
   }
 
-  private emitChord(event: ChordTimelineEvent | null) {
+  private emitChord(event: PlannedChord | null) {
     this.currentChordEvent = event;
-    const key = tokenKeyFromEvent(event);
+    const key = event?.tokenKey ?? null;
     if (key != null && this.selectedKey === key) {
       this.setStartChordTokenKey(null);
     }
@@ -273,13 +222,7 @@ class ChordsProgressionPlayer {
     this.selectionListeners.forEach((listener) => listener(this.selectedKey));
   }
 
-  private clearScheduledChordEvents() {
-    this.scheduledChordEvents.forEach((id) => Tone.Transport.clear(id));
-    this.scheduledChordEvents = [];
-  }
-
   private handlePlaybackComplete() {
-    this.clearScheduledChordEvents();
     this.emitChord(null);
     this.controls = null;
     this.setState("idle");

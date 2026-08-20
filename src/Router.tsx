@@ -24,6 +24,7 @@ import BandLists from "#views/BandLists/BandLists";
 import BandMembers from "#views/BandMembers/BandMembers";
 import AudioHost from "#views/AudioHost/AudioHost";
 import SingleShedule from "#views/SingleSchedule/SingleShedule";
+import Gathering from "#views/Gathering/Gathering";
 import ShadcnDemo from "#views/ShadcnDemo/ShadcnDemo";
 import Landing from "#views/Landing/Landing";
 import SearchSongs from "#views/SearchSongs/SearchSongs";
@@ -63,6 +64,9 @@ function Router() {
             <Route path="songs/:songId/:mode?" element={<SingleSong />} />
             <Route path="lists" element={<BandLists />} />
             <Route path="lists/new" element={<SingleShedule />} />
+            {/* Статичний сегмент ранжується вище за `:mode?` нижче, тож
+                окремий екран зібрання не перехоплює адрес самого списку. */}
+            <Route path="lists/:listId/gathering" element={<Gathering />} />
             {/* `:mode?` — один елемент на читання і правку, як у пісні: інакше
                 перемикання режиму розмонтувало б сторінку й перечитувало
                 список із сервера. Невідомий сегмент = читання. */}

@@ -2,6 +2,7 @@ import { useSlate } from "slate-react";
 import { MusicalNoteIcon, ChatBubbleBottomCenterTextIcon } from "@heroicons/react/24/outline";
 
 import { Switch } from "@/components/ui/switch";
+import { useSettingsEditable } from "../../../mode";
 import { useCurrentUsername } from "../elements/hooks";
 import type { DisplayFilter } from "./model";
 import { setFilterHidden } from "./operations";
@@ -33,6 +34,10 @@ export const DisplayToggles = () => {
   const editor = useSlate();
   const username = useCurrentUsername();
   const { state, stored, filtersApply } = useDisplay();
+  // У знімку (режим зібрання) фільтри ДІЮТЬ, але вибір нікуди записати —
+  // показуємо їх такими ж inert, як поза читанням.
+  const editable = useSettingsEditable();
+  const interactive = filtersApply && editable;
 
   return (
     <span contentEditable={false} className="display-toggles">
@@ -41,10 +46,12 @@ export const DisplayToggles = () => {
         const storedHidden =
           key === "chords" ? stored.chordsHidden : stored.lyricsHidden;
         const toggle = () => {
-          if (!filtersApply) return;
+          if (!interactive) return;
           setFilterHidden(editor, username, key, !hidden);
         };
-        const title = !filtersApply
+        const title = !editable
+          ? `${label} ${hidden ? "приховані" : "видно"} — як збережено в пісні`
+          : !filtersApply
           ? `Поза режимом читання показано все; збережено: ${label.toLowerCase()} ${
               storedHidden ? "приховані" : "видно"
             }`
@@ -56,7 +63,7 @@ export const DisplayToggles = () => {
           <span key={key} className="song-meta-line">
             <span
               className={`song-meta-badge display-toggle ${
-                filtersApply ? "" : "song-meta-badge--readonly song-meta-badge--inert"
+                interactive ? "" : "song-meta-badge--readonly song-meta-badge--inert"
               }`}
               onMouseDown={(e) => e.preventDefault()}
               onClick={toggle}
@@ -72,7 +79,7 @@ export const DisplayToggles = () => {
             >
               <Switch
                 checked={!hidden}
-                disabled={!filtersApply}
+                disabled={!interactive}
                 onCheckedChange={toggle}
                 aria-label={label}
                 title={title}

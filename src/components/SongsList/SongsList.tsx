@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { LockClosedIcon } from "@heroicons/react/24/outline";
 import { formatDate } from "../../utils/utils";
 import { bandPath } from "../../constants/routes";
+import { fromApi, songPointsOf, type SongPoint } from "#models/listPoint";
 
 type SongsListProps = {
   list: any;
@@ -9,11 +10,19 @@ type SongsListProps = {
   bandId?: number | string;
 };
 
+/** Тональність і темп рядком — так, як їх показує картка. */
+const meta = (point: SongPoint) =>
+  `${point.songKey?.replace(/sharp/g, "#") ?? "-"} / ${point.bpm ?? "-"}`;
+
 export function SongsList({ list, bandId }: SongsListProps) {
   // Без гурту нема куди вести — картка лишається, але лише як прев'ю.
   const clickable = bandId != null;
   const formattedDate = formatDate(list?.attributes?.date);
   const bandName = list?.attributes?.band?.data?.attributes?.name;
+
+  // Картка показує саме ПІСНІ: примітки й програші лишаються всередині списку
+  // (`LIST-12`) — у переліку служінь від них користі нема, а місце вони їдять.
+  const songs = songPointsOf(fromApi(list?.attributes?.points));
 
   if (!clickable) {
     return (
@@ -30,16 +39,13 @@ export function SongsList({ list, bandId }: SongsListProps) {
         </div>
         <p className="text-neutral-content mb-2">{bandName}</p>
         <ul className="list-inside space-y-2">
-          {list.attributes.songs.data.map((song) => (
+          {songs.map((point) => (
             <li
-              key={song.id}
+              key={point.key}
               className="flex justify-between bg-background p-2 rounded text-neutral-content"
             >
-              <span>{song.attributes.name}</span>
-              <span>
-                {song.attributes.key?.replace(/sharp/g, "#") ?? "-"} /{" "}
-                {song.attributes.bpm ?? "-"}
-              </span>
+              <span>{point.name}</span>
+              <span>{meta(point)}</span>
             </li>
           ))}
         </ul>
@@ -57,18 +63,15 @@ export function SongsList({ list, bandId }: SongsListProps) {
       </Link>
       <p className="text-neutral-content mb-2">{bandName}</p>
       <ul className="list-inside space-y-2">
-        {list.attributes.songs.data.map((song) => (
+        {songs.map((point) => (
           <Link
-            key={song.id}
+            key={point.key}
             className="block bg-background p-2 rounded"
-            to={bandPath.song(bandId, song.id)}
+            to={bandPath.song(bandId, point.songId)}
           >
             <li className="flex justify-between">
-              <span>{song.attributes.name}</span>
-              <span>
-                {song.attributes.key?.replace(/sharp/g, "#") ?? "-"} /{" "}
-                {song.attributes.bpm ?? "-"}
-              </span>
+              <span>{point.name}</span>
+              <span>{meta(point)}</span>
             </li>
           </Link>
         ))}

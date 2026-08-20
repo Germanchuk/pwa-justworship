@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { RenderElementProps } from "slate-react";
 import { useSlateStatic } from "slate-react";
 import { Switch } from "@/components/ui/switch";
-import { useCapoApplies } from "../../../../mode";
+import { useCapoApplies, useSettingsEditable } from "../../../../mode";
 import { useCurrentUsername } from "../hooks";
 import { CapoModal } from "./CapoModal";
 import type { CapoElement } from "../../types";
@@ -16,6 +16,10 @@ export function Capo(props: RenderElementProps) {
   // Поза читанням капо не діє (таблиця в `mode.tsx`) — тоді бейдж показує
   // ефективний стан: приглушений, свіч вимкнений, значення на місці.
   const capoApplies = useCapoApplies();
+  // У знімку (режим зібрання) капо ДІЄ, але міняти його нікуди записати —
+  // бейдж і свіч поводяться так само, як поза читанням.
+  const editable = useSettingsEditable();
+  const interactive = capoApplies && editable;
 
   const capo = element as CapoElement;
   // Запам'ятане значення капо (показуємо завжди, навіть коли вимкнено).
@@ -35,7 +39,11 @@ export function Capo(props: RenderElementProps) {
     setCapoEnabled(editor, username, !enabled);
   };
 
-  const title = !capoApplies
+  const title = !editable
+    ? rawValue > 0
+      ? `Капо ${rawValue} — як збережено в пісні`
+      : "Капо не виставлене"
+    : !capoApplies
     ? "Капо діє лише в режимі читання — тут акорди показані у тональності пісні"
     : isEmpty
       ? "Спочатку виберіть лад капо"
@@ -50,10 +58,10 @@ export function Capo(props: RenderElementProps) {
       <span
         contentEditable={false}
         className={`song-meta-badge ${
-          capoApplies ? "" : "song-meta-badge--readonly song-meta-badge--inert"
+          interactive ? "" : "song-meta-badge--readonly song-meta-badge--inert"
         }`}
-        onClick={() => capoApplies && setOpen(true)}
-        title={capoApplies ? undefined : title}
+        onClick={() => interactive && setOpen(true)}
+        title={interactive ? undefined : title}
       >
         <span className="song-meta-badge__label">Капо:</span>
         <span
@@ -74,7 +82,7 @@ export function Capo(props: RenderElementProps) {
       >
         <Switch
           checked={active}
-          disabled={isEmpty || !capoApplies}
+          disabled={isEmpty || !interactive}
           onCheckedChange={togglePower}
           aria-label="Капо"
           title={title}

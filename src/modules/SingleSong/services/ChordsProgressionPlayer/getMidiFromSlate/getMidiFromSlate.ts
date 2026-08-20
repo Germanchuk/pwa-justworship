@@ -49,13 +49,27 @@ const nodeText = (node: unknown): string => {
     .join("");
 };
 
-export function getMidiFromSlate(
+/** Прогресія пісні без жодного MIDI — те, що потрібно рулонному плеєру. */
+export interface PreparedSlateProgression {
+  progression: ChordEvent[];
+  bpm: number;
+  timeSignature: [number, number];
+}
+
+/**
+ * Документ пісні → прогресія в імпульсах.
+ *
+ * Свідомо окремо від `getMidiFromSlate`: рулонний плеєр рендерить MIDI сам, по
+ * одному проходу за раз, тож будувати його тут означало б будувати наперед і
+ * викидати. MIDI лишається потрібним для експорту й тестів — саме там і живе
+ * обгортка нижче.
+ */
+export function getProgressionFromSlate(
   snapshot: SongContentSnapshot | null,
   startTokenKey: string | null,
-  options: {humanize?: number} = {},
-): PreparedSlateMidiData {
+): PreparedSlateProgression {
   if (!snapshot || !Array.isArray(snapshot.nodes) || snapshot.nodes.length === 0) {
-    return emptyResult(DEFAULT_BPM, DEFAULT_TIME_SIGNATURE);
+    return {progression: [], bpm: DEFAULT_BPM, timeSignature: DEFAULT_TIME_SIGNATURE};
   }
 
   const {bpm, timeSignature} = snapshot;
@@ -130,12 +144,31 @@ export function getMidiFromSlate(
       : indexed.findIndex((event) => event.tokenKey === startTokenKey);
   const slice = startIndex > 0 ? indexed.slice(startIndex) : indexed;
 
+  return {progression: slice, bpm, timeSignature};
+}
+
+/**
+ * Те саме плюс MIDI й таймлінія. Потрібно для експорту MIDI-файлу й для
+ * тестів, які перевіряють саме розкладку нот; відтворення ходить у
+ * `getProgressionFromSlate` і рендерить MIDI по проходах.
+ */
+export function getMidiFromSlate(
+  snapshot: SongContentSnapshot | null,
+  startTokenKey: string | null,
+  options: {humanize?: number} = {},
+): PreparedSlateMidiData {
+  const {progression, bpm, timeSignature} = getProgressionFromSlate(snapshot, startTokenKey);
+
+  if (progression.length === 0) {
+    return emptyResult(bpm, timeSignature);
+  }
+
   // Транспозиція завжди 0: капо — річ відображення, не звуку. Параметр
   // createMidiFromProgression лишається для майбутнього «грати в іншій тональності».
-  const midi = createMidiFromProgression(slice, bpm, timeSignature, 0, {
+  const midi = createMidiFromProgression(progression, bpm, timeSignature, 0, {
     humanize: options.humanize,
   });
-  const timeline = progressionToTimeline(slice);
+  const timeline = progressionToTimeline(progression);
 
-  return {midi, progression: slice, timeline, bpm, timeSignature};
+  return {midi, progression, timeline, bpm, timeSignature};
 }

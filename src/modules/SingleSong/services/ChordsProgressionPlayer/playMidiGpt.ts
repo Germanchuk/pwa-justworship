@@ -1,28 +1,33 @@
 import * as Tone from "tone";
-import { Midi } from "@tonejs/midi";
 import {getPadPresetDef, type PadPreset, type PadVoice} from "./createPad/padPresets";
 import {createPiano} from "./createPiano/createPiano";
 import {DEFAULT_BPM, DEFAULT_TIME_SIGNATURE} from "./songDefaults";
+import type {PlannedChord, PlaybackSegment} from "./segments/model";
+import {barBeats, canRampBetween} from "./segments/model";
+import {planPass} from "./segments/planPass";
+import {createQueueState, isOnLoop, pullPasses, requestExit, type QueueState} from "./segments/queue";
 
 /** Tone-ове позначення часу; ми вживаємо тільки тікову форму `"<n>i"`. */
 type ToneTime = string | number;
 
-interface MidiEvent {
+interface NoteEvent {
   time: ToneTime;
   name: string;
   duration: ToneTime;
   velocity: number;
 }
 
+/**
+ * Наскільки вперед від голки тримаємо рулон заповненим (в імпульсах).
+ *
+ * Це компроміс, а не константа зі стелі: більший горизонт = надійніший буфер
+ * від затинань, але й довша затримка виходу з лупа, бо долите вже звучатиме.
+ * Два такти 4/4 — досить, щоб пережити збірку сміття, і мало, щоб «далі»
+ * лишалось живим.
+ */
+const DEFAULT_HORIZON_BEATS = 8;
+
 export interface PlayOptions {
-  /**
-   * Темп і розмір — вхідні дані плеєра, а не властивість MIDI. Джерело правди
-   * одне: документ пісні (див. `SlatePlayerBridge`), звідки вони приходять сюди
-   * через `ChordsProgressionPlayer`. Хедер MIDI лишається валідною метаданою
-   * для експорту, але на відтворення не впливає.
-   */
-  bpm?: number;
-  timeSignature?: [number, number];
   metronome?: boolean;     // default: true
   metronomePan?: number;   // -1..1; 1 — правий
   introBars?: number;      // кількість тактів вступного кліку перед відтворенням
@@ -30,7 +35,12 @@ export interface PlayOptions {
   pianoVolume?: number;    // дБ
   padPreset?: PadPreset;   // default залежить від плеєра (defaultPlayer → "classic")
   piano?: boolean;         // грати піаніно-стаб поверх пада; default: true
+  humanize?: number;       // множник гуманізації; 0 — механічно
+  random?: () => number;   // джерело випадковості (тести)
+  horizonBeats?: number;
   onEnded?: () => void;
+  /** Підсвітка: що звучить зараз. `null` — не звучить нічого. */
+  onChord?: (chord: PlannedChord | null) => void;
 }
 
 interface MetronomeCtrl {
@@ -47,13 +57,17 @@ export interface MidiPlaybackControls {
   resume(): void;
   dispose(): void;
   getState(): MidiPlayerState;
+  /** «Далі»: вийти з поточного лупа наприкінці його проходу. */
+  next(): void;
+  /** Чи є зараз із чого виходити — тобто чи показувати кнопку «далі». */
+  isOnLoop(): boolean;
 }
 
 /**
  * Імпульси → тіки транспорту (про імпульс див. модель часу в `songDefaults`).
  * Імпульс лягає на чверть транспорту, бо BPM рахує саме імпульси. Плануємо все
  * в тіках, тому таймінг нот не залежить від темпу: bpm застосовується рівно
- * один раз — на транспорті.
+ * один раз — на транспорті, і може мінятись у польоті, нічого не ламаючи.
  */
 function beatsToTicks(beats: number): ToneTime {
   return `${Math.round(beats * Tone.Transport.PPQ)}i`;
@@ -68,38 +82,25 @@ function setupTransport(num: number, bpm: number) {
   // `[num, den]` тут була б хибною: Tone порахував би такт 6/8 як три чверті,
   // тоді як у нашій моделі це шість імпульсів, тобто шість чвертей транспорту.
   Transport.timeSignature = num;
+  Transport.bpm.cancelScheduledValues(0);
   Transport.bpm.value = bpm;
   return Transport;
 }
 
-/**
- * Читаємо ноти в тіках (`n.ticks`), а не в секундах (`n.time`): секунди @tonejs/midi
- * рахує через темп із хедера, а він тут не авторитет.
- */
-function midiToPartEvents(midi: Midi): MidiEvent[] {
-  const ppq = midi.header.ppq;
-  return midi.tracks.flatMap((t) =>
-    t.notes.map((n) => ({
-      time: beatsToTicks(n.ticks / ppq),
-      name: Tone.Frequency(n.midi, "midi").toNote(),
-      duration: beatsToTicks(n.durationTicks / ppq),
-      velocity: n.velocity ?? 0.7,
-    }))
-  );
-}
-
-function createPart(events: MidiEvent[], players: { pad?: PadVoice; piano?: Tone.Sampler }) {
-  const part = new Tone.Part<MidiEvent>((time, e) => {
+function createPart(players: { pad?: PadVoice; piano?: Tone.Sampler }) {
+  // Порожній на старті: матеріал дописується в польоті через `part.add`.
+  const part = new Tone.Part<NoteEvent>((time, e) => {
     players.pad?.triggerAttackRelease(e.name, e.duration, time, e.velocity);
     players.piano?.triggerAttackRelease(e.name, e.duration, time, e.velocity);
-  }, events);
+  }, [] as NoteEvent[]);
   part.loop = false;
   return part;
 }
 
 /**
  * Клацає на кожен імпульс, тож інтервал завжди `"4n"` — імпульс і є чверть
- * транспорту.
+ * транспорту. Темп може мінятись у польоті: цикл прив'язаний до транспорту,
+ * тож клік їде за темпом сам.
  *
  * Усі кліки однакові — без сильної долі (рішення Германа 2026-08-13). Акценти
  * пробували двома способами, обидва звучали чужорідно: інша висота читається
@@ -130,14 +131,6 @@ function createMetronome({ pan = 1 }: { pan?: number }): MetronomeCtrl {
   };
 }
 
-function computeEndBeats(midi: Midi): number {
-  const ppq = midi.header.ppq;
-  return Math.max(
-    0,
-    ...midi.tracks.flatMap((t) => t.notes.map((n) => (n.ticks + n.durationTicks) / ppq)),
-  );
-}
-
 function setDestinationVolumeImmediately(volume: number) {
   const destination = Tone.Destination;
   destination.volume.cancelAndHoldAtTime(destination.context.currentTime);
@@ -146,19 +139,47 @@ function setDestinationVolumeImmediately(volume: number) {
 
 // =================== КЛАС ===================
 
+/**
+ * РУЛОННИЙ плеєр: транспорт, пад, піаніно й `Tone.Part` живуть наскрізь, а
+ * матеріал **дописується перед голкою** по мірі програвання.
+ *
+ * Чим це відрізняється від того, що було: раніше `play()` будував увесь MIDI
+ * наперед і грав його одним шматком, тож будь-яка зміна означала знести все й
+ * відбудувати — з паузою на завантаження семплів і скиданням транспорту в нуль.
+ * Тепер `play()` викликається один раз на все служіння, а пісні, програші й
+ * зміни темпу під'їжджають у чергу.
+ *
+ * Що лишилось незмінним і чому це важливо: усе планується в ТІКАХ. Саме тому
+ * темп можна вести плавно (`rampTempo`) або міняти стрибком на межі сегмента,
+ * і жодна вже запланована нота від цього не з'їжджає.
+ */
 export class MidiPlayer {
-  private part: Tone.Part<MidiEvent> | null = null;
+  private part: Tone.Part<NoteEvent> | null = null;
   private metro: MetronomeCtrl | null = null;
   private pad: PadVoice | null = null;
   private piano: Tone.Sampler | null = null;
   private state: MidiPlayerState = "idle";
-  private endEventId: number | null = null;
   private fadeTimerId: number | null = null;
+
+  private queue: QueueState | null = null;
+  private opts: PlayOptions = {};
+  /** Id усіх подій, які ми поклали на транспорт (підсвітка, темп, кінець). */
+  private scheduledIds: number[] = [];
+  private topUpId: number | null = null;
+  private endId: number | null = null;
+  /** Сегмент, для якого вже застосовані темп і розмір. */
+  private appliedSegmentId: string | null = null;
+  private prevBpm: number | null = null;
+  private prevTimeSignature: [number, number] | null = null;
 
   constructor(private defaults: PlayOptions = {}) {}
 
   getState(): MidiPlayerState {
     return this.state;
+  }
+
+  isOnLoop(): boolean {
+    return this.queue != null && isOnLoop(this.queue);
   }
 
   private setState(next: MidiPlayerState) {
@@ -172,69 +193,74 @@ export class MidiPlayer {
     }
   }
 
-  private cancelEndEvent() {
-    if (this.endEventId != null) {
-      Tone.Transport.clear(this.endEventId);
-      this.endEventId = null;
+  private clearScheduled() {
+    this.scheduledIds.forEach((id) => Tone.Transport.clear(id));
+    this.scheduledIds = [];
+    if (this.topUpId != null) {
+      Tone.Transport.clear(this.topUpId);
+      this.topUpId = null;
     }
+    this.endId = null;
   }
 
-  async play(midi: Midi, opts: PlayOptions = {}): Promise<MidiPlaybackControls> {
+  /**
+   * @param segments черга на відтворення. Пісня — це черга з одного `once`.
+   */
+  async play(segments: PlaybackSegment[], opts: PlayOptions = {}): Promise<MidiPlaybackControls> {
     this.setState("loading");
     await Tone.start();
+    // Чистий старт. `dispose` знімає і транспортні події, і синти, тож окремої
+    // перевірки «а чи ми грали» не треба — вона однаково була б хибною після
+    // переходу в `loading` вище.
+    this.dispose();
 
-    if (this.state === "playing" || this.state === "paused") {
-      this.stop({ hard: true });
-    }
-    this.dispose(); // чистий старт
+    this.opts = { ...this.defaults, ...opts };
 
-    const bpm = opts.bpm ?? this.defaults.bpm ?? DEFAULT_BPM;
-    const timeSignature = opts.timeSignature ?? this.defaults.timeSignature ?? DEFAULT_TIME_SIGNATURE;
-    const [num] = timeSignature;
-    const Transport = setupTransport(num, bpm);
+    const first = segments[0];
+    const bpm = first?.bpm ?? DEFAULT_BPM;
+    const timeSignature = first?.timeSignature ?? DEFAULT_TIME_SIGNATURE;
+    const Transport = setupTransport(timeSignature[0], bpm);
 
-    const introBars = Math.max(0, opts.introBars ?? this.defaults.introBars ?? 1);
-    // Такт вступу рахуємо в імпульсах (num), а не через Tone-ове `"1m"`: воно
-    // міряє такт відносно знаменника, і на розмірах на кшталт 6/8 розійшлося б
-    // із тим, як такт розуміє лексер акордів.
-    const introBeats = introBars * num;
-    const introOffset = beatsToTicks(introBeats);
+    const introBars = Math.max(0, this.opts.introBars ?? 1);
+    // Такт вступу рахуємо в імпульсах, а не через Tone-ове `"1m"`: воно міряє
+    // такт відносно знаменника, і на розмірах на кшталт 6/8 розійшлося б із
+    // тим, як такт розуміє лексер акордів.
+    const introBeats = introBars * barBeats(timeSignature);
 
-    const preset = opts.padPreset ?? this.defaults.padPreset ?? "classic";
+    const preset = this.opts.padPreset ?? "classic";
     this.pad = getPadPresetDef(preset).create();
-    if (typeof opts.padVolume === "number") {
-      this.pad.volume.value = opts.padVolume;
+    if (typeof this.opts.padVolume === "number") {
+      this.pad.volume.value = this.opts.padVolume;
     }
 
     // Піаніно — додатковий "стаб" поверх пада. Якщо вимкнено (`piano: false`),
     // пед лишається основним (і єдиним) звуком.
-    const wantPiano = (opts.piano ?? this.defaults.piano) !== false;
+    const wantPiano = this.opts.piano !== false;
     this.piano = wantPiano ? createPiano() : null;
-    if (this.piano && typeof opts.pianoVolume === "number") {
-      this.piano.volume.value = opts.pianoVolume;
+    if (this.piano && typeof this.opts.pianoVolume === "number") {
+      this.piano.volume.value = this.opts.pianoVolume;
     }
 
     await Tone.loaded();
 
-    const events = midiToPartEvents(midi);
-    this.part = createPart(events, { pad: this.pad, piano: this.piano ?? undefined });
-    this.part.start(introOffset);
+    this.part = createPart({ pad: this.pad, piano: this.piano ?? undefined });
+    this.part.start(0);
 
-    const endWithIntro = beatsToTicks(introBeats + computeEndBeats(midi));
+    this.queue = createQueueState(segments, introBeats);
+    this.appliedSegmentId = null;
+    this.prevBpm = null;
+    this.prevTimeSignature = null;
 
-    if ((opts.metronome ?? this.defaults.metronome) !== false) {
-      this.metro = createMetronome({
-        pan: opts.metronomePan ?? this.defaults.metronomePan ?? 1,
-      });
+    if (this.opts.metronome !== false) {
+      this.metro = createMetronome({ pan: this.opts.metronomePan ?? 1 });
       this.metro.start(0);
     }
 
-    this.cancelEndEvent();
-    this.endEventId = Transport.scheduleOnce(() => {
-      this.endEventId = null;
-      this.stop({ hard: true });
-      opts.onEnded?.();
-    }, endWithIntro);
+    // Перше заповнення — до старту транспорту, щоб перший такт уже мав ноти.
+    this.topUp();
+    // Далі доливаємо щоімпульсу. Виклик дешевий: коли доливати нічого, черга
+    // одразу віддає порожній список.
+    this.topUpId = Transport.scheduleRepeat(() => this.topUp(), "4n");
 
     this.clearFadeTimer();
     setDestinationVolumeImmediately(0);
@@ -248,7 +274,108 @@ export class MidiPlayer {
       resume: () => this.resume(),
       dispose: () => this.dispose(),
       getState: () => this.getState(),
+      next: () => this.next(),
+      isOnLoop: () => this.isOnLoop(),
     };
+  }
+
+  /** «Далі» — вийти з поточного лупа наприкінці його проходу. */
+  next() {
+    if (!this.queue) return;
+    this.queue = requestExit(this.queue);
+  }
+
+  /**
+   * Долити матеріал так, щоб попереду голки лишався заповнений горизонт.
+   *
+   * Викликається щоімпульсу з транспорту. Уся логіка «що саме доливати» живе в
+   * чистій черзі (`pullPasses`) — тут лише побічні ефекти Tone.
+   */
+  private topUp() {
+    if (!this.queue || !this.part) return;
+
+    const playheadBeats = Tone.Transport.ticks / Tone.Transport.PPQ;
+    const horizon = this.opts.horizonBeats ?? DEFAULT_HORIZON_BEATS;
+
+    const { state, passes } = pullPasses(this.queue, playheadBeats, horizon);
+    this.queue = state;
+
+    for (const pending of passes) {
+      this.applySegmentTransition(pending.segment, pending.startBeats);
+
+      const pass = planPass(pending.segment, pending.startBeats, {
+        humanize: this.opts.humanize,
+        random: this.opts.random,
+      });
+
+      for (const note of pass.notes) {
+        this.part.add({
+          time: beatsToTicks(note.beats),
+          name: Tone.Frequency(note.midi, "midi").toNote(),
+          duration: beatsToTicks(note.durationBeats),
+          velocity: note.velocity,
+        });
+      }
+
+      for (const chord of pass.chords) {
+        const id = Tone.Transport.scheduleOnce(() => {
+          this.opts.onChord?.(chord);
+        }, beatsToTicks(chord.beats));
+        this.scheduledIds.push(id);
+      }
+    }
+
+    // Черга вичерпалась — призначаємо кінець там, де закінчиться долите.
+    if (this.queue.finished && this.endId == null) {
+      const id = Tone.Transport.scheduleOnce(() => {
+        this.endId = null;
+        this.stop({ hard: true });
+        this.opts.onChord?.(null);
+        this.opts.onEnded?.();
+      }, beatsToTicks(this.queue.cursorBeats));
+      this.endId = id;
+      this.scheduledIds.push(id);
+    }
+  }
+
+  /**
+   * Темп і розмір нового сегмента — рівно на його межі.
+   *
+   * Плавно ведемо темп лише коли знаменник не змінився: BPM рахує імпульси,
+   * і рамп між різними знаменниками міняв би не ту величину (див. `canRampBetween`).
+   */
+  private applySegmentTransition(segment: PlaybackSegment, startBeats: number) {
+    if (this.appliedSegmentId === segment.id) return;
+    this.appliedSegmentId = segment.id;
+
+    const prevBpm = this.prevBpm;
+    const prevTimeSignature = this.prevTimeSignature;
+    const wantRamp =
+      segment.rampTempo === true &&
+      prevBpm != null &&
+      canRampBetween(prevTimeSignature, segment.timeSignature);
+
+    // Тривалість рампу — рівно один прохід сегмента. Секунди рахуємо по
+    // середньому темпу: точність тут не критична, бо рамп і так плавний.
+    const passBeats = segment.progression.reduce(
+      (sum, event) => sum + Math.max(0, event.duration || 0),
+      0,
+    );
+    const averageBpm = wantRamp ? ((prevBpm as number) + segment.bpm) / 2 : segment.bpm;
+    const rampSeconds = averageBpm > 0 ? (passBeats * 60) / averageBpm : 0;
+
+    const id = Tone.Transport.scheduleOnce((time) => {
+      Tone.Transport.timeSignature = barBeats(segment.timeSignature);
+      if (wantRamp && rampSeconds > 0) {
+        Tone.Transport.bpm.rampTo(segment.bpm, rampSeconds, time);
+      } else {
+        Tone.Transport.bpm.setValueAtTime(segment.bpm, time);
+      }
+    }, beatsToTicks(startBeats));
+    this.scheduledIds.push(id);
+
+    this.prevBpm = segment.bpm;
+    this.prevTimeSignature = segment.timeSignature;
   }
 
   pause() {
@@ -268,8 +395,9 @@ export class MidiPlayer {
   stop({ hard = false, fadeOut = 0 }: { hard?: boolean; fadeOut?: number } = {}) {
     const Transport = Tone.Transport;
 
-    this.cancelEndEvent();
+    this.clearScheduled();
     this.clearFadeTimer();
+    this.queue = null;
 
     if (fadeOut > 0) {
       Tone.Destination.volume.rampTo(-Infinity, fadeOut);
@@ -280,6 +408,7 @@ export class MidiPlayer {
 
     this.metro?.stop();
     this.part?.stop();
+    this.part?.clear();
 
     Transport.stop();
     if (hard) {
@@ -291,8 +420,9 @@ export class MidiPlayer {
   }
 
   dispose() {
-    this.cancelEndEvent();
+    this.clearScheduled();
     this.clearFadeTimer();
+    this.queue = null;
     try { this.metro?.dispose(); } catch { /* ignore */ }
     try { this.part?.dispose(); } catch { /* ignore */ }
     try { this.pad?.dispose(); } catch { /* ignore */ }
@@ -310,8 +440,8 @@ export class MidiPlayer {
 // поверх нього грає піаніно-стаб.
 const defaultPlayer = new MidiPlayer({ padPreset: "classic", piano: true });
 
-export async function playMidiProgressionGpt(midi: Midi, opts?: PlayOptions) {
-  return defaultPlayer.play(midi, opts);
+export async function playSegments(segments: PlaybackSegment[], opts?: PlayOptions) {
+  return defaultPlayer.play(segments, opts);
 }
 
 export function stopMidiProgression(options?: { hard?: boolean; fadeOut?: number }) {
