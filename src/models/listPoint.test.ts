@@ -69,25 +69,26 @@ describe("fromApi", () => {
     ]);
   });
 
-  it("читає старий компонент програша як примітку, що звучить", () => {
-    expect(
-      withoutKeys(fromApi([{ __component: "list.interlude-point", custom: null }]))
-    ).toEqual([{ kind: "note", text: SOUNDING_NOTE_TEXT, sounding: true }]);
-  });
-
-  it("дає той самий union для обох форм програша", () => {
-    const oldForm = fromApi([{ __component: "list.interlude-point", custom: null }]);
-    const newForm = fromApi([
-      { __component: "list.note-point", text: SOUNDING_NOTE_TEXT, sounding: true },
-    ]);
-
-    expect(withoutKeys(oldForm)).toEqual(withoutKeys(newForm));
-  });
-
-  it("зберігає порядок пунктів, змішуючи обидві форми", () => {
+  // Старий окремий компонент програша зі схеми знято (тікет `02`), і всі три
+  // середовища переїхали. Але межа мусить пережити рядок, що якось лишився:
+  // невідомий пункт — не привід завалити весь список служіння.
+  it("мовчки пропускає компонент, якого в схемі вже немає", () => {
     const raw = [
       songComponent(1, "Перша"),
       { __component: "list.interlude-point", custom: null },
+      songComponent(2, "Друга"),
+    ];
+
+    expect(fromApi(raw).map((point) => point.kind === "song" && point.name)).toEqual([
+      "Перша",
+      "Друга",
+    ]);
+  });
+
+  it("зберігає порядок пунктів усіх видів", () => {
+    const raw = [
+      songComponent(1, "Перша"),
+      { __component: "list.note-point", text: SOUNDING_NOTE_TEXT, sounding: true },
       songComponent(2, "Друга"),
       { __component: "list.note-point", text: "молитва", sounding: false },
       songComponent(3, "Третя"),
@@ -151,7 +152,7 @@ describe("toApi", () => {
   it("після читання й запису ознака «звучить» лишається на місці", () => {
     const raw = [
       songComponent(1, "Перша"),
-      { __component: "list.interlude-point", custom: null },
+      { __component: "list.note-point", text: SOUNDING_NOTE_TEXT, sounding: true },
       { __component: "list.note-point", text: "молитва", sounding: false },
     ];
 
@@ -201,7 +202,7 @@ describe("numberSongs", () => {
       songComponent(1),
       { __component: "list.note-point", text: "молитва" },
       songComponent(2),
-      { __component: "list.interlude-point", custom: null },
+      { __component: "list.note-point", text: SOUNDING_NOTE_TEXT, sounding: true },
       songComponent(3),
     ]);
 

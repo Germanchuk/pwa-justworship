@@ -28,8 +28,8 @@
  * незручна екранам, тож вона лишається на межі: `fromApi` / `toApi` нижче —
  * єдине місце, що про неї знає. Далі по застосунку ходить union.
  *
- * На час міграції (тікет `02`) `fromApi` розуміє **дві** вхідні форми:
- * теперішню примітку з ознакою й старий окремий компонент програша.
+ * Форма ОДНА. Старий окремий компонент програша був другою, поки не переїхали
+ * середовища (тікет `02`); зі схеми його знято, і гілка під нього — теж.
  */
 
 export type ListPointKind = "song" | "note";
@@ -81,18 +81,6 @@ const COMPONENT = {
   song: "list.song-point",
   note: "list.note-point",
 } as const satisfies Record<ListPointKind, string>;
-
-/**
- * Старий окремий компонент програша. Досі лежить у зоні на сервері й
- * знімається окремим кроком міграції — до того часу читаємо його як примітку,
- * що звучить. Пишемо ж завжди в новій формі, тож кожне збереження списку тихо
- * переводить його пункти на неї.
- *
- * Збережений вміст старого програша (`custom`) свідомо не читається: писати
- * його не вміла жодна версія застосунку, а гілка «а якщо custom» пережила б
- * саме поле.
- */
-const LEGACY_INTERLUDE_COMPONENT = "list.interlude-point";
 
 const newKey = (): string =>
   globalThis.crypto?.randomUUID?.() ??
@@ -176,8 +164,6 @@ export const fromApi = (raw: unknown): ListPoint[] => {
         if (!text) return [];
         return [{ kind: "note", key: newKey(), text, sounding: Boolean(item.sounding) }];
       }
-      case LEGACY_INTERLUDE_COMPONENT:
-        return [{ kind: "note", key: newKey(), text: SOUNDING_NOTE_TEXT, sounding: true }];
       default:
         return [];
     }
