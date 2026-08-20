@@ -22,7 +22,7 @@ export default function BandLists() {
   useEffect(() => {
     let cancelled = false;
     fetchAPI(`/bands/${band.id}/lists`, {
-      populate: ["songs", "band"],
+      populate: { points: { populate: "*" }, band: true },
       sort: { date: "desc" },
     }).then((data) => {
       if (!cancelled) setLists(data?.data ?? []);

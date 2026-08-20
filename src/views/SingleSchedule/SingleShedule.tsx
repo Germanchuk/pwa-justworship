@@ -2,6 +2,7 @@ import {
   CalendarDaysIcon,
   CheckIcon,
   PencilSquareIcon,
+  PlayIcon,
   TagIcon,
 } from "@heroicons/react/24/outline";
 import { uk } from "date-fns/locale";
@@ -25,6 +26,15 @@ import {
   LIST_TITLE_MAX_LENGTH,
 } from "#constants/app";
 import { useBand } from "#modules/Band/BandLayout";
+import {
+  dropEmptyNotes,
+  fromApi,
+  makeNotePoint,
+  makeSoundingNote,
+  makeSongPoint,
+  toApi,
+  type ListPoint,
+} from "#models/listPoint";
 import { formatDate } from "#utils/utils";
 import DeleteSchedule from "./DeleteSchedule/DeleteSchedule";
 import {addNotificationWithTimeout} from "#layout/slices/notificationsSlice";
@@ -35,7 +45,7 @@ import { Button } from "@/components/ui/button";
 const EMPTY_SHEDULE = {
   date: "",
   title: "",
-  songs: [],
+  points: [],
 };
 
 /**
@@ -120,25 +130,59 @@ export default function SingleShedule() {
       return;
     }
 
-    fetchAPI(`/bands/${band.id}/lists/${listId}`, {
-      populate: ["songs"],
-    }).then((data) => {
-      savedRef.current = data.data;
-      setShedule(data.data);
+    fetchAPI(`/bands/${band.id}/lists/${listId}`).then((data) => {
+      // Форма динамічної зони лишається на межі — далі по екрану ходить union.
+      const loaded = { ...data.data, points: fromApi(data.data?.points) };
+      savedRef.current = loaded;
+      setShedule(loaded);
     });
   }, []);
 
-  const addItem = useCallback((newItem) => {
+  const addPoint = useCallback((point: ListPoint) => {
     setShedule((prev) => ({
       ...prev,
-      songs: [...prev.songs, newItem],
+      points: [...prev.points, point],
     }));
   }, []);
 
-  const setItems = useCallback((items) => {
+  const addItem = useCallback(
+    (song) => addPoint(makeSongPoint(song)),
+    [addPoint]
+  );
+  const addNote = useCallback(() => addPoint(makeNotePoint()), [addPoint]);
+  // «Додати програш» — та сама примітка, лише зі звуком і з готовим текстом:
+  // тип у списку один, а кнопки дві, бо намір різний.
+  const addSoundingNote = useCallback(
+    () => addPoint(makeSoundingNote()),
+    [addPoint]
+  );
+
+  const setItems = useCallback((points: ListPoint[]) => {
     setShedule((prev) => ({
       ...prev,
-      songs: items,
+      points,
+    }));
+  }, []);
+
+  /** Правка тексту примітки на місці — примітка живе лише в цьому списку. */
+  const updateNote = useCallback((key: string, text: string) => {
+    setShedule((prev) => ({
+      ...prev,
+      points: prev.points.map((point) =>
+        point.key === key && point.kind === "note" ? { ...point, text } : point
+      ),
+    }));
+  }, []);
+
+  /** Перемикання ознаки «звучить» — в обидва боки, на вже створеному пункті. */
+  const toggleSounding = useCallback((key: string) => {
+    setShedule((prev) => ({
+      ...prev,
+      points: prev.points.map((point) =>
+        point.key === key && point.kind === "note"
+          ? { ...point, sounding: !point.sounding }
+          : point
+      ),
     }));
   }, []);
 
@@ -157,10 +201,10 @@ export default function SingleShedule() {
     }));
   }, []);
 
-  const deleteItem = useCallback((itemId) => {
+  const deleteItem = useCallback((key: string) => {
     setShedule((prev) => ({
       ...prev,
-      songs: prev.songs.filter((item) => item.id !== itemId),
+      points: prev.points.filter((point) => point.key !== key),
     }))
   }, [setShedule]);
 
@@ -178,6 +222,12 @@ export default function SingleShedule() {
       return;
     }
 
+    // Недописану примітку зберігати нема як (на сервері текст обов'язковий),
+    // тож вона зникає з порядку тут-таки — інакше читання після збереження
+    // показувало б рядок, якого в базі немає.
+    const points = dropEmptyNotes(shedule.points);
+    const saved = { ...shedule, points };
+
     try {
       const data = await fetchAPI(
         isCreateMode
@@ -186,8 +236,13 @@ export default function SingleShedule() {
         {},
         {
           method: isCreateMode ? "POST" : "PUT",
+          // Шлемо рівно те, чим володіє цей екран.
           body: JSON.stringify({
-            data: shedule,
+            data: {
+              date: saved.date,
+              title: saved.title ?? "",
+              points: toApi(points),
+            },
           }),
         }
       );
@@ -195,7 +250,8 @@ export default function SingleShedule() {
       // Збереглось — виходимо в читання: правка це короткий візит, а не стан,
       // у якому лишаються. `replace`, щоб «назад» вело туди, звідки прийшли,
       // а не назад у правку.
-      savedRef.current = shedule;
+      savedRef.current = saved;
+      setShedule(saved);
       navigate(bandPath.list(band.id, isCreateMode ? data.data.id : listId), {
         replace: true,
       });
@@ -243,7 +299,7 @@ export default function SingleShedule() {
 
   if (!shedule) return null;
 
-  const songs = shedule?.songs || [];
+  const points: ListPoint[] = shedule?.points || [];
 
   return (
     <>
@@ -299,13 +355,17 @@ export default function SingleShedule() {
 
       {isEditing ? (
         <DragDropList
-          items={songs}
+          points={points}
           setItems={setItems}
           addItem={addItem}
+          addNote={addNote}
+          addSoundingNote={addSoundingNote}
+          updateNote={updateNote}
+          toggleSounding={toggleSounding}
           deleteItem={deleteItem}
         />
       ) : (
-        <SongsOrder items={songs} bandId={band.id} />
+        <SongsOrder points={points} bandId={band.id} />
       )}
 
       {/* Кнопка режиму — під списком, а не у верхньому барі: вона стосується
@@ -326,12 +386,22 @@ export default function SingleShedule() {
             )}
           </>
         ) : (
-          <Button asChild variant="outline">
-            <Link to={bandPath.editList(band.id, listId)}>
-              <PencilSquareIcon className="size-5" />
-              Редагувати
-            </Link>
-          </Button>
+          <>
+            {/* Вхід у зібрання — головна дія екрана списку на самому
+                служінні, тож стоїть першою й помітнішою за правку. */}
+            <Button asChild>
+              <Link to={bandPath.gathering(band.id, listId)}>
+                <PlayIcon className="size-5" />
+                Режим зібрання
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link to={bandPath.editList(band.id, listId)}>
+                <PencilSquareIcon className="size-5" />
+                Редагувати
+              </Link>
+            </Button>
+          </>
         )}
       </div>
 

@@ -7,7 +7,9 @@ export default function Home() {
   const [lists, setLists] = React.useState([]);
   const user = useSelector((state: any) => state.user);
   useEffect(() => {
-    fetchAPI("/myLists", { populate: ["songs", "band"] }).then((data) => {
+    fetchAPI("/myLists", {
+      populate: { points: { populate: "*" }, band: true },
+    }).then((data) => {
       setLists(data.data);
     });
   }, []);
