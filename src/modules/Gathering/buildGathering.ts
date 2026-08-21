@@ -51,6 +51,7 @@ import {
 import { getProgressionFromSlate } from "#modules/SingleSong/services/ChordsProgressionPlayer/getMidiFromSlate/getMidiFromSlate";
 import {
   canRampBetween,
+  pointPrefix,
   prefixTokenKey,
   type PlaybackSegment,
 } from "#modules/SingleSong/services/ChordsProgressionPlayer/segments/model";
@@ -254,6 +255,30 @@ const soundingNodes = (text: string, parts: SoundingPart[]): Descendant[] =>
     },
   ] as unknown as Descendant[];
 
+/**
+ * Пункт, якому належить сегмент. Id сегмента — це `пункт[:частина]`
+ * (`p3`, `p3:loop`, `p3:pause`), тож пункт — його перше поле. Порівнюємо саме
+ * поле, а не початок рядка: `p1` інакше впізнав би `p10`.
+ */
+const pointOfSegment = (segment: PlaybackSegment): string => segment.id.split(":")[0];
+
+/**
+ * «Грай звідси й до кінця служіння» (`LIST-43`): черга від першого сегмента
+ * названого пункту й далі без змін.
+ *
+ * Невідомий пункт означає, що в того, хто ріже чергу, ІНШИЙ список — знімок
+ * старіший або новіший за той, з якого тиснули. Тоді не грає нічого: почати з
+ * початку служіння посеред зібрання гірше за тишу, з якої видно, що команда не
+ * вийшла.
+ */
+export const sliceFromPoint = (
+  segments: ReadonlyArray<PlaybackSegment>,
+  fromPoint: string,
+): PlaybackSegment[] => {
+  const start = segments.findIndex((segment) => pointOfSegment(segment) === fromPoint);
+  return start < 0 ? [] : segments.slice(start);
+};
+
 export function buildGathering(points: ReadonlyArray<GatheringPoint>): Gathering {
   const numbers = numberSongs(points);
   const songs = points.map((point) =>
@@ -264,7 +289,7 @@ export function buildGathering(points: ReadonlyArray<GatheringPoint>): Gathering
   const segments: PlaybackSegment[] = [];
 
   points.forEach((point, index) => {
-    const tokenPrefix = `p${index}`;
+    const tokenPrefix = pointPrefix(index);
 
     if (point.kind === "song") {
       const song = songs[index]!;

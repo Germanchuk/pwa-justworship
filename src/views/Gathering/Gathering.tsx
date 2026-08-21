@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import type { Descendant } from "slate";
 
-import { fetchAPI } from "#utils/fetch-api";
 import { formatDate } from "#utils/utils";
 import { DEFAULT_LIST_TITLE } from "#constants/app";
 import { useBand } from "#modules/Band/BandLayout";
+import { needleFor } from "#modules/Band/audio/hostView";
+import { gatheringTarget } from "#modules/Band/audio/types";
+import { useAudioHostStatus } from "#modules/Band/audio/useBandAudio";
 import { ToPageBar } from "#layout/PageBar/ToPageBar";
 import { SongModeProvider, StaticSongProvider } from "#modules/SingleSong/mode";
-import { fromApi } from "#models/listPoint";
-import { buildGathering, type GatheringPoint } from "#modules/Gathering/buildGathering";
+import { buildGathering } from "#modules/Gathering/buildGathering";
+import { fetchGathering, type GatheringList } from "#modules/Gathering/gatheringSource";
 import { GatheringControls } from "#modules/Gathering/GatheringControls";
 import { GatheringItemView } from "#modules/Gathering/GatheringItemView";
 import ChordsProgressionPlayer from "#modules/SingleSong/services/ChordsProgressionPlayer/ChordsProgressionPlayer";
@@ -36,46 +37,36 @@ import { unprefixTokenKey } from "#modules/SingleSong/services/ChordsProgression
  *
  * ─── ЩО ПОКАЗУЄ Й ЩО ГРАЄ ──────────────────────────────────────────────────
  * Ряд елементів, чергу сегментів і відповідність токенів рахує один
- * `buildGathering`. Черга віддається плеєру ОДНИМ шматком, тож служіння
- * звучить наскрізь: пісні йдуть атакою, а голка з плеєра розходиться по
- * пунктах — кожен упізнає лише свої токени (`GatheringItemView`).
+ * `buildGathering`. Служіння звучить наскрізь: пісні йдуть атакою, а голка
+ * розходиться по пунктах — кожен упізнає лише свої токени
+ * (`GatheringItemView`).
+ *
+ * ─── ЗВУК ІДЕ НА ХОСТА, А ГОЛКА — ДО ВСІХ ──────────────────────────────────
+ * Кнопка «грати» відправляє команду в кімнату гурту, і служіння піднімає
+ * планшет за пультом (`LIST-46`). Чергу хост збирає САМ — тим самим чистим
+ * `buildGathering` і з того самого джерела, тож те, що видно, і те, що
+ * звучить, збігаються (`LIST-35`; межі — в `audioHostEngine`). Назад приїжджає
+ * лише голка, з ознакою пункту попереду (`PLAY-39`), і підсвічує в кожного
+ * його власними акордами: капо й фільтри лишаються особистими (`LIST-44`).
+ *
+ * Без хоста все те саме грає звідси — сценарій «пройти план удома».
  *
  * ─── ЧОГО ЩЕ НЕМА ──────────────────────────────────────────────────────────
- * Звук грає з ЦЬОГО пристрою: хоста й спільної на весь гурт голки ще немає
- * (тікет `05`), «продовжити» — теж (`06`). Наслідок видно одразу: примітка
- * проминається, а програш крутить луп до самого «зупинити» — тобто наскрізь
- * служіння проходить лише до першого програша. Див. `GatheringControls`.
+ * «Продовжити» — тікет `06`. Наслідок видно одразу: примітка проминається, а
+ * програш крутить луп до самого «зупинити» — тобто наскрізь служіння проходить
+ * лише до першого програша. Старт із акорда — `08`, автоскрол — `09`.
  */
-
-/**
- * `fromApi` дає чистий union, але вміст пісні (`slate`) живе поруч із пунктом —
- * зшиваємо по id пісні, а НЕ по індексу: межа відсіює пункти (пісня без пісні,
- * порожня примітка), тож порядки двох рядів не збігаються, і зсув на один тихо
- * підклав би не той документ.
- */
-const pointsOf = (list: any): GatheringPoint[] => {
-  const rawPoints: any[] = Array.isArray(list?.points) ? list.points : [];
-  const slateBySongId = new Map<string, Descendant[] | null | undefined>(
-    rawPoints
-      .filter((raw) => raw?.__component === "list.song-point" && raw?.song?.id != null)
-      .map((raw) => [String(raw.song.id), raw.slate])
-  );
-  return fromApi(rawPoints).map((point) =>
-    point.kind === "song" ? { ...point, slate: slateBySongId.get(String(point.songId)) } : point
-  ) as GatheringPoint[];
-};
-
 export default function Gathering() {
   const { listId } = useParams();
   const band = useBand();
-  const [list, setList] = useState<any>(null);
+  const [list, setList] = useState<GatheringList | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    fetchAPI(`/bands/${band.id}/lists/${listId}/gathering`)
+    fetchGathering(band.id, listId!)
       .then((data) => {
-        if (!cancelled) setList(data?.data ?? null);
+        if (!cancelled) setList(data);
       })
       .catch(() => {
         if (!cancelled) setFailed(true);
@@ -88,26 +79,50 @@ export default function Gathering() {
   // Хук стоїть ДО ранніх виходів — інакше він викликався б через раз.
   // Знімок міняється рівно раз (коли приїхав), а збірка проганяє лексером усі
   // документи служіння: без пам'яті це рахувалось би на кожен ререндер екрана.
-  const { items, segments } = useMemo(() => buildGathering(pointsOf(list)), [list]);
-
-  const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
-  // Голка приходить з плеєра ЦІЛОЮ — з префіксом пункту попереду; розводить її
-  // по пунктах `unprefixTokenKey` нижче (причина — там же).
-  const [currentTokenKey, setCurrentTokenKey] = useState<string | null>(null);
-  useEffect(
-    () => player.onChordChange((event) => setCurrentTokenKey(event?.tokenKey ?? null)),
-    [player],
+  const { items, segments } = useMemo(
+    () => buildGathering(list?.points ?? []),
+    [list],
   );
 
+  const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
+  const [localState, setLocalState] = useState(player.getState());
+  const [localTokenKey, setLocalTokenKey] = useState<string | null>(null);
+  useEffect(
+    () => player.onChordChange((event) => setLocalTokenKey(event?.tokenKey ?? null)),
+    [player],
+  );
+  useEffect(() => player.onStateChange(setLocalState), [player]);
+
+  // Голка приходить ЦІЛОЮ — з префіксом пункту попереду; чи вона своя, чи з
+  // хоста, вирішує одне правило на весь застосунок (`needleFor`), а розводить
+  // її по пунктах `unprefixTokenKey` нижче.
+  const hostStatus = useAudioHostStatus();
+  const currentTokenKey = needleFor({
+    localState,
+    localTokenKey,
+    status: hostStatus,
+    target: gatheringTarget(listId!),
+  });
+
   // Вийшли зі служіння — глушимо СВІЙ звук: далі його ніхто не спинить, бо
-  // екрана з кнопками вже немає.
+  // екрана з кнопками вже немає. Хоста не чіпаємо: він грає для всього гурту.
   useEffect(() => () => player.stop(), [player]);
+
+  const hostDesignated =
+    (band as { audioHostUserId?: number | null }).audioHostUserId != null;
 
   // Бар живе вище роутів і не має смикатись від руху голки: елемент лишається
   // тим самим об'єктом, поки не змінилась сама черга (див. `usePageBarContent`).
   const controls = useMemo(
-    () => <GatheringControls title={formatDate(list?.date)} segments={segments} />,
-    [list?.date, segments],
+    () => (
+      <GatheringControls
+        title={formatDate(list?.date)}
+        segments={segments}
+        listId={listId!}
+        hostDesignated={hostDesignated}
+      />
+    ),
+    [list?.date, segments, listId, hostDesignated],
   );
 
   if (failed) {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Descendant } from "slate";
 
 import { makeNotePoint, makeSongPoint, makeSoundingNote, type ListPoint } from "#models/listPoint";
-import { buildGathering, type GatheringPoint } from "./buildGathering";
+import { buildGathering, sliceFromPoint, type GatheringPoint } from "./buildGathering";
 
 /**
  * Документ пісні у вигляді, у якому він приїжджає з ендпоінта зібрання.
@@ -363,5 +363,47 @@ describe("buildGathering — пункт і його токени", () => {
       );
       expect(own).not.toHaveLength(0);
     });
+  });
+});
+
+describe("sliceFromPoint — «грай звідси й до кінця служіння»", () => {
+  // Примітка стоїть окремо від програша навмисно: так у черзі є і пункт без
+  // жодного сегмента зі звуком, і пункт із трьох частин.
+  const points = [song(), note(), song(), sounding(), song()];
+  const all = buildGathering(points).segments;
+
+  it("з першого пункту — це вся черга", () => {
+    expect(sliceFromPoint(all, "p0")).toEqual(all);
+  });
+
+  it("з пункту посеред служіння — усе від нього й далі, ні шматка раніше", () => {
+    expect(sliceFromPoint(all, "p3").map((s) => s.id)).toEqual([
+      "p3:intro",
+      "p3:loop",
+      "p3:outro",
+      "p4",
+    ]);
+  });
+
+  it("пункт без токенів (примітка) теж є точкою старту", () => {
+    expect(sliceFromPoint(all, "p1").map((s) => s.id)).toEqual([
+      "p1:pause",
+      "p2",
+      "p3:intro",
+      "p3:loop",
+      "p3:outro",
+      "p4",
+    ]);
+  });
+
+  it("`p1` не впізнає `p10` — інакше старт з другого пункту грав би одинадцятий", () => {
+    const long = buildGathering(Array.from({ length: 12 }, () => song())).segments;
+
+    expect(sliceFromPoint(long, "p1")[0].id).toBe("p1");
+    expect(sliceFromPoint(long, "p1")).toHaveLength(11);
+  });
+
+  it("невідомий пункт не грає нічого: у хоста інший список, і з початку йому не можна", () => {
+    expect(sliceFromPoint(all, "p9")).toEqual([]);
   });
 });
