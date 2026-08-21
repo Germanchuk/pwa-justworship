@@ -1,12 +1,12 @@
-import { PlayIcon, StopIcon } from "@heroicons/react/24/outline";
+import { ForwardIcon, PlayIcon, StopIcon } from "@heroicons/react/24/outline";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { AudioDestination } from "#modules/Band/audio/AudioDestination";
 import BandAudioChannel from "#modules/Band/audio/bandAudioChannel";
-import { hostStateFor, isHostLive } from "#modules/Band/audio/hostView";
-import { FIRST_POINT, gatheringTarget } from "#modules/Band/audio/types";
+import { hostAwaitingPoint, hostStateFor, isHostLive } from "#modules/Band/audio/hostView";
+import { FIRST_POINT, gatheringTarget, type PlaybackAction } from "#modules/Band/audio/types";
 import { useAudioHostStatus } from "#modules/Band/audio/useBandAudio";
 import { useCurrentUsername } from "#modules/SingleSong/components/SlateLyricsPlayground/elements/hooks";
 import ChordsProgressionPlayer from "#modules/SingleSong/services/ChordsProgressionPlayer/ChordsProgressionPlayer";
@@ -40,17 +40,21 @@ import type { PlaybackSegment } from "#modules/SingleSong/services/ChordsProgres
  * (`LIST-35`) — межі цієї однаковості описані в `audioHostEngine`. Локальний
  * плейбек грає цю, вже зібрану, чергу.
  *
- * ─── ДВІ КНОПКИ, І ОБИДВІ НАВМИСНО ─────────────────────────────────────────
- * «Грати» й «зупинити» — і жодної паузи. Пауза в цьому застосунку означає не
- * «стало, бо я так захотів», а зупинку НА ПРИМІТЦІ, з якої виводить
- * «продовжити» (`LIST-36`, `LIST-37`). Своя, пристроєва пауза була б другим
- * значенням того самого слова, і тікету `06` довелось би їх мирити. «Зупинити»
- * лишається, бо без нього звук нічим спинити.
+ * ─── ТРИ КНОПКИ, І ЖОДНОЇ ПАУЗИ ────────────────────────────────────────────
+ * «Грати», «зупинити» і — коли служіння чекає — «продовжити». Паузи серед них
+ * немає навмисно: пауза в цьому застосунку означає не «стало, бо я так
+ * захотів», а зупинку НА ПРИМІТЦІ (`LIST-36`, `LIST-37`). Своя, пристроєва
+ * пауза була б другим значенням того самого слова.
  *
- * ⚠️ Служіння проходить наскрізь лише ДО ПЕРШОГО ПРОГРАША: примітка без
- * програша проминається (черга не бачить нульового сегмента), а програш крутить
- * свій луп, і вийти з нього нема чим — лише «зупинити». Обидва свідомі проміжні
- * стани, обидва знімає `06`.
+ * «Продовжити» з'являється на два різні очікування — тиша на примітці й луп
+ * програша — бо для того, хто на неї дивиться, вони однакові: далі буде, коли
+ * ми скажемо. Тисне її будь-хто з гурту, один раз, і звук іде далі У ВСІХ
+ * (`LIST-41`) — тією ж дорогою, що й «грати»: команда в кімнату, коли грає
+ * хост, свій плеєр, коли граю я сам.
+ *
+ * ⚠️ У ЛУПІ кнопка живе трохи не в такт звуку: черга йде попереду голки на
+ * горизонт доливання, тож кнопка з'являється до першого чутного кола програша
+ * і зникає на сам натиск, а вийде луп на межі свого проходу (`LIST-42`).
  *
  * ─── ЧОМУ ЦЕ ОКРЕМИЙ КОМПОНЕНТ, А НЕ ЧАСТИНА ЕКРАНА ────────────────────────
  * Він живе у верхньому барі, тобто вище роутів — жодного контексту з них не
@@ -72,44 +76,57 @@ interface Props {
 export const GatheringControls = ({ title, segments, listId, hostDesignated }: Props) => {
   const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
   const [localState, setLocalState] = useState(player.getState());
+  const [localAwaitingAt, setLocalAwaitingAt] = useState(player.getAwaitingPoint());
   const hostStatus = useAudioHostStatus();
   const username = useCurrentUsername();
 
   useEffect(() => player.onStateChange(setLocalState), [player]);
+  // Очікування — окрема підписка, а не похідне від стану: у лупі програша стан
+  // лишається «playing», а кнопка мусить з'явитись саме там.
+  useEffect(() => player.onAwaitingContinueChange(setLocalAwaitingAt), [player]);
 
   const remoteActive = isHostLive(hostStatus);
+  const target = gatheringTarget(listId);
   // Хост грає щось інше (іншу пісню, інше служіння) → мої кнопки в тиші, а мій
   // плей його перехопить.
-  const state = remoteActive ? hostStateFor(hostStatus, gatheringTarget(listId)) : localState;
+  const state = remoteActive ? hostStateFor(hostStatus, target) : localState;
+  const awaitingAt = remoteActive ? hostAwaitingPoint(hostStatus, target) : localAwaitingAt;
 
-  const handlePlay = useCallback(() => {
-    if (remoteActive) {
+  // Три кнопки — три однакові листи в кімнату гурту, різні лише дією і пунктом.
+  const command = useCallback(
+    (action: PlaybackAction, fromPoint?: string) => {
       BandAudioChannel.getInstance().sendCommand({
-        action: "play",
-        // З першого пункту: старт із довільного акорда — тікет `08`.
-        target: gatheringTarget(listId, FIRST_POINT),
+        action,
+        target: gatheringTarget(listId, fromPoint),
         issuedBy: username ?? null,
       });
-      return;
-    }
+    },
+    [listId, username],
+  );
+
+  const handlePlay = useCallback(() => {
+    // З першого пункту: старт із довільного акорда — тікет `08`.
+    if (remoteActive) return command("play", FIRST_POINT);
     // Запуск глушить те, що грало доти (`PLAY-40`): звук один, і про це дбає
     // сам плеєр — тут лишається просто попросити.
     player.playQueue(segments).catch((error) => {
       console.error("Failed to start gathering playback", error);
     });
-  }, [remoteActive, listId, username, player, segments]);
+  }, [remoteActive, command, player, segments]);
+
+  const handleContinue = useCallback(() => {
+    // Пункт, який ЦЕЙ екран бачить зупиненим, їде разом із натиском: тиснуть
+    // кілька людей одразу, і без адреси другий натиск проковтнув би наступну
+    // зупинку (`requestExit`).
+    if (awaitingAt == null) return;
+    if (remoteActive) return command("continue", awaitingAt);
+    player.next(awaitingAt);
+  }, [awaitingAt, remoteActive, command, player]);
 
   const handleStop = useCallback(() => {
-    if (remoteActive) {
-      BandAudioChannel.getInstance().sendCommand({
-        action: "stop",
-        target: gatheringTarget(listId),
-        issuedBy: username ?? null,
-      });
-      return;
-    }
+    if (remoteActive) return command("stop");
     player.stop();
-  }, [remoteActive, listId, username, player]);
+  }, [remoteActive, command, player]);
 
   const isLoading = state === "loading";
   const isSounding = state === "playing" || state === "paused";
@@ -124,6 +141,17 @@ export const GatheringControls = ({ title, segments, listId, hostDesignated }: P
       <div className="flex shrink-0 items-center gap-1">
         {/* Куди піде звук — видно до натиску (`PLAY-29`, `LIST-46`). */}
         <AudioDestination status={hostStatus} hostDesignated={hostDesignated} />
+        {awaitingAt != null && (
+          <Button
+            variant="outline"
+            size="icon"
+            className="rounded-full border-dashed"
+            onClick={handleContinue}
+            aria-label="Продовжити служіння"
+          >
+            <ForwardIcon className="h-6 w-6" />
+          </Button>
+        )}
         {isSounding ? (
           <Button
             variant="outline"

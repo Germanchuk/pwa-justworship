@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { hostNeedleFor, hostStateFor, isSameTarget, needleFor } from "./hostView";
+import {
+  hostAwaitingPoint,
+  hostNeedleFor,
+  hostStateFor,
+  isSameTarget,
+  needleFor,
+} from "./hostView";
 import { gatheringTarget, songTarget, type AudioHostStatus } from "./types";
 
 const host = (patch: Partial<AudioHostStatus> = {}): AudioHostStatus => ({
@@ -11,6 +17,7 @@ const host = (patch: Partial<AudioHostStatus> = {}): AudioHostStatus => ({
   playing: songTarget(7),
   playingName: "Пісня",
   currentTokenKey: "0:1:2",
+  awaitingAt: null,
   controlledBy: null,
   updatedAt: 0,
   ...patch,
@@ -140,5 +147,46 @@ describe("needleFor — мій показ сильніший за хостови
     });
 
     expect(needle).toBe(null);
+  });
+});
+
+describe("hostAwaitingPoint — на чому служіння на хості чекає «продовжити»", () => {
+  const gathering = gatheringTarget(3);
+
+  it("хост стоїть у моєму служінні — кнопка моя, і на тому самому пункті", () => {
+    expect(
+      hostAwaitingPoint(
+        host({ playing: gatheringTarget(3, "p2"), awaitingAt: "p2" }),
+        gathering,
+      ),
+    ).toBe("p2");
+  });
+
+  it("хост чекає в ЧУЖОМУ служінні — не моя справа", () => {
+    expect(
+      hostAwaitingPoint(host({ playing: gatheringTarget(9), awaitingAt: "p2" }), gathering),
+    ).toBe(null);
+  });
+
+  it("хост грає моє, але не чекає — кнопки немає", () => {
+    expect(
+      hostAwaitingPoint(host({ playing: gatheringTarget(3), awaitingAt: null }), gathering),
+    ).toBe(null);
+  });
+
+  it("хоста немає або він не озброєний — чекати нема кому", () => {
+    expect(hostAwaitingPoint(null, gathering)).toBe(null);
+    expect(
+      hostAwaitingPoint(
+        host({ armed: false, playing: gatheringTarget(3), awaitingAt: "p2" }),
+        gathering,
+      ),
+    ).toBe(null);
+  });
+
+  it("старий хост без цього поля — просто не чекає", () => {
+    const legacy = host({ playing: gatheringTarget(3) });
+    delete legacy.awaitingAt;
+    expect(hostAwaitingPoint(legacy, gathering)).toBe(null);
   });
 });

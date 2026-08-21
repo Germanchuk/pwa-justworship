@@ -14,6 +14,8 @@ export interface AudioHostEngineState {
   /** Що зараз на хості: пісня чи служіння — і яке саме. */
   playing: PlaybackTarget | null;
   playingName: string | null;
+  /** Пункт, на якому служіння чекає «продовжити» (`LIST-41`); `null` — не чекає. */
+  awaitingAt: string | null;
   controlledBy: string | null;
 }
 
@@ -80,6 +82,7 @@ class AudioHostEngine {
       state: this.loading ? "loading" : this.player.getState(),
       playing: this.playing,
       playingName: this.playingName,
+      awaitingAt: this.player.getAwaitingPoint(),
       controlledBy: this.controlledBy,
     };
   }
@@ -103,6 +106,9 @@ class AudioHostEngine {
       }),
       this.player.onStateChange(() => this.publish()),
       this.player.onChordChange(() => this.publish()),
+      // Очікування — окрема подія: у лупі програша ні стан, ні акорд не
+      // міняються, а кнопка в гурту має з'явитись саме тоді.
+      this.player.onAwaitingContinueChange(() => this.publish()),
     );
     this.publish();
   }
@@ -147,6 +153,15 @@ class AudioHostEngine {
         break;
       case "resume":
         this.player.resume();
+        break;
+      case "continue":
+        // «Продовжити» тисне будь-хто з гурту, і тисне ОДИН раз на всіх
+        // (`LIST-41`): звук один, черга одна, і рухає її той, у кого вона в
+        // руках. Тиснуть частіше за раз — тому команда несе ПУНКТ, з якого
+        // продовжують, і другу зупинку підряд другий натиск не проковтне.
+        this.player.next(
+          command.target.kind === "gathering" ? command.target.fromPoint : undefined,
+        );
         break;
       case "stop":
         this.player.stop();
@@ -251,6 +266,7 @@ class AudioHostEngine {
       state: state.state,
       playing: state.playing,
       playingName: state.playingName,
+      awaitingAt: state.awaitingAt,
       // У зібранні ключ приходить із ознакою пункту попереду — так він і їде
       // в кімнату (`PLAY-39`): без неї той самий акорд спалахнув би одразу в
       // кількох піснях служіння.

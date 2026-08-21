@@ -51,6 +51,7 @@ import {
 import { getProgressionFromSlate } from "#modules/SingleSong/services/ChordsProgressionPlayer/getMidiFromSlate/getMidiFromSlate";
 import {
   canRampBetween,
+  pointOfSegment,
   pointPrefix,
   prefixTokenKey,
   type PlaybackSegment,
@@ -254,13 +255,6 @@ const soundingNodes = (text: string, parts: SoundingPart[]): Descendant[] =>
       ],
     },
   ] as unknown as Descendant[];
-
-/**
- * Пункт, якому належить сегмент. Id сегмента — це `пункт[:частина]`
- * (`p3`, `p3:loop`, `p3:pause`), тож пункт — його перше поле. Порівнюємо саме
- * поле, а не початок рядка: `p1` інакше впізнав би `p10`.
- */
-const pointOfSegment = (segment: PlaybackSegment): string => segment.id.split(":")[0];
 
 /**
  * «Грай звідси й до кінця служіння» (`LIST-43`): черга від першого сегмента

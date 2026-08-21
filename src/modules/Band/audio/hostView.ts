@@ -60,6 +60,19 @@ export const hostNeedleFor = (
 ): string | null => (hostPlays(status, target) ? status!.currentTokenKey : null);
 
 /**
+ * Пункт, на якому служіння на хості чекає «продовжити», — і чекає саме ТУТ, на
+ * цьому екрані. `null` — кнопки немає.
+ *
+ * Кнопку «продовжити» тисне будь-хто з гурту (`LIST-41`), тож питання в
+ * кожного те саме, що й про голку: хост стоїть у МОЄМУ служінні? Стоїть у
+ * чужому — не моя справа, і кнопки в мене немає.
+ */
+export const hostAwaitingPoint = (
+  status: AudioHostStatus | null | undefined,
+  target: PlaybackTarget,
+): string | null => (hostPlays(status, target) ? (status!.awaitingAt ?? null) : null);
+
+/**
  * Що підсвічувати: своє, поки звучить мій пристрій, інакше — хостове
  * (`PLAY-33`). Локальний звук сильніший саме тому, що він мій: якщо я граю
  * сам, чужа голка на моєму екрані означала б розсинхрон із тим, що я чую.
