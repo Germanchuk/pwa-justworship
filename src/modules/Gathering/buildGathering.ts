@@ -72,6 +72,16 @@ interface BaseItem {
    * сервером), а порядок однаковий у всіх. Тому по мережі їде місце.
    */
   key: string;
+  /**
+   * Місце пункту в служінні (`p0`, `p1`, …) — те саме, що їде по мережі
+   * попереду ключів токенів (див. `unprefixTokenKey`, там і причина).
+   * Без нього показ не має чим відрізнити свою голку від чужої.
+   *
+   * Стоїть на КОЖНОМУ пункті, включно з примітками, хоч у примітки токенів і
+   * не буває: ряд лишається однорідним, і показу не треба питати, якого виду
+   * пункт, перш ніж спитати про голку.
+   */
+  tokenKeyPrefix: string;
 }
 
 export interface GatheringSongItem extends BaseItem {
@@ -261,6 +271,7 @@ export function buildGathering(points: ReadonlyArray<GatheringPoint>): Gathering
       items.push({
         kind: "song",
         key: point.key,
+        tokenKeyPrefix: tokenPrefix,
         point,
         number: numbers[index]!,
         nodes: Array.isArray(point.slate) ? point.slate : [],
@@ -282,7 +293,13 @@ export function buildGathering(points: ReadonlyArray<GatheringPoint>): Gathering
     const next = songs[index + 1] ?? null;
 
     if (!point.sounding) {
-      items.push({ kind: "note", key: point.key, point, text: point.text });
+      items.push({
+        kind: "note",
+        key: point.key,
+        tokenKeyPrefix: tokenPrefix,
+        point,
+        text: point.text,
+      });
       // Пауза не звучить, але темп і розмір у неї є: транспорт має з чим стати
       // й чим піти далі. Беремо в найближчої пісні — своїх у тиші не буває.
       const near = prev ?? next;
@@ -300,6 +317,7 @@ export function buildGathering(points: ReadonlyArray<GatheringPoint>): Gathering
     items.push({
       kind: "sounding",
       key: point.key,
+      tokenKeyPrefix: tokenPrefix,
       point,
       text: point.text,
       nodes: soundingNodes(point.text, parts),

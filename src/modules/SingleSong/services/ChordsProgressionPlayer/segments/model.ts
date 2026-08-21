@@ -85,6 +85,24 @@ export const prefixTokenKey = (
   return prefix ? `${prefix}:${tokenKey}` : tokenKey;
 };
 
+/**
+ * Зворотний бік: чи цей ключ належить ЦЬОМУ пунктові, і яким він там є.
+ *
+ * `null` означає «не мій» — і саме на цьому стоїть правило «підсвітка не
+ * спалахує в кількох піснях одразу»: документ пункту знає лише свої ключі
+ * (`секція:рядок:токен`), а той самий ключ існує в кожній пісні служіння.
+ * Двокрапка в порівнянні обов'язкова: без неї `p1` впізнав би `p10`.
+ */
+export const unprefixTokenKey = (
+  tokenKey: string | null,
+  prefix: string | undefined,
+): string | null => {
+  if (tokenKey == null) return null;
+  if (!prefix) return tokenKey;
+  const head = `${prefix}:`;
+  return tokenKey.startsWith(head) ? tokenKey.slice(head.length) : null;
+};
+
 /** Нота, готова до планування: час в **абсолютних імпульсах** від старту транспорту. */
 export interface PlannedNote {
   beats: number;

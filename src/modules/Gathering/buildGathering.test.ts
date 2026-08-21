@@ -346,3 +346,22 @@ describe("buildGathering — детермінованість", () => {
     expect(JSON.stringify([...first.tokens])).toEqual(JSON.stringify([...second.tokens]));
   });
 });
+
+describe("buildGathering — пункт і його токени", () => {
+  it("кожен пункт знає своє місце в служінні, і місця не збігаються", () => {
+    const items = buildGathering([song(), note(), sounding(), song()]).items;
+
+    expect(items.map((item) => item.tokenKeyPrefix)).toEqual(["p0", "p1", "p2", "p3"]);
+  });
+
+  it("префікс пункту — той самий, з яким його токени їдуть по мережі", () => {
+    const gathering = buildGathering([song(), song()]);
+
+    gathering.items.forEach((item) => {
+      const own = [...gathering.tokens.keys()].filter((key) =>
+        key.startsWith(`${item.tokenKeyPrefix}:`),
+      );
+      expect(own).not.toHaveLength(0);
+    });
+  });
+});

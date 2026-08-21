@@ -8,9 +8,12 @@ import { DEFAULT_LIST_TITLE } from "#constants/app";
 import { useBand } from "#modules/Band/BandLayout";
 import { ToPageBar } from "#layout/PageBar/ToPageBar";
 import { SongModeProvider, StaticSongProvider } from "#modules/SingleSong/mode";
-import { StaticSong } from "#modules/SingleSong/components/StaticSong/StaticSong";
 import { fromApi } from "#models/listPoint";
 import { buildGathering, type GatheringPoint } from "#modules/Gathering/buildGathering";
+import { GatheringControls } from "#modules/Gathering/GatheringControls";
+import { GatheringItemView } from "#modules/Gathering/GatheringItemView";
+import ChordsProgressionPlayer from "#modules/SingleSong/services/ChordsProgressionPlayer/ChordsProgressionPlayer";
+import { unprefixTokenKey } from "#modules/SingleSong/services/ChordsProgressionPlayer/segments/model";
 
 /**
  * РЕЖИМ ЗІБРАННЯ — усе служіння одним екраном.
@@ -31,11 +34,17 @@ import { buildGathering, type GatheringPoint } from "#modules/Gathering/buildGat
  * `StaticSong`). Міняти їх тут не можна: змінам нікуди подітись. Хто хоче
  * інше капо — заходить у пісню.
  *
- * ─── ЩО ПОКАЗУЄ, А ЧОГО ЩЕ НЕ РОБИТЬ ───────────────────────────────────────
- * Ряд елементів рахує `buildGathering` — він же збирає чергу сегментів і
- * відповідність токенів. Тут поки використана лише перша з трьох: програш
- * ВИДНО (згенерований документ поруч із піснями), але ще не чутно. Плеєр —
- * наступні тікети.
+ * ─── ЩО ПОКАЗУЄ Й ЩО ГРАЄ ──────────────────────────────────────────────────
+ * Ряд елементів, чергу сегментів і відповідність токенів рахує один
+ * `buildGathering`. Черга віддається плеєру ОДНИМ шматком, тож служіння
+ * звучить наскрізь: пісні йдуть атакою, а голка з плеєра розходиться по
+ * пунктах — кожен упізнає лише свої токени (`GatheringItemView`).
+ *
+ * ─── ЧОГО ЩЕ НЕМА ──────────────────────────────────────────────────────────
+ * Звук грає з ЦЬОГО пристрою: хоста й спільної на весь гурт голки ще немає
+ * (тікет `05`), «продовжити» — теж (`06`). Наслідок видно одразу: примітка
+ * проминається, а програш крутить луп до самого «зупинити» — тобто наскрізь
+ * служіння проходить лише до першого програша. Див. `GatheringControls`.
  */
 
 /**
@@ -79,7 +88,27 @@ export default function Gathering() {
   // Хук стоїть ДО ранніх виходів — інакше він викликався б через раз.
   // Знімок міняється рівно раз (коли приїхав), а збірка проганяє лексером усі
   // документи служіння: без пам'яті це рахувалось би на кожен ререндер екрана.
-  const { items } = useMemo(() => buildGathering(pointsOf(list)), [list]);
+  const { items, segments } = useMemo(() => buildGathering(pointsOf(list)), [list]);
+
+  const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
+  // Голка приходить з плеєра ЦІЛОЮ — з префіксом пункту попереду; розводить її
+  // по пунктах `unprefixTokenKey` нижче (причина — там же).
+  const [currentTokenKey, setCurrentTokenKey] = useState<string | null>(null);
+  useEffect(
+    () => player.onChordChange((event) => setCurrentTokenKey(event?.tokenKey ?? null)),
+    [player],
+  );
+
+  // Вийшли зі служіння — глушимо СВІЙ звук: далі його ніхто не спинить, бо
+  // екрана з кнопками вже немає.
+  useEffect(() => () => player.stop(), [player]);
+
+  // Бар живе вище роутів і не має смикатись від руху голки: елемент лишається
+  // тим самим об'єктом, поки не змінилась сама черга (див. `usePageBarContent`).
+  const controls = useMemo(
+    () => <GatheringControls title={formatDate(list?.date)} segments={segments} />,
+    [list?.date, segments],
+  );
 
   if (failed) {
     return (
@@ -98,7 +127,7 @@ export default function Gathering() {
       {/* Знімок, а не живий документ: налаштування показані й діють, але не
           редагуються, а шапка пісні закріплена (див. `mode.tsx`). */}
       <StaticSongProvider>
-        <ToPageBar>{formatDate(list.date)}</ToPageBar>
+        <ToPageBar>{controls}</ToPageBar>
 
         <div className="mb-3 rounded-xl border border-border bg-background/60 px-3 py-2 shadow-xs">
           <div className="text-base font-semibold leading-tight">
@@ -111,34 +140,11 @@ export default function Gathering() {
 
         <div className="flex flex-col">
           {items.map((item) => (
-            <section
+            <GatheringItemView
               key={item.key}
-              className="border-t border-dashed border-border/70 py-4 first:border-t-0 first:pt-0"
-            >
-              {item.kind === "song" && (
-                <>
-                  {/* Номер над піснею: єдина навігаційна підказка на екрані,
-                      де гортають пальцем. На репетиції домовляються саме
-                      номерами. */}
-                  <div className="mb-1 text-sm font-semibold text-muted-foreground">
-                    {item.number}
-                  </div>
-                  <StaticSong docId={item.point.songId} slate={item.nodes} />
-                </>
-              )}
-
-              {/* Програш — такий самий документ, як пісня: акорди, згенеровані
-                  зі стику сусідів, під текстом примітки. Свого вмісту він не
-                  має й мати не може (`LIST-26`). */}
-              {item.kind === "sounding" && <StaticSong docId={item.key} slate={item.nodes} />}
-
-              {/* Примітка без програша — просто рядок: тут говорить ведучий. */}
-              {item.kind === "note" && (
-                <p className="rounded-lg bg-muted/60 px-3 py-2 text-base text-foreground/80">
-                  {item.text}
-                </p>
-              )}
-            </section>
+              item={item}
+              tokenKey={unprefixTokenKey(currentTokenKey, item.tokenKeyPrefix)}
+            />
           ))}
         </div>
 

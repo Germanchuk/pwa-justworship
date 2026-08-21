@@ -37,6 +37,14 @@ class ChordsProgressionPlayer {
   private currentChordEvent: PlannedChord | null = null;
   private selectedKey: string | null = null;
   private contentProvider: ContentProvider | null = null;
+  /**
+   * Покоління запуску. Між «натиснули грати» і першим звуком стоїть
+   * ЗАВАНТАЖЕННЯ СЕМПЛІВ — і за цей час користувач устигає піти зі сторінки.
+   * Без покоління `stop` у цю мить не робив нічого видимого, а запуск, що
+   * приїжджав після нього, воскрешав звук уже нікому не потрібного екрана —
+   * і спинити його було нічим, бо кнопок на екрані вже немає.
+   */
+  private startGeneration = 0;
 
   static getInstance = () => {
     if (!ChordsProgressionPlayer.instance) {
@@ -70,9 +78,11 @@ class ChordsProgressionPlayer {
     // діє з наступного разу.
     const settings = getPlayerSettings();
 
+    const generation = ++this.startGeneration;
+
     this.setState("loading");
     try {
-      this.controls = await playSegments(segments, {
+      const controls = await playSegments(segments, {
         padPreset: settings.padPreset,
         piano: settings.piano,
         pianoVolume: settings.pianoVolume,
@@ -84,6 +94,21 @@ class ChordsProgressionPlayer {
           options.onEnded?.();
         },
       });
+
+      // Поки вантажились семпли, покоління змінилось: нас або спинили, або
+      // перезапустили. Питання лише одне — чи транспорт уже ЧУЖИЙ. Він чужий,
+      // коли новіший запуск сам дійшов до звуку («playing»/«paused»); тоді
+      // глушити означало б обірвати те, що людина щойно попросила. Поки той
+      // запуск ще вантажиться («loading»), транспорт нічий — і наш недоречний
+      // звук треба прибрати, інакше він грає до кінця служіння сам собі.
+      if (generation !== this.startGeneration) {
+        if (this.state === "idle" || this.state === "loading") {
+          controls.stop({ hard: true });
+        }
+        return;
+      }
+
+      this.controls = controls;
       this.setState("playing");
     } catch (error) {
       this.handlePlaybackComplete();
@@ -164,6 +189,9 @@ class ChordsProgressionPlayer {
   };
 
   stop = () => {
+    // Спершу покоління, і лише потім ранній вихід: запуск може саме зараз
+    // вантажити семпли, а його стан («loading») ще не «idle».
+    this.startGeneration += 1;
     if (this.state === "idle") return;
     this.controls?.stop({ hard: true });
     this.handlePlaybackComplete();
