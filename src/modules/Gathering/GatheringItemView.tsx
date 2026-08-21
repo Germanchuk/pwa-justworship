@@ -49,7 +49,13 @@ export const GatheringItemView = memo(function GatheringItemView({
 
   return (
     <PlayerHighlightContext.Provider value={highlight}>
-      <section className="border-t border-dashed border-border/70 py-4 first:border-t-0 first:pt-0">
+      {/* Ознака пункту лишається В РОЗМІТЦІ: коли голка є, а вузла її акорда
+          на екрані немає (сховані фільтром акорди, згорнута секція), автоскрол
+          везе хоча б до пункту — див. `useNeedleScroll`. */}
+      <section
+        data-gathering-point={item.tokenKeyPrefix}
+        className="border-t border-dashed border-border/70 py-4 first:border-t-0 first:pt-0"
+      >
         {item.kind === "song" && (
           <>
             {/* Номер над піснею: єдина навігаційна підказка на екрані, де

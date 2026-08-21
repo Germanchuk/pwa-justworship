@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { formatDate } from "#utils/utils";
@@ -14,6 +14,8 @@ import { useGatheringStart } from "#modules/Gathering/useGatheringStart";
 import { fetchGathering, type GatheringList } from "#modules/Gathering/gatheringSource";
 import { GatheringControls } from "#modules/Gathering/GatheringControls";
 import { GatheringItemView } from "#modules/Gathering/GatheringItemView";
+import { GatheringScrollControls } from "#modules/Gathering/GatheringScrollControls";
+import { useNeedleScroll } from "#modules/Gathering/useNeedleScroll";
 import ChordsProgressionPlayer from "#modules/SingleSong/services/ChordsProgressionPlayer/ChordsProgressionPlayer";
 import { unprefixTokenKey } from "#modules/SingleSong/services/ChordsProgressionPlayer/segments/model";
 
@@ -61,8 +63,16 @@ import { unprefixTokenKey } from "#modules/SingleSong/services/ChordsProgression
  * паузи й наступні пісні. Цим зібрання годиться і для генеральної репетиції,
  * і щоб влитись назад після перезавантаження посеред служіння.
  *
- * ─── ЧОГО ЩЕ НЕМА ──────────────────────────────────────────────────────────
- * Автоскрол — тікет `09`.
+ * ─── ЕКРАН ЇДЕ САМ — ЯКЩО ПОПРОСИЛИ ────────────────────────────────────────
+ * Автоскрол за замовчуванням ВИМКНЕНИЙ і вмикається кнопкою внизу
+ * (`GatheringScrollControls`, `LIST-45`): частина гуртів гортає сама, і
+ * непроханий рух екрана їм лише заважає. Дотик до екрана вимикає автоскрол на
+ * місці, а кнопка «до голки» вертає й екран, і його (`autoScroll.ts`).
+ *
+ * Скрол лише СПОЖИВАЄ голку — ту саму, що підсвічує акорд, — і ніде не
+ * питається транспорту (`useNeedleScroll`). Тому голка спільна, а поїздка
+ * особиста: капо, фільтри, згорнуті секції й розмір телефона в кожного свої
+ * (`LIST-44`).
  */
 export default function Gathering() {
   const { listId } = useParams();
@@ -113,6 +123,11 @@ export default function Gathering() {
     target: gatheringTarget(listId!),
   });
 
+  // Ряд пунктів — і межа пошуку для скролу: далі нього автоскролу нема чого
+  // шукати, а картка з датою й бар його не стосуються.
+  const itemsRef = useRef<HTMLDivElement>(null);
+  const toNeedle = useNeedleScroll({ rootRef: itemsRef, needleKey: currentTokenKey });
+
   // Вийшли зі служіння — глушимо СВІЙ звук: далі його ніхто не спинить, бо
   // екрана з кнопками вже немає. Хоста не чіпаємо: він грає для всього гурту.
   useEffect(() => () => player.stop(), [player]);
@@ -162,7 +177,7 @@ export default function Gathering() {
           </div>
         </div>
 
-        <div className="flex flex-col">
+        <div className="flex flex-col" ref={itemsRef}>
           {gathering.items.map((item) => (
             <GatheringItemView
               key={item.key}
@@ -178,6 +193,11 @@ export default function Gathering() {
             У цьому служінні ще нічого немає.
           </div>
         )}
+
+        <GatheringScrollControls
+          hasNeedle={currentTokenKey != null}
+          onToNeedle={toNeedle}
+        />
       </StaticSongProvider>
     </SongModeProvider>
   );
