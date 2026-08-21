@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Descendant } from "slate";
 
 import { makeNotePoint, makeSongPoint, makeSoundingNote, type ListPoint } from "#models/listPoint";
-import { buildGathering, sliceFromPoint, type GatheringPoint } from "./buildGathering";
+import { buildGathering, sliceFrom, type GatheringPoint } from "./buildGathering";
 
 /**
  * Документ пісні у вигляді, у якому він приїжджає з ендпоінта зібрання.
@@ -44,6 +44,8 @@ const note = (text = "Молитва"): GatheringPoint => makeNotePoint(text);
 const sounding = (): GatheringPoint => makeSoundingNote();
 
 const ids = (points: GatheringPoint[]) => buildGathering(points).segments.map((s) => s.id);
+
+const idsOf = (segments: ReadonlyArray<{ id: string }>) => segments.map((s) => s.id);
 
 const chordsOf = (points: GatheringPoint[], segmentId: string) =>
   buildGathering(points)
@@ -366,28 +368,92 @@ describe("buildGathering — пункт і його токени", () => {
   });
 });
 
-describe("sliceFromPoint — «грай звідси й до кінця служіння»", () => {
+describe("sliceFrom — «грай звідси й до кінця служіння»", () => {
   // Примітка стоїть окремо від програша навмисно: так у черзі є і пункт без
   // жодного сегмента зі звуком, і пункт із трьох частин.
   const points = [song(), note(), song(), sounding(), song()];
-  const all = buildGathering(points).segments;
+  const gathering = buildGathering(points);
+  const all = gathering.segments;
+  const idsFrom = (from: string) => sliceFrom(gathering, from).map((s) => s.id);
 
   it("з першого пункту — це вся черга", () => {
-    expect(sliceFromPoint(all, "p0")).toEqual(all);
+    expect(sliceFrom(gathering, "p0")).toEqual(all);
   });
 
   it("з пункту посеред служіння — усе від нього й далі, ні шматка раніше", () => {
-    expect(sliceFromPoint(all, "p3").map((s) => s.id)).toEqual([
-      "p3:intro",
-      "p3:loop",
-      "p3:outro",
-      "p4",
-    ]);
+    expect(idsFrom("p3")).toEqual(["p3:intro", "p3:loop", "p3:outro", "p4"]);
   });
 
   it("пункт без токенів (примітка) теж є точкою старту", () => {
-    expect(sliceFromPoint(all, "p1").map((s) => s.id)).toEqual([
-      "p1:pause",
+    expect(idsFrom("p1")).toEqual(["p1:pause", "p2", "p3:intro", "p3:loop", "p3:outro", "p4"]);
+  });
+
+  it("`p1` не впізнає `p10` — інакше старт з другого пункту грав би одинадцятий", () => {
+    const long = buildGathering(Array.from({ length: 12 }, () => song()));
+
+    expect(sliceFrom(long, "p1")[0].id).toBe("p1");
+    expect(sliceFrom(long, "p1")).toHaveLength(11);
+  });
+
+  it("невідомий пункт не грає нічого: у хоста інший список, і з початку йому не можна", () => {
+    expect(sliceFrom(gathering, "p9")).toEqual([]);
+  });
+});
+
+describe("sliceFrom — старт із акорда", () => {
+  /**
+   * Пісні тут навмисно ОДНАКОВІ: `0:0:3` є в кожній, і саме на цьому стоїть
+   * питання тікета — тап по акорду третьої пісні мусить дати сегмент третьої,
+   * а не однойменний токен першої.
+   */
+  const line = "| C | G | Am | F |";
+  const points = [
+    song(songDoc({ lines: [line] })),
+    note(),
+    song(songDoc({ lines: [line] })),
+    sounding(),
+    song(songDoc({ lines: [line] })),
+  ];
+  const gathering = buildGathering(points);
+  const chordsFrom = (from: string) =>
+    sliceFrom(gathering, from)[0]?.progression.map((event) => event.chord);
+
+  it("тап по акорду третьої пісні починає в ТРЕТІЙ пісні, а не в однойменному токені першої", () => {
+    const queue = sliceFrom(gathering, "p2:0:0:5");
+
+    expect(queue.map((s) => s.id)).toEqual(["p2", "p3:intro", "p3:loop", "p3:outro", "p4"]);
+  });
+
+  it("перший сегмент починається рівно з того акорда, по якому тапнули", () => {
+    expect(chordsFrom("p2:0:0:5")).toEqual(["Am", "F"]);
+    expect(chordsFrom("p2:0:0:7")).toEqual(["F"]);
+  });
+
+  it("тап по першому акорду пункту нічого не ріже", () => {
+    expect(chordsFrom("p2:0:0:1")).toEqual(["C", "G", "Am", "F"]);
+    expect(sliceFrom(gathering, "p2:0:0:1")[0]).toBe(gathering.segments[2]);
+  });
+
+  it("далі за пунктом старту черга йде незмінною — «й до кінця служіння»", () => {
+    expect(sliceFrom(gathering, "p2:0:0:5").slice(1)).toEqual(gathering.segments.slice(3));
+  });
+
+  it("тап у вступі програша ріже вступ, а не пісню поруч", () => {
+    const queue = sliceFrom(gathering, "p3:0:0:3");
+
+    expect(queue.map((s) => s.id)).toEqual(["p3:intro", "p3:loop", "p3:outro", "p4"]);
+    expect(queue[0].progression.map((e) => e.chord)).toEqual(["G7"]);
+  });
+
+  it("тап у лупі веде на початок кола: обрізаний луп крутився б обрізаним завжди", () => {
+    const queue = sliceFrom(gathering, "p3:0:1:3");
+
+    expect(queue[0].id).toBe("p3:loop");
+    expect(queue[0]).toBe(gathering.segments.find((s) => s.id === "p3:loop"));
+  });
+
+  it("акорда немає в цьому знімку — грає з початку СВОГО пункту, а не з початку служіння", () => {
+    expect(idsOf(sliceFrom(gathering, "p2:9:9:9"))).toEqual([
       "p2",
       "p3:intro",
       "p3:loop",
@@ -396,14 +462,7 @@ describe("sliceFromPoint — «грай звідси й до кінця служ
     ]);
   });
 
-  it("`p1` не впізнає `p10` — інакше старт з другого пункту грав би одинадцятий", () => {
-    const long = buildGathering(Array.from({ length: 12 }, () => song())).segments;
-
-    expect(sliceFromPoint(long, "p1")[0].id).toBe("p1");
-    expect(sliceFromPoint(long, "p1")).toHaveLength(11);
-  });
-
-  it("невідомий пункт не грає нічого: у хоста інший список, і з початку йому не можна", () => {
-    expect(sliceFromPoint(all, "p9")).toEqual([]);
+  it("акорд неіснуючого пункту не грає нічого — як і сам пункт", () => {
+    expect(sliceFrom(gathering, "p9:0:0:1")).toEqual([]);
   });
 });

@@ -4,7 +4,7 @@ import type {Descendant, Editor} from "slate";
 
 import ChordsProgressionPlayer from "../../../services/ChordsProgressionPlayer/ChordsProgressionPlayer";
 import {extractHeader} from "../../../services/ChordsProgressionPlayer/extractHeader";
-import {PlayerHighlightContext} from "./PlayerHighlightContext";
+import {PlayerHighlightContext, toggleStartChord} from "./PlayerHighlightContext";
 import {needleFor} from "#modules/Band/audio/hostView";
 import {songTarget} from "#modules/Band/audio/types";
 import {useAudioHostStatus} from "#modules/Band/audio/useBandAudio";
@@ -65,7 +65,10 @@ export const SlatePlayerBridge = ({editor, children}: Props) => {
   );
 
   const value = useMemo(
-    () => ({currentTokenKey, selectedTokenKey}),
+    // Тап тут ПОЗНАЧАЄ акорд, а не запускає: на сторінці пісні між вибором і
+    // звуком стоїть кнопка (`PLAY-14`). У зібранні те саме місце значить інше
+    // — див. `GatheringItemView`.
+    () => ({currentTokenKey, selectedTokenKey, onChordTap: toggleStartChord}),
     [currentTokenKey, selectedTokenKey],
   );
 

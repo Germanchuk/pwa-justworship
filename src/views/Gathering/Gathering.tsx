@@ -10,6 +10,7 @@ import { useAudioHostStatus } from "#modules/Band/audio/useBandAudio";
 import { ToPageBar } from "#layout/PageBar/ToPageBar";
 import { SongModeProvider, StaticSongProvider } from "#modules/SingleSong/mode";
 import { buildGathering } from "#modules/Gathering/buildGathering";
+import { useGatheringStart } from "#modules/Gathering/useGatheringStart";
 import { fetchGathering, type GatheringList } from "#modules/Gathering/gatheringSource";
 import { GatheringControls } from "#modules/Gathering/GatheringControls";
 import { GatheringItemView } from "#modules/Gathering/GatheringItemView";
@@ -54,8 +55,14 @@ import { unprefixTokenKey } from "#modules/SingleSong/services/ChordsProgression
  *
  * Без хоста все те саме грає звідси — сценарій «пройти план удома».
  *
+ * ─── СТАРТ ІЗ БУДЬ-ЯКОГО АКОРДА ────────────────────────────────────────────
+ * Тап по акорду означає «грай звідси й до кінця служіння» (`LIST-43`) — саме
+ * служіння, а не ту пісню, у яку тицьнули: далі так само йдуть програші,
+ * паузи й наступні пісні. Цим зібрання годиться і для генеральної репетиції,
+ * і щоб влитись назад після перезавантаження посеред служіння.
+ *
  * ─── ЧОГО ЩЕ НЕМА ──────────────────────────────────────────────────────────
- * Старт із акорда — тікет `08`, автоскрол — `09`.
+ * Автоскрол — тікет `09`.
  */
 export default function Gathering() {
   const { listId } = useParams();
@@ -80,10 +87,7 @@ export default function Gathering() {
   // Хук стоїть ДО ранніх виходів — інакше він викликався б через раз.
   // Знімок міняється рівно раз (коли приїхав), а збірка проганяє лексером усі
   // документи служіння: без пам'яті це рахувалось би на кожен ререндер екрана.
-  const { items, segments } = useMemo(
-    () => buildGathering(list?.points ?? []),
-    [list],
-  );
+  const gathering = useMemo(() => buildGathering(list?.points ?? []), [list]);
 
   const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
   const [localState, setLocalState] = useState(player.getState());
@@ -98,6 +102,10 @@ export default function Gathering() {
   // хоста, вирішує одне правило на весь застосунок (`needleFor`), а розводить
   // її по пунктах `unprefixTokenKey` нижче.
   const hostStatus = useAudioHostStatus();
+  // Тап по акорду веде тією самою дорогою, що й кнопка «грати», — різна лише
+  // адреса (`useGatheringStart`). Функція стабільна, тож `memo` на пунктах
+  // лишається живим.
+  const startFrom = useGatheringStart(listId!, gathering);
   const currentTokenKey = needleFor({
     localState,
     localTokenKey,
@@ -118,12 +126,12 @@ export default function Gathering() {
     () => (
       <GatheringControls
         title={formatDate(list?.date)}
-        segments={segments}
+        gathering={gathering}
         listId={listId!}
         hostDesignated={hostDesignated}
       />
     ),
-    [list?.date, segments, listId, hostDesignated],
+    [list?.date, gathering, listId, hostDesignated],
   );
 
   if (failed) {
@@ -155,16 +163,17 @@ export default function Gathering() {
         </div>
 
         <div className="flex flex-col">
-          {items.map((item) => (
+          {gathering.items.map((item) => (
             <GatheringItemView
               key={item.key}
               item={item}
               tokenKey={unprefixTokenKey(currentTokenKey, item.tokenKeyPrefix)}
+              onPlayFrom={startFrom}
             />
           ))}
         </div>
 
-        {items.length === 0 && (
+        {gathering.items.length === 0 && (
           <div className="text-sm text-muted-foreground">
             У цьому служінні ще нічого немає.
           </div>

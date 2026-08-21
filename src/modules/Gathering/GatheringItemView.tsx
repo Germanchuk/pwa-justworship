@@ -2,6 +2,7 @@ import { memo, useMemo } from "react";
 
 import { PlayerHighlightContext } from "#modules/SingleSong/components/SlateLyricsPlayground/player/PlayerHighlightContext";
 import { StaticSong } from "#modules/SingleSong/components/StaticSong/StaticSong";
+import { prefixTokenKey } from "#modules/SingleSong/services/ChordsProgressionPlayer/segments/model";
 import type { GatheringItem } from "./buildGathering";
 
 /**
@@ -13,18 +14,37 @@ import type { GatheringItem } from "./buildGathering";
  * стоїть: голка рухається кілька разів на такт, а на екрані до десятка живих
  * Slate-документів, і декорація проходить кожен акордовий рядок кожної пісні.
  * Прийшов би цілий ключ — перемальовувалось би все служіння на кожен акорд.
+ *
+ * ─── А ТАП ІДЕ НАЗАД УЖЕ ЦІЛИМ ─────────────────────────────────────────────
+ * Тап по акорду означає «грай звідси й до кінця СЛУЖІННЯ» (`LIST-43`), а не
+ * «грай цю пісню». Тому пункт тут же вертає ключеві свою ознаку
+ * (`prefixTokenKey`) — тією самою адресою, якою вона їде по мережі: `0:1:3`
+ * є в кожній пісні служіння, і без ознаки старт потрапив би в однойменний
+ * акорд геть іншої.
  */
 interface Props {
   item: GatheringItem;
   /** Токен, що звучить, уже без префікса пункту. `null` — звучить не тут. */
   tokenKey: string | null;
+  /** Запустити служіння з цієї адреси. Стабільна — інакше `memo` дарма. */
+  onPlayFrom: (from: string) => void;
 }
 
-export const GatheringItemView = memo(function GatheringItemView({ item, tokenKey }: Props) {
+export const GatheringItemView = memo(function GatheringItemView({
+  item,
+  tokenKey,
+  onPlayFrom,
+}: Props) {
   const highlight = useMemo(
-    // Вибраний акорд («грай звідси») — окрема робота, тікет `08`.
-    () => ({ currentTokenKey: tokenKey, selectedTokenKey: null }),
-    [tokenKey],
+    () => ({
+      currentTokenKey: tokenKey,
+      // Позначеного акорда в зібранні не буває: тап не вибирає місце старту, а
+      // одразу з нього грає — чекати тут нічого (рішення Германа 2026-08-20:
+      // «тап запускає одразу; якщо зловимо мисклік — тоді й розберемось»).
+      selectedTokenKey: null,
+      onChordTap: (key: string) => onPlayFrom(prefixTokenKey(key, item.tokenKeyPrefix)!),
+    }),
+    [tokenKey, onPlayFrom, item.tokenKeyPrefix],
   );
 
   return (

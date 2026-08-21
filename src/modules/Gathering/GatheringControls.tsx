@@ -10,14 +10,15 @@ import { FIRST_POINT, gatheringTarget, type PlaybackAction } from "#modules/Band
 import { useAudioHostStatus } from "#modules/Band/audio/useBandAudio";
 import { useCurrentUsername } from "#modules/SingleSong/components/SlateLyricsPlayground/elements/hooks";
 import ChordsProgressionPlayer from "#modules/SingleSong/services/ChordsProgressionPlayer/ChordsProgressionPlayer";
-import type { PlaybackSegment } from "#modules/SingleSong/services/ChordsProgressionPlayer/segments/model";
+import type { Gathering } from "./buildGathering";
+import { useGatheringStart } from "./useGatheringStart";
 
 /**
  * «Грати» для всього служіння.
  *
  * ─── ЗВУК ГУРТУ ОДИН ───────────────────────────────────────────────────────
  * Хост онлайн і озброєний → ця кнопка стає пультом: у band-кімнату їде команда
- * «грай оце служіння з такого пункту», і звук піднімає планшет за пультом
+ * «грай оце служіння з такого місця», і звук піднімає планшет за пультом
  * (`LIST-46`, `PLAY-38`). Хоста немає → грає цей пристрій, і це не аварія, а
  * сценарій «пройти план удома». Куди саме піде звук, видно ДО натиску —
  * ліворуч від кнопки (`PLAY-29`).
@@ -34,11 +35,15 @@ import type { PlaybackSegment } from "#modules/SingleSong/services/ChordsProgres
  * семплів. Кінця служіння як події теж немає: черга вичерпалась — звук
  * скінчився (`LIST-40`).
  *
- * ⚠️ ЧЕРГА ЇДЕ НЕ ПО МЕРЕЖІ. По ній їде лише «список і пункт», а чергу хост
+ * ⚠️ ЧЕРГА ЇДЕ НЕ ПО МЕРЕЖІ. По ній їде лише «список і місце», а чергу хост
  * збирає САМ — тим самим чистим `buildGathering` і з того самого джерела. Так
  * програш, який музикант бачить, і той, що звучить, виходять однакові
  * (`LIST-35`) — межі цієї однаковості описані в `audioHostEngine`. Локальний
  * плейбек грає цю, вже зібрану, чергу.
+ *
+ * ⚠️ ЦЕ НЕ ЄДИНИЙ СПОСІБ ЗАПУСТИТИ. Тап по акорду просто в тексті означає те
+ * саме «грай», лише з точнішої адреси (`LIST-43`), і йде тією самою дорогою —
+ * `useGatheringStart`. Тому кнопка тут не тримає ніякої «своєї» логіки старту.
  *
  * ─── ТРИ КНОПКИ, І ЖОДНОЇ ПАУЗИ ────────────────────────────────────────────
  * «Грати», «зупинити» і — коли служіння чекає — «продовжити». Паузи серед них
@@ -65,15 +70,15 @@ import type { PlaybackSegment } from "#modules/SingleSong/services/ChordsProgres
 interface Props {
   /** Заголовок сторінки — дата служіння. Своє місце в барі кнопки з ним ділять. */
   title: string;
-  /** Наскрізна черга всього служіння з `buildGathering`. Для локальної гри. */
-  segments: PlaybackSegment[];
+  /** Зібране служіння: черга для локальної гри й адреси старту в ній. */
+  gathering: Gathering;
   /** Кого просити грати на хості. Черга по мережі не їде — лише це. */
   listId: string | number;
   /** Чи взагалі призначений хост звуку в складі гурту (`PLAY-29`). */
   hostDesignated: boolean;
 }
 
-export const GatheringControls = ({ title, segments, listId, hostDesignated }: Props) => {
+export const GatheringControls = ({ title, gathering, listId, hostDesignated }: Props) => {
   const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
   const [localState, setLocalState] = useState(player.getState());
   const [localAwaitingAt, setLocalAwaitingAt] = useState(player.getAwaitingPoint());
@@ -92,27 +97,24 @@ export const GatheringControls = ({ title, segments, listId, hostDesignated }: P
   const state = remoteActive ? hostStateFor(hostStatus, target) : localState;
   const awaitingAt = remoteActive ? hostAwaitingPoint(hostStatus, target) : localAwaitingAt;
 
-  // Три кнопки — три однакові листи в кімнату гурту, різні лише дією і пунктом.
+  // Однакові листи в кімнату гурту, різні лише дією і адресою. Запуску серед
+  // них немає: він живе в `useGatheringStart` — там, де ним користується ще й
+  // тап по акорду.
   const command = useCallback(
-    (action: PlaybackAction, fromPoint?: string) => {
+    (action: PlaybackAction, from?: string) => {
       BandAudioChannel.getInstance().sendCommand({
         action,
-        target: gatheringTarget(listId, fromPoint),
+        target: gatheringTarget(listId, from),
         issuedBy: username ?? null,
       });
     },
     [listId, username],
   );
 
-  const handlePlay = useCallback(() => {
-    // З першого пункту: старт із довільного акорда — тікет `08`.
-    if (remoteActive) return command("play", FIRST_POINT);
-    // Запуск глушить те, що грало доти (`PLAY-40`): звук один, і про це дбає
-    // сам плеєр — тут лишається просто попросити.
-    player.playQueue(segments).catch((error) => {
-      console.error("Failed to start gathering playback", error);
-    });
-  }, [remoteActive, command, player, segments]);
+  // Кнопка — це та сама дія, що й тап по акорду в тексті, лише з найгрубішою
+  // адресою: з першого пункту (`useGatheringStart`).
+  const start = useGatheringStart(listId, gathering);
+  const handlePlay = useCallback(() => start(FIRST_POINT), [start]);
 
   const handleContinue = useCallback(() => {
     // Пункт, який ЦЕЙ екран бачить зупиненим, їде разом із натиском: тиснуть
@@ -132,7 +134,7 @@ export const GatheringControls = ({ title, segments, listId, hostDesignated }: P
   const isSounding = state === "playing" || state === "paused";
   // Порожня черга гасить кнопку і з хостом: у служінні без жодного звучного
   // пункту хост теж не заграє, і мовчазна кнопка чесніша за команду в нікуди.
-  const nothingToPlay = segments.length === 0;
+  const nothingToPlay = gathering.segments.length === 0;
 
   return (
     <div className="flex w-full items-center justify-between gap-2">

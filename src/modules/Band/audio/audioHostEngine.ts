@@ -1,6 +1,6 @@
 import * as Tone from "tone";
 
-import { buildGathering, sliceFromPoint } from "#modules/Gathering/buildGathering";
+import { buildGathering, sliceFrom } from "#modules/Gathering/buildGathering";
 import { fetchGathering } from "#modules/Gathering/gatheringSource";
 import ChordsProgressionPlayer from "#modules/SingleSong/services/ChordsProgressionPlayer/ChordsProgressionPlayer";
 import { formatDate } from "#utils/utils";
@@ -159,9 +159,7 @@ class AudioHostEngine {
         // (`LIST-41`): звук один, черга одна, і рухає її той, у кого вона в
         // руках. Тиснуть частіше за раз — тому команда несе ПУНКТ, з якого
         // продовжують, і другу зупинку підряд другий натиск не проковтне.
-        this.player.next(
-          command.target.kind === "gathering" ? command.target.fromPoint : undefined,
-        );
+        this.player.next(command.target.kind === "gathering" ? command.target.from : undefined);
         break;
       case "stop":
         this.player.stop();
@@ -236,9 +234,11 @@ class AudioHostEngine {
     const list = await fetchGathering(bandId, target.listId);
     this.playingName = formatDate(list.date) ?? null;
 
-    const queue = sliceFromPoint(buildGathering(list.points).segments, target.fromPoint);
+    // Адреса приїжджає з екрана: пункт або акорд у ньому (`sliceFrom`). Тап по
+    // акорду й «грати» — та сама дорога, різна лише точність адреси.
+    const queue = sliceFrom(buildGathering(list.points), target.from);
     if (queue.length === 0) {
-      // Пункту немає в тому списку, що бачить хост (див. `sliceFromPoint`):
+      // Пункту немає в тому списку, що бачить хост (див. `sliceFrom`):
       // краще тиша, з якої видно, що команда не вийшла.
       console.warn("[audio-host] gathering point not found", target);
       return false;

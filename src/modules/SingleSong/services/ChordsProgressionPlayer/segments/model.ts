@@ -83,14 +83,18 @@ export interface PlaybackSegment {
 export const pointPrefix = (index: number): string => `p${index}`;
 
 /**
- * Пункт, якому належить сегмент. Id сегмента — це `пункт[:частина]`
- * (`p3`, `p3:loop`, `p3:pause`), тож пункт — його перше поле. Порівнюємо саме
- * поле, а не початок рядка: `p1` інакше впізнав би `p10`.
+ * Пункт із будь-якої адреси в служінні. Адреса — це `пункт[:решта]`: id
+ * сегмента (`p3`, `p3:loop`, `p3:pause`), ключ токена (`p3:0:1:2`) або сам
+ * пункт (`p3`). Тож пункт — її перше поле, і беремо саме поле, а не початок
+ * рядка: `p1` інакше впізнав би `p10`.
  *
  * Стоїть поруч із `pointPrefix` навмисно: це його зворотний бік, і розійтись
  * вони можуть лише тихо.
  */
-export const pointOfSegment = (segment: PlaybackSegment): string => segment.id.split(":")[0];
+export const pointOfKey = (key: string): string => key.split(":")[0];
+
+/** Пункт, якому належить сегмент. */
+export const pointOfSegment = (segment: PlaybackSegment): string => pointOfKey(segment.id);
 
 /**
  * Ключ токена, яким його знає весь застосунок: свій у межах пісні, з префіксом

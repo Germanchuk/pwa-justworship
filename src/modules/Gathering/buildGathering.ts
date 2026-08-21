@@ -51,6 +51,7 @@ import {
 import { getProgressionFromSlate } from "#modules/SingleSong/services/ChordsProgressionPlayer/getMidiFromSlate/getMidiFromSlate";
 import {
   canRampBetween,
+  pointOfKey,
   pointOfSegment,
   pointPrefix,
   prefixTokenKey,
@@ -257,20 +258,53 @@ const soundingNodes = (text: string, parts: SoundingPart[]): Descendant[] =>
   ] as unknown as Descendant[];
 
 /**
- * «Грай звідси й до кінця служіння» (`LIST-43`): черга від першого сегмента
- * названого пункту й далі без змін.
+ * «Грай звідси й до кінця служіння» (`LIST-43`): черга від названого місця й
+ * далі без жодної зміни. Далі — усе за планом: програші, паузи, наступні
+ * пісні.
  *
- * Невідомий пункт означає, що в того, хто ріже чергу, ІНШИЙ список — знімок
- * старіший або новіший за той, з якого тиснули. Тоді не грає нічого: почати з
- * початку служіння посеред зібрання гірше за тишу, з якої видно, що команда не
- * вийшла.
+ * ─── АДРЕСА БУВАЄ ГРУБОЮ Й ТОЧНОЮ ──────────────────────────────────────────
+ * `p3` — з початку пункту; `p3:0:1:2` — з конкретного акорда в ньому. Це одна
+ * адреса, а не дві різні речі: точна — уточнення грубої, і пункт у ній той
+ * самий перший (`pointOfKey`). Тому по мережі їде ОДНЕ поле, а не поле плюс
+ * необов'язкове уточнення.
+ *
+ * ─── ЧОГО НЕ ЗНАЙШЛИ, ТЕ ЗАГРУБЛЮЄМО ───────────────────────────────────────
+ * Акорда немає в цьому знімку (у того, хто ріже чергу, список свіжіший або
+ * старіший) — грає з початку СВОГО пункту: та сама пісня, просто спочатку.
+ * А от невідомий ПУНКТ не грає нічого: почати з початку служіння посеред
+ * зібрання гірше за тишу, з якої видно, що команда не вийшла.
  */
-export const sliceFromPoint = (
+export const sliceFrom = (gathering: Gathering, from: string): PlaybackSegment[] => {
+  const at = gathering.tokens.get(from);
+  if (at == null) return sliceFromPoint(gathering.segments, pointOfKey(from));
+
+  const head = gathering.segments[at.segmentIndex]!;
+  return [trimToToken(head, from), ...gathering.segments.slice(at.segmentIndex + 1)];
+};
+
+const sliceFromPoint = (
   segments: ReadonlyArray<PlaybackSegment>,
   fromPoint: string,
 ): PlaybackSegment[] => {
   const start = segments.findIndex((segment) => pointOfSegment(segment) === fromPoint);
   return start < 0 ? [] : segments.slice(start);
+};
+
+/**
+ * Сегмент, що починається з названого акорда.
+ *
+ * ⚠️ ЛУП НЕ РІЖЕТЬСЯ. Він коло, і обрізаний ішов би обрізаним КОЖНЕ коло, а не
+ * лише перше — тобто тап у програші беззвучно вкоротив би сам програш. Тап у
+ * лупі веде на початок кола: два такти на 80 BPM — це ~6 с, і чекати їх
+ * чесніше, ніж грати не той луп.
+ */
+const trimToToken = (segment: PlaybackSegment, tokenKey: string): PlaybackSegment => {
+  if (segment.kind !== "once") return segment;
+
+  const start = segment.progression.findIndex(
+    (event) => prefixTokenKey(event.tokenKey ?? null, segment.tokenKeyPrefix) === tokenKey,
+  );
+  return start <= 0 ? segment : { ...segment, progression: segment.progression.slice(start) };
 };
 
 export function buildGathering(points: ReadonlyArray<GatheringPoint>): Gathering {

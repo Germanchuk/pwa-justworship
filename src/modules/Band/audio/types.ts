@@ -34,11 +34,18 @@ export type PlaybackTarget =
       kind: "gathering";
       listId: string | number;
       /**
-       * Пункт, з якого грати: `p0`, `p1`… — та сама ознака пункту, що їде
-       * попереду ключів токенів (`PLAY-39`). Служіння грає звідси **й до
-       * кінця** (`LIST-43`), тож інших координат старту тут не буває.
+       * Звідки грати. Служіння звучить від цього місця **й до кінця**
+       * (`LIST-43`), тож координата тут одна — точка входу, не відрізок.
+       *
+       * Адреса буває грубою і точною: `p0`, `p1`… — з початку пункту (та сама
+       * ознака пункту, що їде попереду ключів токенів, `PLAY-39`);
+       * `p2:0:1:3` — з конкретного акорда в ньому, тобто цілий ключ токена,
+       * як він і їде по мережі. Друга — уточнення першої, а не інший вид
+       * адреси: пункт у ній той самий перший (`pointOfKey`). Тому поле одне —
+       * необов'язкове «іноді ще й акорд» роздвоїло б протокол на рівному
+       * місці.
        */
-      fromPoint: string;
+      from: string;
     };
 
 /** Перший пункт служіння. Формат ознаки — один на застосунок (`pointPrefix`). */
@@ -50,11 +57,11 @@ export const songTarget = (
   startTokenKey: string | null = null,
 ): PlaybackTarget => ({ kind: "song", songId, startTokenKey });
 
-/** Служіння цілком. Без пункту — з першого. */
+/** Служіння цілком. Без адреси — з першого пункту. */
 export const gatheringTarget = (
   listId: string | number,
-  fromPoint = FIRST_POINT,
-): PlaybackTarget => ({ kind: "gathering", listId, fromPoint });
+  from = FIRST_POINT,
+): PlaybackTarget => ({ kind: "gathering", listId, from });
 
 /** Команда контролера хосту. */
 export interface PlaybackCommand {

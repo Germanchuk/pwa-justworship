@@ -8,11 +8,12 @@ import {
   requestExit,
 } from "#modules/SingleSong/services/ChordsProgressionPlayer/segments/queue";
 import { progressionBeats } from "#modules/SingleSong/services/ChordsProgressionPlayer/segments/model";
+import { planPass } from "#modules/SingleSong/services/ChordsProgressionPlayer/segments/planPass";
 import {
   planTempoTransition,
   type TempoState,
 } from "#modules/SingleSong/services/ChordsProgressionPlayer/segments/tempoTransition";
-import { buildGathering, type GatheringPoint } from "./buildGathering";
+import { buildGathering, sliceFrom, type GatheringPoint } from "./buildGathering";
 
 /**
  * ЗІБРАННЯ НА ХОДУ — стик збірки й черги.
@@ -175,5 +176,55 @@ describe("програш у черзі — темп і розмір на меж�
       rampSeconds: 0,
     });
     expect(plans.every((p) => p.rampSeconds === 0)).toBe(true);
+  });
+});
+
+describe("старт із акорда — чи грає далі за планом", () => {
+  /**
+   * Обрізаний сегмент — усе ще сегмент: рулон мусить пройти його й піти далі
+   * тим самим планом. Окремо `buildGathering.test.ts` перевіряє, ЩО відрізано,
+   * а `queue.test.ts` — як черга ходить; розійтись вони можуть саме тут, на
+   * зсунутих межах.
+   */
+  const points = [
+    song(songDoc({ key: "C", bpm: 80, lines: ["| C | G | Am | F |"] })),
+    sounding(),
+    next(),
+  ];
+  const gathering = buildGathering(points);
+
+  it("перший сегмент коротшає рівно на пропущене, а межі далі йдуть від нього", () => {
+    // Стартуємо з третього такту першої пісні: лишається 2 такти (8 імпульсів),
+    // далі вступ (2 такти) і луп — усе за планом, просто на такт ближче.
+    const queue = sliceFrom(gathering, "p0:0:0:5");
+    const { passes } = pullPasses(createQueueState(queue), 0, 24);
+
+    expect(passes.map((p) => [p.segment.id, p.startBeats])).toEqual([
+      ["p0", 0],
+      ["p1:intro", 8],
+      ["p1:loop", 16],
+    ]);
+  });
+
+  it("голка починає саме з того акорда, по якому тапнули — і з його ознакою пункту", () => {
+    const pass = planPass(sliceFrom(gathering, "p0:0:0:5")[0], 0);
+
+    expect(pass.chords.map((chord) => chord.chord)).toEqual(["Am", "F"]);
+    // Ознака пункту на місці: саме нею голка знаходить свою пісню на екрані.
+    expect(pass.chords[0].tokenKey).toBe("p0:0:0:5");
+    expect(pass.lengthBeats).toBe(8);
+  });
+
+  it("тап у лупі програша лишає програш цілим колом — і крутить його далі", () => {
+    const queue = sliceFrom(gathering, "p1:0:1:3");
+    const { passes, state } = pullPasses(createQueueState(queue), 0, 24);
+
+    // Коло за колом, від нуля: обрізаний луп ішов би коротшим КОЖНЕ коло.
+    expect(passes.map((p) => [p.segment.id, p.startBeats])).toEqual([
+      ["p1:loop", 0],
+      ["p1:loop", 8],
+      ["p1:loop", 16],
+    ]);
+    expect(state.finished).toBe(false);
   });
 });
