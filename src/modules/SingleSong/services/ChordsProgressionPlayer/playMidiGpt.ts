@@ -3,9 +3,18 @@ import {getPadPresetDef, type PadPreset, type PadVoice} from "./createPad/padPre
 import {createPiano} from "./createPiano/createPiano";
 import {DEFAULT_BPM, DEFAULT_TIME_SIGNATURE} from "./songDefaults";
 import type {PlannedChord, PlaybackSegment} from "./segments/model";
-import {barBeats, canRampBetween} from "./segments/model";
+import {barBeats} from "./segments/model";
 import {planPass} from "./segments/planPass";
-import {createQueueState, isOnLoop, pullPasses, requestExit, type QueueState} from "./segments/queue";
+import {planTempoTransition, type TempoState} from "./segments/tempoTransition";
+import {
+  awaitingPoint,
+  createQueueState,
+  isOnLoop,
+  isOnPause,
+  pullPasses,
+  requestExit,
+  type QueueState,
+} from "./segments/queue";
 
 /** Tone-ове позначення часу; ми вживаємо тільки тікову форму `"<n>i"`. */
 type ToneTime = string | number;
@@ -41,6 +50,16 @@ export interface PlayOptions {
   onEnded?: () => void;
   /** Підсвітка: що звучить зараз. `null` — не звучить нічого. */
   onChord?: (chord: PlannedChord | null) => void;
+  /**
+   * Пункт, на якому служіння чекає «продовжити», — або `null`, коли не чекає.
+   *
+   * Чекає воно двома способами — стоячи на примітці й крутячи луп програша, —
+   * і для того, хто тисне кнопку, це одне й те саме очікування. Тому назовні
+   * йде одне значення, а не два прапорці. Не «чи чекає», а «на чому»: натиск
+   * їде назад тим самим пунктом і тим доводить, що продовжують саме ЦЮ
+   * зупинку (`requestExit`).
+   */
+  onAwaitingContinue?: (point: string | null) => void;
 }
 
 interface MetronomeCtrl {
@@ -57,8 +76,11 @@ export interface MidiPlaybackControls {
   resume(): void;
   dispose(): void;
   getState(): MidiPlayerState;
-  /** «Далі»: вийти з поточного лупа наприкінці його проходу. */
-  next(): void;
+  /**
+   * «Продовжити»: зняти зупинку на примітці або вийти з лупа програша.
+   * `from` — пункт, на якому натиснули; чужий пункт черга не бере.
+   */
+  next(from?: string): void;
   /** Чи є зараз із чого виходити — тобто чи показувати кнопку «далі». */
   isOnLoop(): boolean;
 }
@@ -71,6 +93,19 @@ export interface MidiPlaybackControls {
  */
 function beatsToTicks(beats: number): ToneTime {
   return `${Math.round(beats * Tone.Transport.PPQ)}i`;
+}
+
+/**
+ * На тік РАНІШЕ за вказаний імпульс — цим ставимо транспорт на примітці.
+ *
+ * Тік не можна зупиняти на самій межі: подія, що прийшла в тіку `T`, приходить
+ * ПІД ЧАС його обробки, тобто все, що на `T` призначено, вже роздано. Матеріал,
+ * долитий після «продовжити», починається рівно з `T` — і на ньому транспорт
+ * уже не спинився б, а проскочив би його мовчки. Тік — це 1/192 імпульсу, тож
+ * музично цієї різниці немає.
+ */
+function beatsToTicksBefore(beats: number): ToneTime {
+  return `${Math.max(0, Math.round(beats * Tone.Transport.PPQ) - 1)}i`;
 }
 
 function setupTransport(num: number, bpm: number) {
@@ -169,8 +204,14 @@ export class MidiPlayer {
   private endId: number | null = null;
   /** Сегмент, для якого вже застосовані темп і розмір. */
   private appliedSegmentId: string | null = null;
-  private prevBpm: number | null = null;
-  private prevTimeSignature: [number, number] | null = null;
+  /** Темп і розмір, у які транспорт уже переведений. `null` — ще нічого. */
+  private tempo: TempoState | null = null;
+  /** Голка стоїть на примітці: транспорт справді зупинений (`LIST-37`). */
+  private stoppedAtPause = false;
+  /** Імпульс, на якому вже призначена зупинка. `null` — не призначена. */
+  private pauseArmedAt: number | null = null;
+  /** Останнє, що ми сказали назовні про очікування, — щоб не повторюватись. */
+  private awaitingAt: string | null = null;
 
   constructor(private defaults: PlayOptions = {}) {}
 
@@ -180,6 +221,28 @@ export class MidiPlayer {
 
   isOnLoop(): boolean {
     return this.queue != null && isOnLoop(this.queue);
+  }
+
+  /**
+   * Пункт, на якому служіння чекає «продовжити», — або `null`, коли не чекає.
+   * Два різні очікування, одна відповідь: на примітці стоїть транспорт, у лупі
+   * програша крутиться прохід — а для того, хто дивиться на кнопку, це
+   * однаково «далі буде, коли ми скажемо».
+   *
+   * ⚠️ У ЛУПІ це рахується від того, що ЗАЛИВАЄТЬСЯ, а не від того, що звучить:
+   * черга йде попереду голки на горизонт (до двох тактів), тож кнопка
+   * з'являється трохи раніше, ніж чути луп (`LIST-42`).
+   *
+   * На ПРИМІТЦІ такої вільності немає навмисно: чекаємо лише тоді, коли
+   * транспорт справді став. Кнопка, показана до тиші, повела б служіння повз
+   * саму зупинку — тобто рівно повз те, заради чого примітка й існує.
+   */
+  awaitingContinueAt(): string | null {
+    if (!this.queue) return null;
+    const point = awaitingPoint(this.queue);
+    if (point == null) return null;
+    if (isOnPause(this.queue) && !this.stoppedAtPause) return null;
+    return point;
   }
 
   private setState(next: MidiPlayerState) {
@@ -196,6 +259,7 @@ export class MidiPlayer {
   private clearScheduled() {
     this.scheduledIds.forEach((id) => Tone.Transport.clear(id));
     this.scheduledIds = [];
+    this.pauseArmedAt = null;
     if (this.topUpId != null) {
       Tone.Transport.clear(this.topUpId);
       this.topUpId = null;
@@ -248,8 +312,10 @@ export class MidiPlayer {
 
     this.queue = createQueueState(segments, introBeats);
     this.appliedSegmentId = null;
-    this.prevBpm = null;
-    this.prevTimeSignature = null;
+    this.tempo = null;
+    this.stoppedAtPause = false;
+    this.pauseArmedAt = null;
+    this.awaitingAt = null;
 
     if (this.opts.metronome !== false) {
       this.metro = createMetronome({ pan: this.opts.metronomePan ?? 1 });
@@ -267,6 +333,10 @@ export class MidiPlayer {
 
     Transport.start();
     this.setState("playing");
+    // Служіння, що починається з примітки, стане на ній саме: зупинка вже
+    // призначена першим заповненням, і з такту вступного кліку вона знімає
+    // рівно цей такт.
+    this.emitAwaiting();
 
     return {
       stop: (options) => this.stop(options),
@@ -274,15 +344,79 @@ export class MidiPlayer {
       resume: () => this.resume(),
       dispose: () => this.dispose(),
       getState: () => this.getState(),
-      next: () => this.next(),
+      next: (from) => this.next(from),
       isOnLoop: () => this.isOnLoop(),
     };
   }
 
-  /** «Далі» — вийти з поточного лупа наприкінці його проходу. */
-  next() {
+  /**
+   * «Продовжити» (`LIST-41`). На лупі — прохання вийти наприкінці проходу; на
+   * примітці — зняти зупинку й пустити транспорт далі просто зараз.
+   */
+  next(from?: string) {
     if (!this.queue) return;
-    this.queue = requestExit(this.queue);
+    const asked = requestExit(this.queue, from);
+    // Черга не взяла прохання: або вже попросили, або тиснули на іншій
+    // зупинці й команда спізнилась. Рушати транспорт на такому натиску
+    // означало б проїхати зупинку, якої той, хто тиснув, і не бачив.
+    if (asked === this.queue) return;
+    this.queue = asked;
+    if (this.stoppedAtPause) this.leavePause();
+    this.emitAwaiting();
+  }
+
+  /**
+   * Зійти з примітки: долити наступне й аж потім пустити транспорт.
+   *
+   * Порядок саме такий, бо доливає нас транспорт (`scheduleRepeat`), а він
+   * стоїть: пустити його порожнім означало б віддати перші імпульси наступної
+   * пісні в тишу.
+   */
+  private leavePause() {
+    this.stoppedAtPause = false;
+    this.topUp({ afterContinue: true });
+    // Друга примітка підряд — це друга зупинка, а не пропущена (`LIST-37`):
+    // `topUp` знову стане на ній, і заводити транспорт знову нема для чого.
+    if (this.stoppedAtPause) return;
+    Tone.Transport.start();
+    this.setState("playing");
+  }
+
+  /**
+   * Стати на примітці. Це СПРАВЖНЯ зупинка транспорту, а не тиша в темп:
+   * поки ведучий говорить, час не йде взагалі, тож накопичене очікування не
+   * тягнеться в наступну пісню (`LIST-37`).
+   *
+   * @param time коли саме зупинитись; без нього — просто зараз. Транспортна
+   * подія приходить із випередженням (`lookAhead`), тому час із неї треба
+   * передати далі, інакше зупинка з'їла б хвіст попередньої пісні.
+   */
+  private stopAtPause(time?: number) {
+    this.pauseArmedAt = null;
+    if (this.stoppedAtPause) return;
+    this.stoppedAtPause = true;
+    if (Tone.Transport.state === "started") Tone.Transport.pause(time);
+    this.setState("paused");
+    this.opts.onChord?.(null);
+    this.emitAwaiting();
+  }
+
+  /** Призначити зупинку на межі примітки — до неї ще грає попередній пункт. */
+  private armPauseStop(atBeats: number) {
+    if (this.pauseArmedAt != null) return;
+    this.pauseArmedAt = atBeats;
+    const id = Tone.Transport.scheduleOnce(
+      (time) => this.stopAtPause(time),
+      beatsToTicksBefore(atBeats),
+    );
+    this.scheduledIds.push(id);
+  }
+
+  private emitAwaiting() {
+    const point = this.awaitingContinueAt();
+    if (point === this.awaitingAt) return;
+    this.awaitingAt = point;
+    this.opts.onAwaitingContinue?.(point);
   }
 
   /**
@@ -291,7 +425,7 @@ export class MidiPlayer {
    * Викликається щоімпульсу з транспорту. Уся логіка «що саме доливати» живе в
    * чистій черзі (`pullPasses`) — тут лише побічні ефекти Tone.
    */
-  private topUp() {
+  private topUp({ afterContinue = false }: { afterContinue?: boolean } = {}) {
     if (!this.queue || !this.part) return;
 
     const playheadBeats = Tone.Transport.ticks / Tone.Transport.PPQ;
@@ -325,6 +459,17 @@ export class MidiPlayer {
       }
     }
 
+    // Черга стала на примітці. Пауза не має довжини, тож її межа — рівно
+    // курсор: усе до неї вже долито, після неї ще нічого немає.
+    if (isOnPause(this.queue)) {
+      // `afterContinue` — нас покликало «продовжити», тобто ми стоїмо рівно на
+      // цій межі, а за нею одразу друга примітка. Призначати нема на коли:
+      // другу зупинку робимо просто зараз, транспорт і так ще не пущено.
+      if (afterContinue) this.stopAtPause();
+      else this.armPauseStop(this.queue.cursorBeats);
+    }
+    this.emitAwaiting();
+
     // Черга вичерпалась — призначаємо кінець там, де закінчиться долите.
     if (this.queue.finished && this.endId == null) {
       const id = Tone.Transport.scheduleOnce(() => {
@@ -341,41 +486,31 @@ export class MidiPlayer {
   /**
    * Темп і розмір нового сегмента — рівно на його межі.
    *
-   * Плавно ведемо темп лише коли знаменник не змінився: BPM рахує імпульси,
-   * і рамп між різними знаменниками міняв би не ту величину (див. `canRampBetween`).
+   * Саме рішення (вести чи різати, і скільки секунд вести) живе в чистому
+   * `planTempoTransition` — тут лишились три дії Tone. Розділено навмисно: це
+   * єдине місце рулону, де вирішує музика, і перевіряти його вухом означало б
+   * не перевіряти взагалі.
    */
   private applySegmentTransition(segment: PlaybackSegment, startBeats: number) {
     if (this.appliedSegmentId === segment.id) return;
     this.appliedSegmentId = segment.id;
 
-    const prevBpm = this.prevBpm;
-    const prevTimeSignature = this.prevTimeSignature;
-    const wantRamp =
-      segment.rampTempo === true &&
-      prevBpm != null &&
-      canRampBetween(prevTimeSignature, segment.timeSignature);
-
-    // Тривалість рампу — рівно один прохід сегмента. Секунди рахуємо по
-    // середньому темпу: точність тут не критична, бо рамп і так плавний.
-    const passBeats = segment.progression.reduce(
-      (sum, event) => sum + Math.max(0, event.duration || 0),
-      0,
-    );
-    const averageBpm = wantRamp ? ((prevBpm as number) + segment.bpm) / 2 : segment.bpm;
-    const rampSeconds = averageBpm > 0 ? (passBeats * 60) / averageBpm : 0;
+    const plan = planTempoTransition(this.tempo, segment);
 
     const id = Tone.Transport.scheduleOnce((time) => {
-      Tone.Transport.timeSignature = barBeats(segment.timeSignature);
-      if (wantRamp && rampSeconds > 0) {
-        Tone.Transport.bpm.rampTo(segment.bpm, rampSeconds, time);
+      Tone.Transport.timeSignature = plan.barBeats;
+      if (plan.rampSeconds > 0) {
+        // ⚠️ САМЕ `linearRampTo`, а не Tone-ове `rampTo` (воно на одиницях `bpm`
+        // веде експонентою): довжину рампу `planTempoTransition` рахує по
+        // лінійному веденню — там і причина.
+        Tone.Transport.bpm.linearRampTo(plan.bpm, plan.rampSeconds, time);
       } else {
-        Tone.Transport.bpm.setValueAtTime(segment.bpm, time);
+        Tone.Transport.bpm.setValueAtTime(plan.bpm, time);
       }
     }, beatsToTicks(startBeats));
     this.scheduledIds.push(id);
 
-    this.prevBpm = segment.bpm;
-    this.prevTimeSignature = segment.timeSignature;
+    this.tempo = { bpm: segment.bpm, timeSignature: segment.timeSignature };
   }
 
   pause() {
@@ -388,6 +523,10 @@ export class MidiPlayer {
     if (this.state !== "paused") {
       return;
     }
+    // Стоїмо на примітці — звідти виводить лише «продовжити» (`next`), і
+    // виводить разом із чергою. Пустити транспорт тут означало б грати далі
+    // порожнечу: наступний пункт ще не долитий.
+    if (this.stoppedAtPause) return;
     Tone.Transport.start();
     this.setState("playing");
   }
@@ -398,6 +537,8 @@ export class MidiPlayer {
     this.clearScheduled();
     this.clearFadeTimer();
     this.queue = null;
+    this.stoppedAtPause = false;
+    this.emitAwaiting();
 
     if (fadeOut > 0) {
       Tone.Destination.volume.rampTo(-Infinity, fadeOut);
@@ -423,6 +564,8 @@ export class MidiPlayer {
     this.clearScheduled();
     this.clearFadeTimer();
     this.queue = null;
+    this.stoppedAtPause = false;
+    this.emitAwaiting();
     try { this.metro?.dispose(); } catch { /* ignore */ }
     try { this.part?.dispose(); } catch { /* ignore */ }
     try { this.pad?.dispose(); } catch { /* ignore */ }

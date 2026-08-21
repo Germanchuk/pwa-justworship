@@ -4,7 +4,9 @@ import type {Descendant, Editor} from "slate";
 
 import ChordsProgressionPlayer from "../../../services/ChordsProgressionPlayer/ChordsProgressionPlayer";
 import {extractHeader} from "../../../services/ChordsProgressionPlayer/extractHeader";
-import {PlayerHighlightContext} from "./PlayerHighlightContext";
+import {PlayerHighlightContext, toggleStartChord} from "./PlayerHighlightContext";
+import {needleFor} from "#modules/Band/audio/hostView";
+import {songTarget} from "#modules/Band/audio/types";
 import {useAudioHostStatus} from "#modules/Band/audio/useBandAudio";
 import {useSongId} from "../../../redux/selectors";
 
@@ -26,13 +28,12 @@ export const SlatePlayerBridge = ({editor, children}: Props) => {
   // поточний акорд. Локальне програвання (фолбек) має пріоритет.
   const hostStatus = useAudioHostStatus();
   const songId = useSongId();
-  const remoteTokenKey =
-    hostStatus?.armed &&
-    hostStatus.songId != null &&
-    String(hostStatus.songId) === String(songId)
-      ? hostStatus.currentTokenKey
-      : null;
-  const currentTokenKey = localPlayerState !== "idle" ? localTokenKey : remoteTokenKey;
+  const currentTokenKey = needleFor({
+    localState: localPlayerState,
+    localTokenKey,
+    status: hostStatus,
+    target: songId == null ? null : songTarget(songId),
+  });
 
   useEffect(() => {
     // Капо свідомо НЕ впливає на звук (рішення 2026-08-09): воно змінює лише
@@ -64,7 +65,10 @@ export const SlatePlayerBridge = ({editor, children}: Props) => {
   );
 
   const value = useMemo(
-    () => ({currentTokenKey, selectedTokenKey}),
+    // Тап тут ПОЗНАЧАЄ акорд, а не запускає: на сторінці пісні між вибором і
+    // звуком стоїть кнопка (`PLAY-14`). У зібранні те саме місце значить інше
+    // — див. `GatheringItemView`.
+    () => ({currentTokenKey, selectedTokenKey, onChordTap: toggleStartChord}),
     [currentTokenKey, selectedTokenKey],
   );
 

@@ -1,9 +1,9 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useContext } from "react";
 import type { MouseEvent } from "react";
 import type { RenderElementProps } from "slate-react";
 
-import ChordsProgressionPlayer from "../../../../services/ChordsProgressionPlayer/ChordsProgressionPlayer";
 import { useCanPlay } from "../../../../mode";
+import { PlayerHighlightContext } from "../../player/PlayerHighlightContext";
 import { NoteCards } from "../../comments/NoteCards";
 import { useNoteHeadsFor } from "../../comments/NoteHeadsContext";
 import { useRowHidden } from "../../display/useRowHidden";
@@ -13,7 +13,9 @@ import "./ChordLine.css";
 
 export const ChordLine = ({ attributes, children, element }: RenderElementProps) => {
   const { isFirst } = useFirstInSectionInfo(element);
-  const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
+  // Що зробить тап, вирішує екран: пісня позначає акорд, зібрання одразу з
+  // нього грає (`onChordTap`). Рядок лише повідомляє, по чому тапнули.
+  const { onChordTap } = useContext(PlayerHighlightContext);
   // Вибір акорду, з якого продовжити гру, — функція режиму читання.
   const canPlay = useCanPlay();
   const hidden = useRowHidden(element);
@@ -31,10 +33,9 @@ export const ChordLine = ({ attributes, children, element }: RenderElementProps)
       if (!key) return;
       e.preventDefault();
       e.stopPropagation();
-      const current = player.getStartChordTokenKey();
-      player.setStartChordTokenKey(current === key ? null : key);
+      onChordTap(key);
     },
-    [canPlay, player],
+    [canPlay, onChordTap],
   );
 
   return (

@@ -13,6 +13,7 @@ import {getHumanizeFactor, getPlayerSettings} from "./playerSettings";
 type StateListener = (state: MidiPlayerState) => void;
 type ChordListener = (event: PlannedChord | null) => void;
 type SelectionListener = (eventKey: string | null) => void;
+type AwaitingListener = (point: string | null) => void;
 type ContentProvider = () => SongContentSnapshot | null;
 
 const sanitizeBpm = (bpm: number | undefined, fallback: number): number =>
@@ -34,9 +35,24 @@ class ChordsProgressionPlayer {
   private stateListeners = new Set<StateListener>();
   private chordListeners = new Set<ChordListener>();
   private selectionListeners = new Set<SelectionListener>();
+  private awaitingListeners = new Set<AwaitingListener>();
+  /**
+   * Пункт, на якому служіння чекає «продовжити», — або `null`, коли не чекає.
+   * Не прапорець: натиск їде назад цим самим пунктом і тим доводить, що
+   * продовжують саме ту зупинку, яку бачив той, хто тиснув.
+   */
+  private awaitingAt: string | null = null;
   private currentChordEvent: PlannedChord | null = null;
   private selectedKey: string | null = null;
   private contentProvider: ContentProvider | null = null;
+  /**
+   * Покоління запуску. Між «натиснули грати» і першим звуком стоїть
+   * ЗАВАНТАЖЕННЯ СЕМПЛІВ — і за цей час користувач устигає піти зі сторінки.
+   * Без покоління `stop` у цю мить не робив нічого видимого, а запуск, що
+   * приїжджав після нього, воскрешав звук уже нікому не потрібного екрана —
+   * і спинити його було нічим, бо кнопок на екрані вже немає.
+   */
+  private startGeneration = 0;
 
   static getInstance = () => {
     if (!ChordsProgressionPlayer.instance) {
@@ -70,21 +86,41 @@ class ChordsProgressionPlayer {
     // діє з наступного разу.
     const settings = getPlayerSettings();
 
+    const generation = ++this.startGeneration;
+
     this.setState("loading");
     try {
-      this.controls = await playSegments(segments, {
+      const controls = await playSegments(segments, {
         padPreset: settings.padPreset,
         piano: settings.piano,
         pianoVolume: settings.pianoVolume,
         humanize: getHumanizeFactor(settings.humanize),
         ...options,
         onChord: (chord) => this.emitChord(chord),
+        onAwaitingContinue: (point) => this.applyAwaiting(point),
         onEnded: () => {
           this.handlePlaybackComplete();
           options.onEnded?.();
         },
       });
-      this.setState("playing");
+
+      // Поки вантажились семпли, покоління змінилось: нас або спинили, або
+      // перезапустили. Питання лише одне — чи транспорт уже ЧУЖИЙ. Він чужий,
+      // коли новіший запуск сам дійшов до звуку («playing»/«paused»); тоді
+      // глушити означало б обірвати те, що людина щойно попросила. Поки той
+      // запуск ще вантажиться («loading»), транспорт нічий — і наш недоречний
+      // звук треба прибрати, інакше він грає до кінця служіння сам собі.
+      if (generation !== this.startGeneration) {
+        if (this.state === "idle" || this.state === "loading") {
+          controls.stop({ hard: true });
+        }
+        return;
+      }
+
+      this.controls = controls;
+      // Не завжди «playing»: служіння, що починається з примітки, стало на ній
+      // ще до того, як ми сюди дійшли.
+      this.setState(controls.getState());
     } catch (error) {
       this.handlePlaybackComplete();
       throw error;
@@ -104,9 +140,26 @@ class ChordsProgressionPlayer {
     return this.controls?.isOnLoop() ?? false;
   }
 
-  /** «Далі»: вийти з поточного лупа наприкінці його проходу. */
-  next() {
-    this.controls?.next();
+  /**
+   * «Продовжити» (`LIST-41`): зняти зупинку на примітці або вийти з лупа
+   * програша. Одна дія на обидва очікування — саме тому в гурті це одна
+   * кнопка, і байдуже, хто з гурту її натиснув.
+   */
+  next(from?: string) {
+    this.controls?.next(from);
+  }
+
+  /** Пункт, на якому служіння чекає «продовжити». `null` — не чекає. */
+  getAwaitingPoint() {
+    return this.awaitingAt;
+  }
+
+  onAwaitingContinueChange(listener: AwaitingListener) {
+    this.awaitingListeners.add(listener);
+    listener(this.awaitingAt);
+    return () => {
+      this.awaitingListeners.delete(listener);
+    };
   }
 
   onStateChange(listener: StateListener) {
@@ -160,10 +213,17 @@ class ChordsProgressionPlayer {
   resume = () => {
     if (this.state !== "paused") return;
     this.controls?.resume();
-    this.setState("playing");
+    // Плеєр міг і не піти: зупинка на примітці — не та пауза, з неї виводить
+    // «продовжити» (`next`), бо йти далі там треба ЧЕРГОЮ, а не транспортом.
+    // Питаємо його, а не проголошуємо: інакше кнопки показували б «грає» під
+    // тишею.
+    this.setState(this.controls?.getState() ?? "playing");
   };
 
   stop = () => {
+    // Спершу покоління, і лише потім ранній вихід: запуск може саме зараз
+    // вантажити семпли, а його стан («loading») ще не «idle».
+    this.startGeneration += 1;
     if (this.state === "idle") return;
     this.controls?.stop({ hard: true });
     this.handlePlaybackComplete();
@@ -222,9 +282,20 @@ class ChordsProgressionPlayer {
     this.selectionListeners.forEach((listener) => listener(this.selectedKey));
   }
 
+  private applyAwaiting(point: string | null) {
+    if (this.awaitingAt === point) return;
+    this.awaitingAt = point;
+    // Зупинка на примітці — це стан плеєра, а не лише напис на кнопці: екран
+    // мусить побачити «paused» тим самим шляхом, яким бачить решту. Тому тут
+    // не лише розсилка: стан перечитуємо в плеєра й собі.
+    this.setState(this.controls?.getState() ?? this.state);
+    this.awaitingListeners.forEach((listener) => listener(point));
+  }
+
   private handlePlaybackComplete() {
     this.emitChord(null);
     this.controls = null;
+    this.applyAwaiting(null);
     this.setState("idle");
   }
 }

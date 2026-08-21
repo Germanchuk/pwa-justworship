@@ -56,7 +56,7 @@ describe("розкладка проходу в абсолютний час", () 
   });
 
   it("префікс пункту розводить однакові ключі різних пісень", () => {
-    const pass = planPass(segment, 0, { ...exact, tokenKeyPrefix: "p3" });
+    const pass = planPass({ ...segment, tokenKeyPrefix: "p3" }, 0, exact);
 
     expect(pass.chords.map((c) => c.tokenKey)).toEqual(["p3:0:0:0", "p3:0:0:1"]);
   });

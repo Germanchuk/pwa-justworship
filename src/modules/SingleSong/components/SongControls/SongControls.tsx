@@ -3,7 +3,6 @@ import {
   ChevronDoubleUpIcon,
   PauseIcon,
   PlayIcon,
-  SpeakerWaveIcon,
   StopIcon,
 } from "@heroicons/react/24/outline";
 import {MoreOptions} from "./MoreOptions/MoreOptions";
@@ -20,7 +19,10 @@ import {
   useToggleSongMeta,
 } from "../SlateLyricsPlayground/display/useSongMeta";
 import { useBandOrNull } from "#modules/Band/BandLayout";
+import { AudioDestination } from "#modules/Band/audio/AudioDestination";
 import BandAudioChannel from "#modules/Band/audio/bandAudioChannel";
+import { hostStateFor, routeFor } from "#modules/Band/audio/hostView";
+import { songTarget } from "#modules/Band/audio/types";
 import { useAudioHostStatus } from "#modules/Band/audio/useBandAudio";
 import { useCurrentUsername } from "../SlateLyricsPlayground/elements/hooks";
 import { useSongId } from "../../redux/selectors";
@@ -46,11 +48,15 @@ export const SongControls = () => {
 
   // Хост онлайн і озброєний → кнопки стають пультом: команди їдуть у
   // band-кімнату, звук грає планшет за пультом. Інакше — локально, як завжди.
-  const remoteActive = hostStatus?.armed === true;
-  const hostOnMySong =
-    remoteActive && hostStatus.songId != null && String(hostStatus.songId) === String(songId);
-  // Хост грає ІНШУ пісню → мої кнопки в idle; мій плей перехоплює («останній перемагає»).
-  const playbackState = remoteActive ? (hostOnMySong ? hostStatus.state : "idle") : localState;
+  // Правило одне на застосунок (`routeFor`): звук, що вже йде з цього
+  // пристрою, лишається його — хост, який озброївся посеред пісні, забирає
+  // НАСТУПНИЙ запуск, а не той, що звучить.
+  const remoteActive = routeFor({ localState, status: hostStatus }) === "host";
+  // Хост грає ІНШУ пісню (або ціле служіння) → мої кнопки в idle; мій плей
+  // перехоплює («останній перемагає»).
+  const hostState = songId == null ? "idle" : hostStateFor(hostStatus, songTarget(songId));
+  const hostOnMySong = remoteActive && hostState !== "idle";
+  const playbackState = remoteActive ? hostState : localState;
 
   const hostDesignated =
     (band as {audioHostUserId?: number | null} | null)?.audioHostUserId != null;
@@ -65,10 +71,12 @@ export const SongControls = () => {
 
   const sendCommand = useCallback(
     (action: "play" | "pause" | "resume" | "stop") => {
+      // Пісні немає — командувати нема чим: хост відкриває документ саме по
+      // цьому id.
+      if (songId == null) return;
       BandAudioChannel.getInstance().sendCommand({
         action,
-        songId: songId ?? null,
-        startTokenKey: action === "play" ? player.getStartChordTokenKey() : null,
+        target: songTarget(songId, action === "play" ? player.getStartChordTokenKey() : null),
         issuedBy: username ?? null,
       });
     },
@@ -121,19 +129,11 @@ export const SongControls = () => {
         {canPlay && (
           <div className="flex gap-1 items-center">
             {/* Куди йде звук: на хоста чи з цього пристрою (хост офлайн). */}
-            {remoteActive ? (
-              <span
-                className="flex items-center gap-0.5 text-[10px] font-semibold text-blue-900 max-w-24"
-                title={`Звук грає: ${hostStatus?.username ?? "хост"}`}
-              >
-                <SpeakerWaveIcon className="size-3.5 shrink-0" />
-                <span className="truncate">{hostStatus?.username ?? "хост"}</span>
-              </span>
-            ) : hostDesignated ? (
-              <span className="text-[10px] font-semibold text-stone-400" title="Хост звуку офлайн">
-                звук тут
-              </span>
-            ) : null}
+            <AudioDestination
+              route={remoteActive ? "host" : "local"}
+              status={hostStatus}
+              hostDesignated={hostDesignated}
+            />
             <Button
               variant="outline"
               size="icon"

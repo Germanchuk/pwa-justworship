@@ -12,7 +12,9 @@ import {Button} from "@/components/ui/button";
 
 const STATE_LABELS: Record<AudioHostEngineState["state"], string> = {
   idle: "Тиша — чекаю команду",
-  loading: "Завантажую пісню…",
+  // Вантажитись може і пісня, і ціле служіння — назва того, що піднімається,
+  // стоїть рядком нижче.
+  loading: "Завантажую…",
   playing: "Грає",
   paused: "На паузі",
 };
@@ -131,9 +133,9 @@ export default function AudioHost() {
               <div className="text-lg font-bold text-stone-800">
                 {STATE_LABELS[engineState.state]}
               </div>
-              {engineState.songName && (
+              {engineState.playingName && (
                 <div className="text-sm text-stone-500 mt-1">
-                  {engineState.songName}
+                  {engineState.playingName}
                   {engineState.controlledBy && ` — керує ${engineState.controlledBy}`}
                 </div>
               )}
