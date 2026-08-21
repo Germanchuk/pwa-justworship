@@ -6,6 +6,7 @@ import {
   hostStateFor,
   isSameTarget,
   needleFor,
+  routeFor,
 } from "./hostView";
 import { gatheringTarget, songTarget, type AudioHostStatus } from "./types";
 
@@ -188,5 +189,33 @@ describe("hostAwaitingPoint — на чому служіння на хості �
     const legacy = host({ playing: gatheringTarget(3) });
     delete legacy.awaitingAt;
     expect(hostAwaitingPoint(legacy, gathering)).toBe(null);
+  });
+});
+
+describe("routeFor — куди йдуть мої кнопки", () => {
+  it("хоста немає — усе своє", () => {
+    expect(routeFor({ localState: "idle", status: null })).toBe("local");
+  });
+
+  it("хост призначений, але не озброєний — усе одно своє", () => {
+    expect(routeFor({ localState: "idle", status: host({ armed: false }) })).toBe("local");
+  });
+
+  it("хост живий, я мовчу — кнопки стають пультом", () => {
+    expect(routeFor({ localState: "idle", status: host() })).toBe("host");
+  });
+
+  it("я вже граю — хост, що зʼявився, мене не забирає", () => {
+    expect(routeFor({ localState: "playing", status: host() })).toBe("local");
+  });
+
+  it("моя зупинка на примітці — це теж мій звук", () => {
+    expect(routeFor({ localState: "paused", status: host() })).toBe("local");
+  });
+
+  it("я ще вантажу семпли — це вже мій звук, хост його не забирає", () => {
+    // Інакше «зупинити» пішло б на хост, а звук за секунду піднявся б ТУТ — і
+    // спинити його не було б чим.
+    expect(routeFor({ localState: "loading", status: host() })).toBe("local");
   });
 });

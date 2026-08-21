@@ -5,13 +5,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AudioDestination } from "#modules/Band/audio/AudioDestination";
 import BandAudioChannel from "#modules/Band/audio/bandAudioChannel";
-import { hostAwaitingPoint, hostStateFor, isHostLive } from "#modules/Band/audio/hostView";
+import { hostAwaitingPoint, hostStateFor, routeFor } from "#modules/Band/audio/hostView";
 import { FIRST_POINT, gatheringTarget, type PlaybackAction } from "#modules/Band/audio/types";
 import { useAudioHostStatus } from "#modules/Band/audio/useBandAudio";
 import { useCurrentUsername } from "#modules/SingleSong/components/SlateLyricsPlayground/elements/hooks";
 import ChordsProgressionPlayer from "#modules/SingleSong/services/ChordsProgressionPlayer/ChordsProgressionPlayer";
 import type { Gathering } from "./buildGathering";
-import { useGatheringStart } from "./useGatheringStart";
 
 /**
  * «Грати» для всього служіння.
@@ -22,6 +21,12 @@ import { useGatheringStart } from "./useGatheringStart";
  * (`LIST-46`, `PLAY-38`). Хоста немає → грає цей пристрій, і це не аварія, а
  * сценарій «пройти план удома». Куди саме піде звук, видно ДО натиску —
  * ліворуч від кнопки (`PLAY-29`).
+ *
+ * ⚠️ ХОСТ, ЩО ЗʼЯВИВСЯ ПОСЕРЕД СЛУЖІННЯ, НЕ ЗАБИРАЄ ТЕ, ЩО ВЖЕ ГРАЄ ТУТ
+ * (`routeFor`): усі три кнопки — і «зупинити», і «продовжити» — до кінця
+ * лишаються при своєму звуці, а пультом бар стане з наступного запуску. Тому
+ * «продовжити» в локальному режимі нікого в гурті не смикає (`LIST-46`), і
+ * тому ж напис ліворуч читає МАРШРУТ, а не сам факт живого хоста.
  *
  * Протокол той самий, що й у пісні: та сама кімната, те саме «останній
  * перемагає». Тому запуск служіння глушить пісню, а запуск пісні — служіння
@@ -43,7 +48,9 @@ import { useGatheringStart } from "./useGatheringStart";
  *
  * ⚠️ ЦЕ НЕ ЄДИНИЙ СПОСІБ ЗАПУСТИТИ. Тап по акорду просто в тексті означає те
  * саме «грай», лише з точнішої адреси (`LIST-43`), і йде тією самою дорогою —
- * `useGatheringStart`. Тому кнопка тут не тримає ніякої «своєї» логіки старту.
+ * `useGatheringStart`. Тому кнопка тут не тримає ніякої «своєї» логіки старту:
+ * дія приходить пропсом, з екрана, де в неї є ще й друге вухо — той, хто
+ * тиснув, мусить дізнатись, що звук не пішов (`PLAY-30`).
  *
  * ─── ТРИ КНОПКИ, І ЖОДНОЇ ПАУЗИ ────────────────────────────────────────────
  * «Грати», «зупинити» і — коли служіння чекає — «продовжити». Паузи серед них
@@ -63,9 +70,9 @@ import { useGatheringStart } from "./useGatheringStart";
  *
  * ─── ЧОМУ ЦЕ ОКРЕМИЙ КОМПОНЕНТ, А НЕ ЧАСТИНА ЕКРАНА ────────────────────────
  * Він живе у верхньому барі, тобто вище роутів — жодного контексту з них не
- * бачить (див. `PageBar`). Звідси й пропси: `listId` та «чи призначений хост»
- * приходять з екрана, бо самому їх узяти нема звідки. Плеєр і канал —
- * синглтони, тож до них він дістає сам.
+ * бачить (див. `PageBar`). Звідси й пропси: `listId`, «чи призначений хост» і
+ * сам запуск приходять з екрана, бо самому їх узяти нема звідки. Плеєр і
+ * канал — синглтони, тож до них він дістає сам.
  */
 interface Props {
   /** Заголовок сторінки — дата служіння. Своє місце в барі кнопки з ним ділять. */
@@ -76,9 +83,22 @@ interface Props {
   listId: string | number;
   /** Чи взагалі призначений хост звуку в складі гурту (`PLAY-29`). */
   hostDesignated: boolean;
+  /**
+   * «Грай служіння звідси». Приходить з екрана, хоч хук і поруч
+   * (`useGatheringStart`): запуск буває невдалим, а сказати про це нема де —
+   * місця в барі 241px, і напис живе на екрані. Два виклики хука дали б два
+   * різні «не вдалося», і тап по акорду мовчав би.
+   */
+  onPlayFrom: (from: string) => void;
 }
 
-export const GatheringControls = ({ title, gathering, listId, hostDesignated }: Props) => {
+export const GatheringControls = ({
+  title,
+  gathering,
+  listId,
+  hostDesignated,
+  onPlayFrom,
+}: Props) => {
   const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
   const [localState, setLocalState] = useState(player.getState());
   const [localAwaitingAt, setLocalAwaitingAt] = useState(player.getAwaitingPoint());
@@ -90,7 +110,11 @@ export const GatheringControls = ({ title, gathering, listId, hostDesignated }: 
   // лишається «playing», а кнопка мусить з'явитись саме там.
   useEffect(() => player.onAwaitingContinueChange(setLocalAwaitingAt), [player]);
 
-  const remoteActive = isHostLive(hostStatus);
+  // Куди йдуть ці кнопки — правило одне на застосунок (`routeFor`): звук, що
+  // вже йде звідси, лишається тут, і хост, який озброївся посеред служіння,
+  // забирає лише НАСТУПНИЙ запуск. Інакше «зупинити» поїхало б у кімнату
+  // гурту, а звук грав би далі в цьому динаміку.
+  const remoteActive = routeFor({ localState, status: hostStatus }) === "host";
   const target = gatheringTarget(listId);
   // Хост грає щось інше (іншу пісню, інше служіння) → мої кнопки в тиші, а мій
   // плей його перехопить.
@@ -113,8 +137,7 @@ export const GatheringControls = ({ title, gathering, listId, hostDesignated }: 
 
   // Кнопка — це та сама дія, що й тап по акорду в тексті, лише з найгрубішою
   // адресою: з першого пункту (`useGatheringStart`).
-  const start = useGatheringStart(listId, gathering);
-  const handlePlay = useCallback(() => start(FIRST_POINT), [start]);
+  const handlePlay = useCallback(() => onPlayFrom(FIRST_POINT), [onPlayFrom]);
 
   const handleContinue = useCallback(() => {
     // Пункт, який ЦЕЙ екран бачить зупиненим, їде разом із натиском: тиснуть
@@ -142,7 +165,11 @@ export const GatheringControls = ({ title, gathering, listId, hostDesignated }: 
 
       <div className="flex shrink-0 items-center gap-1">
         {/* Куди піде звук — видно до натиску (`PLAY-29`, `LIST-46`). */}
-        <AudioDestination status={hostStatus} hostDesignated={hostDesignated} />
+        <AudioDestination
+          route={remoteActive ? "host" : "local"}
+          status={hostStatus}
+          hostDesignated={hostDesignated}
+        />
         {awaitingAt != null && (
           <Button
             variant="outline"

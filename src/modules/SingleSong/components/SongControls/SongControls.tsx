@@ -21,7 +21,7 @@ import {
 import { useBandOrNull } from "#modules/Band/BandLayout";
 import { AudioDestination } from "#modules/Band/audio/AudioDestination";
 import BandAudioChannel from "#modules/Band/audio/bandAudioChannel";
-import { hostStateFor, isHostLive } from "#modules/Band/audio/hostView";
+import { hostStateFor, routeFor } from "#modules/Band/audio/hostView";
 import { songTarget } from "#modules/Band/audio/types";
 import { useAudioHostStatus } from "#modules/Band/audio/useBandAudio";
 import { useCurrentUsername } from "../SlateLyricsPlayground/elements/hooks";
@@ -48,7 +48,10 @@ export const SongControls = () => {
 
   // Хост онлайн і озброєний → кнопки стають пультом: команди їдуть у
   // band-кімнату, звук грає планшет за пультом. Інакше — локально, як завжди.
-  const remoteActive = isHostLive(hostStatus);
+  // Правило одне на застосунок (`routeFor`): звук, що вже йде з цього
+  // пристрою, лишається його — хост, який озброївся посеред пісні, забирає
+  // НАСТУПНИЙ запуск, а не той, що звучить.
+  const remoteActive = routeFor({ localState, status: hostStatus }) === "host";
   // Хост грає ІНШУ пісню (або ціле служіння) → мої кнопки в idle; мій плей
   // перехоплює («останній перемагає»).
   const hostState = songId == null ? "idle" : hostStateFor(hostStatus, songTarget(songId));
@@ -126,7 +129,11 @@ export const SongControls = () => {
         {canPlay && (
           <div className="flex gap-1 items-center">
             {/* Куди йде звук: на хоста чи з цього пристрою (хост офлайн). */}
-            <AudioDestination status={hostStatus} hostDesignated={hostDesignated} />
+            <AudioDestination
+              route={remoteActive ? "host" : "local"}
+              status={hostStatus}
+              hostDesignated={hostDesignated}
+            />
             <Button
               variant="outline"
               size="icon"

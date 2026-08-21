@@ -39,6 +39,34 @@ export const isSameTarget = (
 export const isHostLive = (status: AudioHostStatus | null | undefined): boolean =>
   status?.armed === true;
 
+/**
+ * КУДИ ЙДУТЬ МОЇ КНОПКИ — на хост чи у власний динамік.
+ *
+ * Правило одне на весь застосунок, і воно те саме, що й у голки (`needleFor`):
+ * **звук, який уже йде з мого пристрою, лишається моїм**. Хост живий і я мовчу
+ * — кнопки стають пультом (`PLAY-27`); хоста немає — граю сам, і це не аварія,
+ * а «пройти план удома» (`LIST-46`, `PLAY-30`).
+ *
+ * ⚠️ ЩО РОБИТЬ ХОСТ, ЯКИЙ ЗʼЯВИВСЯ ПОСЕРЕД МОЄЇ ГРИ: нічого. Він забирає
+ * НАСТУПНИЙ запуск, а не поточний. Інакше «зупинити» й «продовжити» посеред
+ * служіння поїхали б у кімнату гурту, а звук лишився б тут — на екрані кнопки
+ * від чужого звуку, у динаміку свій, і спинити його нічим. Той самий доказ
+ * стосується й `loading`: семпли ще вантажаться, але звук уже піднімається
+ * саме тут.
+ *
+ * Симетрично: поки я граю сам, чужий хост мене не глушить — «останній
+ * перемагає» (`PLAY-28`) стосується того, хто звуком керує, а тут ним керую я.
+ */
+export type PlaybackRoute = "host" | "local";
+
+export const routeFor = ({
+  localState,
+  status,
+}: {
+  localState: AudioHostPlaybackState;
+  status: AudioHostStatus | null | undefined;
+}): PlaybackRoute => (localState === "idle" && isHostLive(status) ? "host" : "local");
+
 const hostPlays = (
   status: AudioHostStatus | null | undefined,
   target: PlaybackTarget,
