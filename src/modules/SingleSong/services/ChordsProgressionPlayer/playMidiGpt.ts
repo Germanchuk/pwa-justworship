@@ -3,8 +3,9 @@ import {getPadPresetDef, type PadPreset, type PadVoice} from "./createPad/padPre
 import {createPiano} from "./createPiano/createPiano";
 import {DEFAULT_BPM, DEFAULT_TIME_SIGNATURE} from "./songDefaults";
 import type {PlannedChord, PlaybackSegment} from "./segments/model";
-import {barBeats, canRampBetween} from "./segments/model";
+import {barBeats} from "./segments/model";
 import {planPass} from "./segments/planPass";
+import {planTempoTransition, type TempoState} from "./segments/tempoTransition";
 import {
   awaitingPoint,
   createQueueState,
@@ -203,8 +204,8 @@ export class MidiPlayer {
   private endId: number | null = null;
   /** Сегмент, для якого вже застосовані темп і розмір. */
   private appliedSegmentId: string | null = null;
-  private prevBpm: number | null = null;
-  private prevTimeSignature: [number, number] | null = null;
+  /** Темп і розмір, у які транспорт уже переведений. `null` — ще нічого. */
+  private tempo: TempoState | null = null;
   /** Голка стоїть на примітці: транспорт справді зупинений (`LIST-37`). */
   private stoppedAtPause = false;
   /** Імпульс, на якому вже призначена зупинка. `null` — не призначена. */
@@ -311,8 +312,7 @@ export class MidiPlayer {
 
     this.queue = createQueueState(segments, introBeats);
     this.appliedSegmentId = null;
-    this.prevBpm = null;
-    this.prevTimeSignature = null;
+    this.tempo = null;
     this.stoppedAtPause = false;
     this.pauseArmedAt = null;
     this.awaitingAt = null;
@@ -486,41 +486,31 @@ export class MidiPlayer {
   /**
    * Темп і розмір нового сегмента — рівно на його межі.
    *
-   * Плавно ведемо темп лише коли знаменник не змінився: BPM рахує імпульси,
-   * і рамп між різними знаменниками міняв би не ту величину (див. `canRampBetween`).
+   * Саме рішення (вести чи різати, і скільки секунд вести) живе в чистому
+   * `planTempoTransition` — тут лишились три дії Tone. Розділено навмисно: це
+   * єдине місце рулону, де вирішує музика, і перевіряти його вухом означало б
+   * не перевіряти взагалі.
    */
   private applySegmentTransition(segment: PlaybackSegment, startBeats: number) {
     if (this.appliedSegmentId === segment.id) return;
     this.appliedSegmentId = segment.id;
 
-    const prevBpm = this.prevBpm;
-    const prevTimeSignature = this.prevTimeSignature;
-    const wantRamp =
-      segment.rampTempo === true &&
-      prevBpm != null &&
-      canRampBetween(prevTimeSignature, segment.timeSignature);
-
-    // Тривалість рампу — рівно один прохід сегмента. Секунди рахуємо по
-    // середньому темпу: точність тут не критична, бо рамп і так плавний.
-    const passBeats = segment.progression.reduce(
-      (sum, event) => sum + Math.max(0, event.duration || 0),
-      0,
-    );
-    const averageBpm = wantRamp ? ((prevBpm as number) + segment.bpm) / 2 : segment.bpm;
-    const rampSeconds = averageBpm > 0 ? (passBeats * 60) / averageBpm : 0;
+    const plan = planTempoTransition(this.tempo, segment);
 
     const id = Tone.Transport.scheduleOnce((time) => {
-      Tone.Transport.timeSignature = barBeats(segment.timeSignature);
-      if (wantRamp && rampSeconds > 0) {
-        Tone.Transport.bpm.rampTo(segment.bpm, rampSeconds, time);
+      Tone.Transport.timeSignature = plan.barBeats;
+      if (plan.rampSeconds > 0) {
+        // ⚠️ САМЕ `linearRampTo`, а не Tone-ове `rampTo` (воно на одиницях `bpm`
+        // веде експонентою): довжину рампу `planTempoTransition` рахує по
+        // лінійному веденню — там і причина.
+        Tone.Transport.bpm.linearRampTo(plan.bpm, plan.rampSeconds, time);
       } else {
-        Tone.Transport.bpm.setValueAtTime(segment.bpm, time);
+        Tone.Transport.bpm.setValueAtTime(plan.bpm, time);
       }
     }, beatsToTicks(startBeats));
     this.scheduledIds.push(id);
 
-    this.prevBpm = segment.bpm;
-    this.prevTimeSignature = segment.timeSignature;
+    this.tempo = { bpm: segment.bpm, timeSignature: segment.timeSignature };
   }
 
   pause() {

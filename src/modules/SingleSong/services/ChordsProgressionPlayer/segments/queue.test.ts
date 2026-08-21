@@ -1,26 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { ChordEvent } from "../getMidiFromSections/utils/createMidiFromProgression";
 import type { PlaybackSegment } from "./model";
 import { canRampBetween } from "./model";
 import { awaitingPoint, createQueueState, isOnLoop, isOnPause, pullPasses, requestExit } from "./queue";
-
-/** Прогресія на `bars` тактів 4/4: один акорд на такт. */
-const bars = (count: number): ChordEvent[] =>
-  Array.from({ length: count }, (_, i) => ({
-    chord: "C",
-    duration: 4,
-    tokenKey: `0:0:${i}`,
-  }));
-
-const segment = (over: Partial<PlaybackSegment> = {}): PlaybackSegment => ({
-  id: "s",
-  progression: bars(1),
-  bpm: 80,
-  timeSignature: [4, 4],
-  kind: "once",
-  ...over,
-});
+import { bars, makeSegment as segment } from "./segmentFixtures";
 
 describe("черга сегментів", () => {
   it("порожня черга одразу вичерпана", () => {
