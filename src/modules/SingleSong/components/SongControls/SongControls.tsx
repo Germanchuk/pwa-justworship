@@ -1,6 +1,4 @@
 import {
-  ChevronDoubleDownIcon,
-  ChevronDoubleUpIcon,
   PauseIcon,
   PlayIcon,
   StopIcon,
@@ -13,11 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import {ConnectionStatus} from "../ConnectionStatus/ConnectionStatus";
 import {NotesAudienceSelect} from "../SlateLyricsPlayground/comments/NotesAudienceSelect";
-import { useCanAnnotate, useCanPlay, useMetaHideApplies } from "../../mode";
-import {
-  useSongMetaVisible,
-  useToggleSongMeta,
-} from "../SlateLyricsPlayground/display/useSongMeta";
+import { useCanAnnotate, useCanPlay } from "../../mode";
 import { useBandOrNull } from "#modules/Band/BandLayout";
 import { AudioDestination } from "#modules/Band/audio/AudioDestination";
 import BandAudioChannel from "#modules/Band/audio/bandAudioChannel";
@@ -33,11 +27,6 @@ export const SongControls = () => {
   // Вибір, чиї примітки я бачу, — функція режиму приміток. Кнопки програвання
   // й ця не перетинаються в часі, тож ділять те саме місце в панелі.
   const canAnnotate = useCanAnnotate();
-  // Згортання шапки пісні. Кнопка стоїть тут, а не в самій шапці, бо разом із
-  // шапкою вона б і зникла — повертати було б нічим.
-  const metaHideApplies = useMetaHideApplies();
-  const songMetaVisible = useSongMetaVisible();
-  const toggleSongMeta = useToggleSongMeta();
   const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
   const [localState, setLocalState] = useState(player.getState());
 
@@ -121,8 +110,8 @@ export const SongControls = () => {
     <div className="w-full flex justify-between items-center gap-1">
       {/* Перемикач режимів і «три крапки» стоять праворуч завжди — це вхід у
           пісню, який не має їздити по панелі. Усе, що зʼявляється й зникає з
-          режимом (плеєр, адресат приміток, згортання шапки), тулиться ліворуч,
-          тож жодна кнопка не міняє місця, коли сусідня зникла. */}
+          режимом (плеєр, адресат приміток), тулиться ліворуч, тож жодна кнопка
+          не міняє місця, коли сусідня зникла. */}
       <div className="flex gap-1 items-center min-w-0">
         {/* Стан звʼязку малюється рамкою самої панелі — місця не займає. */}
         <ConnectionStatus />
@@ -165,27 +154,6 @@ export const SongControls = () => {
           </div>
         )}
         {canAnnotate && <NotesAudienceSelect />}
-        {metaHideApplies && (
-          <Button
-            variant="outline"
-            size="icon"
-            className="rounded-full border-dashed"
-            onClick={toggleSongMeta}
-            aria-pressed={!songMetaVisible}
-            aria-label={songMetaVisible ? "Сховати шапку пісні" : "Показати шапку пісні"}
-            title={
-              songMetaVisible
-                ? "Сховати назву й дані пісні"
-                : "Показати назву й дані пісні (темп, розмір, тональність, капо)"
-            }
-          >
-            {songMetaVisible ? (
-              <ChevronDoubleUpIcon className="w-6 h-6" />
-            ) : (
-              <ChevronDoubleDownIcon className="w-6 h-6" />
-            )}
-          </Button>
-        )}
       </div>
 
       <div className="flex gap-1 items-center shrink-0">
