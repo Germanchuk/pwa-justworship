@@ -9,6 +9,7 @@ import {
   MessageSquarePlus,
   PencilOff,
   StickyNote,
+  Strikethrough,
   Trash2,
   X,
 } from "lucide-react";
@@ -23,6 +24,7 @@ import {
   COMMENT_PALETTE,
   highlightBg,
   PUBLIC_COMMENT_COLOR,
+  STRIKE_COLOR,
 } from "./colors";
 import { setPendingFocus } from "./pendingFocus";
 import { isVisibleTo, privateTo, publicVisibility } from "./visibility";
@@ -379,6 +381,26 @@ export const CommentsFab = () => {
                     )}
                   </ColoredIconButton>
                 ))}
+                {/*
+                  Закреслення — останнє в списку, тобто НАЙНИЖЧА кнопка, впритул
+                  до самого FAB: контейнер росте вгору (`bottom-full`), тож
+                  останній child опиняється знизу.
+
+                  Іконка тут інша, ніж у кольорових: ті розрізняються кольором,
+                  а ця кольору не має — її відрізняє саме іконка. Вид позначки
+                  (виділення чи нотатка) лишається в підказці.
+                */}
+                <ColoredIconButton
+                  color={STRIKE_COLOR}
+                  title={`${phase === "color-highlight" ? "Виділити" : "Нотатка"}: закреслення`}
+                  onClick={() =>
+                    phase === "color-highlight"
+                      ? applyHighlight(STRIKE_COLOR)
+                      : applyNote(STRIKE_COLOR)
+                  }
+                >
+                  <Strikethrough className="size-5" />
+                </ColoredIconButton>
               </>
             )}
 

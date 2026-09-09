@@ -1,6 +1,7 @@
 import * as Tone from "tone";
 import {getPadPresetDef, type PadPreset, type PadVoice} from "./createPad/padPresets";
 import {createPiano} from "./createPiano/createPiano";
+import {bindMetronome, getMetronomeVolumeDb, unbindMetronome} from "./metronomeTrim";
 import {DEFAULT_BPM, DEFAULT_TIME_SIGNATURE} from "./songDefaults";
 import type {PlannedChord, PlaybackSegment} from "./segments/model";
 import {barBeats} from "./segments/model";
@@ -150,10 +151,14 @@ function createMetronome({ pan = 1 }: { pan?: number }): MetronomeCtrl {
   const tick = new Tone.MembraneSynth({
     octaves: 2,
     envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 },
-    volume: 8,
+    volume: getMetronomeVolumeDb(),
   });
   const panner = new Tone.Panner(pan).toDestination();
   tick.connect(panner);
+
+  // Живий клік віддаємо ручці пульта: поки він існує, зміна трима чутна одразу
+  // (`metronomeTrim`). Вимкнений клік — це тиша на синті, а не спинений луп.
+  bindMetronome(tick);
 
   const loop = new Tone.Loop((time) => {
     tick.triggerAttackRelease(TICK_PITCH, "16n", time, TICK_VELOCITY);
@@ -162,7 +167,7 @@ function createMetronome({ pan = 1 }: { pan?: number }): MetronomeCtrl {
   return {
     start(at: ToneTime = 0) { loop.start(at); },
     stop() { loop.stop(); },
-    dispose() { loop.dispose(); tick.dispose(); panner.dispose(); },
+    dispose() { unbindMetronome(tick); loop.dispose(); tick.dispose(); panner.dispose(); },
   };
 }
 

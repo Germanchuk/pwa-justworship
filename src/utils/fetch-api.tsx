@@ -1,4 +1,6 @@
 import qs from "qs";
+
+import { API_URL } from "#utils/serviceUrls";
 import { disableGlobalLoader, enableGlobalLoader } from "#layout/slices/viewConfigSlice";
 
 let storePromise: Promise<{ default: { dispatch: (action: unknown) => void } }> | null = null;
@@ -13,7 +15,7 @@ const getStore = async () => {
 };
 
 export function getStrapiURL(path = "") {
-  return `${import.meta.env.VITE_API_URL}${path}`;
+  return `${API_URL}${path}`;
 }
 
 export async function fetchAPI(

@@ -12,6 +12,10 @@ export type CommentMark = {
    * Private mark: `[authorUsername]`. Targeted: `[author, ...recipients]`.
    */
   visibleFor: string[];
+  /**
+   * Hex кольору підсвітки — АБО sentinel `STRIKE_COLOR` ("strike") для
+   * закреслення, яке кольору не має. Див. `comments/colors.ts`.
+   */
   color: string;
   /** Username of the creator. Optional for back-compat with old data. */
   author?: string;
@@ -46,7 +50,8 @@ export type CustomText = {
  *
  * `color`/`visibleFor`/`author` навмисно дублюють мітку: коли текст під
  * приміткою видалили, міток уже немає, а показати втрачену примітку
- * потрібному адресату треба (`NOTE-29`).
+ * потрібному адресату треба (`NOTE-29`). `color` так само може нести sentinel
+ * `STRIKE_COLOR` замість hex.
  */
 export type NoteRecord = {
   body: string;

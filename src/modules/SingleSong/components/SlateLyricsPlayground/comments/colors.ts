@@ -23,6 +23,24 @@ export const PUBLIC_COMMENT_COLOR = "#6B7280";
 // public one at a glance. In read and notes mode these marks aren't drawn.
 export const OTHERS_NEUTRAL_COLOR = "#9CA3AF";
 
+// Закреслення — позначка БЕЗ кольору: замість підсвітки текст перекреслюється
+// рискою. Живе в тому ж полі `color` мітки/примітки як рядок-sentinel, а не як
+// окреме поле: так значення само доїжджає всюди, де вже носиться колір —
+// у Yjs-мітку, в `NoteRecord`, у втрачені коментарі, у
+// `convertHighlightToNote` — без жодного протягування параметрів.
+// Тому `color` не завжди hex; усе, що його малює, іде через `resolveHex`.
+export const STRIKE_COLOR = "strike";
+
+// Реальний колір, яким малюється риска й тонуються картка та кнопки.
+// Навмисно не PUBLIC_COMMENT_COLOR, щоб закреслення не читалось як публічний
+// коментар.
+export const STRIKE_INK = "#374151";
+
+export const isStrike = (color: string): boolean => color === STRIKE_COLOR;
+
+const resolveHex = (color: string): string =>
+  isStrike(color) ? STRIKE_INK : color;
+
 const HIGHLIGHT_ALPHA = 0.32;
 const CARD_BG_ALPHA = 0.18;
 
@@ -40,7 +58,7 @@ const hexToRgb = (hex: string): [number, number, number] => {
 };
 
 export const hexToRgba = (hex: string, alpha: number): string => {
-  const [r, g, b] = hexToRgb(hex);
+  const [r, g, b] = hexToRgb(resolveHex(hex));
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
@@ -49,4 +67,4 @@ export const highlightBg = (hex: string): string =>
 
 export const cardBg = (hex: string): string => hexToRgba(hex, CARD_BG_ALPHA);
 
-export const cardBorder = (hex: string): string => hex;
+export const cardBorder = (hex: string): string => resolveHex(hex);

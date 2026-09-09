@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from "react";
+import {useEffect, useMemo, useState, useSyncExternalStore} from "react";
 import {useSelector} from "react-redux";
 import {SpeakerWaveIcon, StopIcon} from "@heroicons/react/24/outline";
 
@@ -8,7 +8,15 @@ import AudioHostEngine, {
 } from "#modules/Band/audio/audioHostEngine";
 import BandAudioChannel from "#modules/Band/audio/bandAudioChannel";
 import {useAudioHostStatus} from "#modules/Band/audio/useBandAudio";
+import {
+  getMetronomeTrim,
+  isMetronomeMuted,
+  METRONOME_TRIM_RANGE,
+  setMetronomeTrim,
+  subscribeMetronomeTrim,
+} from "#modules/SingleSong/services/ChordsProgressionPlayer/metronomeTrim";
 import {Button} from "@/components/ui/button";
+import {Slider} from "@/components/ui/slider";
 
 const STATE_LABELS: Record<AudioHostEngineState["state"], string> = {
   idle: "Тиша — чекаю команду",
@@ -17,6 +25,14 @@ const STATE_LABELS: Record<AudioHostEngineState["state"], string> = {
   loading: "Завантажую…",
   playing: "Грає",
   paused: "На паузі",
+};
+
+const useMetronomeTrim = () =>
+  useSyncExternalStore(subscribeMetronomeTrim, getMetronomeTrim);
+
+const formatTrim = (trim: number): string => {
+  if (isMetronomeMuted(trim)) return "Вимк.";
+  return `${trim > 0 ? "+" : ""}${trim} дБ`;
 };
 
 /**
@@ -31,6 +47,7 @@ export default function AudioHost() {
 
   const engine = useMemo(() => AudioHostEngine.getInstance(), []);
   const [engineState, setEngineState] = useState<AudioHostEngineState>(engine.getState());
+  const metronomeTrim = useMetronomeTrim();
 
   // Дубль-сесія: той самий акаунт уже веде звук з іншого пристрою.
   const hostStatus = useAudioHostStatus();
@@ -147,6 +164,28 @@ export default function AudioHost() {
                 Зупинити
               </Button>
             )}
+
+            {/* Гучність кліку — ручка пульта: діє наживо й не зберігається. */}
+            <div className="w-full max-w-sm text-left">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-sm font-semibold text-stone-800">Метроном</span>
+                <span className="text-xs font-semibold text-stone-600 tabular-nums">
+                  {formatTrim(metronomeTrim)}
+                </span>
+              </div>
+              <Slider
+                min={METRONOME_TRIM_RANGE[0]}
+                max={METRONOME_TRIM_RANGE[1]}
+                step={1}
+                value={[metronomeTrim]}
+                onValueChange={([trim]) => setMetronomeTrim(trim)}
+                aria-label="Гучність метронома"
+                className="mt-2"
+              />
+              <p className="text-xs text-stone-400 mt-1.5 m-0">
+                Чутно одразу. Не зберігається — після перезавантаження знову 0 дБ.
+              </p>
+            </div>
 
             <p className="text-xs text-stone-400 max-w-sm m-0">
               Не закривай цю сторінку і не блокуй екран: звук іде з цього

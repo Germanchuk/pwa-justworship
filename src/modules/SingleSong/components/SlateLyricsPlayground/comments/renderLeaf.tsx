@@ -6,7 +6,9 @@ import type { CommentMark, CustomText } from "../types";
 import {
   DEFAULT_COMMENT_COLOR,
   OTHERS_NEUTRAL_COLOR,
+  STRIKE_INK,
   highlightBg,
+  isStrike,
 } from "./colors";
 import { isVisibleTo } from "./visibility";
 
@@ -42,11 +44,25 @@ export const RenderLeaf = ({ attributes, children, leaf }: RenderLeafProps) => {
     const color = shown
       ? c.color ?? DEFAULT_COMMENT_COLOR
       : OTHERS_NEUTRAL_COLOR;
+    // Тільки для СВОЇХ: сірий натяк на чужу мітку не має видавати її вид
+    // (`NOTE-15`) — чуже закреслення теж лишається сірою підсвіткою.
+    const strike = shown && isStrike(color);
     node = (
       <span
-        className="comment-highlight"
+        className={strike ? "comment-strike" : "comment-highlight"}
         data-cid={shown ? c.commentId : undefined}
-        style={{ backgroundColor: highlightBg(color) }}
+        style={
+          strike
+            ? {
+                textDecoration: "line-through",
+                textDecorationColor: STRIKE_INK,
+                // Тонша риска на паперовому фоні губиться, а skipInk рвав би її
+                // на «р», «у» — закреслення має читатись однозначно.
+                textDecorationThickness: 2,
+                textDecorationSkipInk: "none",
+              }
+            : { backgroundColor: highlightBg(color) }
+        }
       >
         {node}
       </span>
