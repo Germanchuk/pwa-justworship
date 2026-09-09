@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
-import { ChevronDown, Copy, Trash2 } from "lucide-react";
+import { ChevronDown, Copy, Strikethrough, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 import { useCanAnnotate } from "../../../mode";
 import { useNotesViewer } from "../../../redux/selectors";
-import { highlightBg } from "./colors";
+import { highlightBg, isStrike, STRIKE_INK } from "./colors";
 import {
   type LostComment,
   getLostCommentsMap,
@@ -83,11 +83,19 @@ export const LostCommentsBlock = ({ ydoc }: { ydoc: Y.Doc }) => {
               key={c.commentId}
               className="flex items-start gap-2 rounded-sm bg-white/60 px-2 py-1.5"
             >
-              <span
-                className="mt-1 inline-block size-3 shrink-0 rounded-full border border-black/15"
-                style={{ backgroundColor: highlightBg(c.color) }}
-                title={c.color}
-              />
+              {isStrike(c.color) ? (
+                <Strikethrough
+                  className="mt-1 size-3 shrink-0"
+                  style={{ color: STRIKE_INK }}
+                  aria-label="закреслення"
+                />
+              ) : (
+                <span
+                  className="mt-1 inline-block size-3 shrink-0 rounded-full border border-black/15"
+                  style={{ backgroundColor: highlightBg(c.color) }}
+                  title={c.color}
+                />
+              )}
               <div className="flex-1 min-w-0">
                 <p className="whitespace-pre-wrap break-words text-sm text-foreground">
                   {c.body || (

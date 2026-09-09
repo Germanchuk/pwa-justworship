@@ -1,6 +1,8 @@
 import * as Y from "yjs";
 import {HocuspocusProvider} from "@hocuspocus/provider";
 
+import {COLLAB_URL} from "#utils/serviceUrls";
+
 import type {AudioHostStatus, PlaybackCommand} from "./types";
 
 type HostStatusListener = (status: AudioHostStatus | null) => void;
@@ -40,7 +42,7 @@ class BandAudioChannel {
     if (this.bandId != null && String(this.bandId) === String(bandId)) return;
     this.disconnect();
 
-    const url = import.meta.env.VITE_COLLAB_URL;
+    const url = COLLAB_URL;
     const token = localStorage.getItem("authToken") ?? "";
 
     this.bandId = bandId;

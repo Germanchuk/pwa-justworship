@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import * as Y from "yjs";
 import { HocuspocusProvider } from "@hocuspocus/provider";
+
+import { COLLAB_URL } from "#utils/serviceUrls";
 import {
   setConnectionStatus,
   setPeers,
@@ -35,7 +37,7 @@ export function useCollabProvider(songId: string | number): UseCollabProviderRes
   (window as unknown as { __sharedRoot?: Y.XmlText }).__sharedRoot = sharedRoot;
 
   useEffect(() => {
-    const url = import.meta.env.VITE_COLLAB_URL;
+    const url = COLLAB_URL;
     const token = localStorage.getItem("authToken") ?? "";
 
     dispatch(setConnectionStatus("connecting"));

@@ -5,6 +5,7 @@ import type {Descendant} from "slate";
 
 import {extractHeader} from "#modules/SingleSong/services/ChordsProgressionPlayer/extractHeader";
 import type {SongContentSnapshot} from "#modules/SingleSong/services/ChordsProgressionPlayer/getMidiFromSlate/getMidiFromSlate";
+import {COLLAB_URL} from "#utils/serviceUrls";
 
 export interface SongDocHandle {
   songId: string | number;
@@ -23,7 +24,7 @@ export interface SongDocHandle {
  * (contentProvider читає живий документ).
  */
 export function openSongDoc(songId: string | number): SongDocHandle {
-  const url = import.meta.env.VITE_COLLAB_URL;
+  const url = COLLAB_URL;
   const token = localStorage.getItem("authToken") ?? "";
 
   const ydoc = new Y.Doc();

@@ -1,68 +1,173 @@
 import { Link } from "react-router-dom";
 import {
   MusicalNoteIcon,
-  SparklesIcon,
+  SpeakerWaveIcon,
+  AdjustmentsHorizontalIcon,
+  EyeSlashIcon,
+  ChatBubbleLeftRightIcon,
+  ChevronUpDownIcon,
   CalendarDaysIcon,
   UsersIcon,
   ArrowsRightLeftIcon,
-  DevicePhoneMobileIcon,
   DocumentArrowDownIcon,
-  HeartIcon,
+  ClockIcon,
   ArrowRightIcon,
+  PaperAirplaneIcon,
 } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { SUPPORT_TELEGRAM_URL } from "#components";
 
-const features = [
+/** Персональний шар показу — перше ядро. */
+const personalFeatures = [
   {
-    icon: MusicalNoteIcon,
-    title: "Бібліотека пісень",
+    icon: AdjustmentsHorizontalIcon,
+    title: "Своє капо",
     description:
-      "Усі пісні гурту в одному місці — з акордами, текстом і нотатками. Швидкий пошук, теги та сортування.",
+      "Аркуш у D, а ти граєш форми C з капо на другому ладу. Акорди перемальовуються тільки тобі — решта гурту бачить пісню незмінною.",
   },
   {
-    icon: SparklesIcon,
-    title: "Створення з AI",
+    icon: ChevronUpDownIcon,
+    title: "Згорнуті секції",
     description:
-      "Перетворюй звичайний текст пісні на готовий формат з акордами за лічені секунди.",
+      "Те, що знаєш напам’ять, не займає екран. Кожен згортає своє — приспів, який усі й так пам’ятають, або куплет, який співає не він.",
+  },
+  {
+    icon: EyeSlashIcon,
+    title: "Слова або акорди",
+    description:
+      "Вокалістці не потрібні акорди, гітаристу не потрібен третій куплет цілком. Ховається окремо в кожного, аркуш лишається спільним.",
+  },
+  {
+    icon: ChatBubbleLeftRightIcon,
+    title: "Примітки на тексті",
+    description:
+      "Особиста позначка «тут вступаю» бачиш тільки ти. Коментар для гурту бачать усі. Одне й друге живе прямо на рядку, а не в чаті.",
+  },
+];
+
+/** Звук під живу гру — друге ядро. */
+const soundFeatures = [
+  {
+    icon: SpeakerWaveIcon,
+    title: "Пед за акордами пісні",
+    description:
+      "Не треба мультитреків і людини за пультом. Пед генерується з акордів, які вже написані в пісні — у її тональності й темпі. Кілька пресетів звуку.",
+  },
+  {
+    icon: ClockIcon,
+    title: "Метроном",
+    description:
+      "Клацання на всю пісню, у правий канал — щоб не змагалося з педом у навушнику.",
+  },
+  {
+    icon: MusicalNoteIcon,
+    title: "Хост звуку",
+    description:
+      "Один пристрій гурту грає на зал, а запустити, поставити на паузу чи перемкнути пісню може будь-хто зі свого телефона.",
+  },
+  {
+    icon: PaperAirplaneIcon,
+    title: "Режим зібрання",
+    description:
+      "Усе служіння одним безперервним звуком: пісня за піснею, з програшами між ними й паузою там, де говорить ведучий.",
+  },
+];
+
+/** Банальна, але обов’язкова основа. Не продається — просто має бути. */
+const baseFeatures = [
+  {
+    icon: MusicalNoteIcon,
+    title: "Пісні гурту",
+    description: "Тексти з акордами в одному місці, з пошуком.",
   },
   {
     icon: CalendarDaysIcon,
-    title: "Розклади служінь",
-    description:
-      "Плануй недільні служіння й репетиції. Усі учасники гурту бачать сетлист наперед.",
+    title: "Списки служінь",
+    description: "План на неділю чи репетицію, який бачить увесь гурт.",
   },
   {
     icon: UsersIcon,
     title: "Гурти та церкви",
-    description:
-      "Об’єднуй музикантів у гурти, гурти — у церкви. Кожен бачить саме те, що йому потрібно.",
+    description: "Музиканти в гуртах, гурти в церкві. Кожен бачить своє.",
   },
   {
     icon: ArrowsRightLeftIcon,
-    title: "Транспонування акордів",
-    description:
-      "Зміни тональність пісні в один дотик — під вокаліста, інструмент чи зручність ведучого.",
-  },
-  {
-    icon: DevicePhoneMobileIcon,
-    title: "Працює офлайн",
-    description:
-      "Встанови як застосунок на телефон. Відкриєш сетлист навіть без інтернету на сцені.",
+    title: "Транспонування",
+    description: "Змінити реальну тональність пісні — вже для всього гурту.",
   },
   {
     icon: DocumentArrowDownIcon,
-    title: "Експорт у DOCX",
-    description:
-      "Завантажуй сетлисти й окремі пісні у Word — для друку чи передачі поза платформою.",
+    title: "Експорт у .docx",
+    description: "Роздрукувати або віддати тому, хто не в застосунку.",
   },
   {
-    icon: HeartIcon,
-    title: "Створено для служіння",
+    icon: ChatBubbleLeftRightIcon,
+    title: "Одна актуальна версія",
     description:
-      "Платформа зроблена музикантами для музикантів, які прославляють Бога щонеділі.",
+      "Регент правив у суботу — у неділю правильне вже в усіх. Без пересилання файлів.",
   },
 ];
+
+/** Один аркуш, два різні екрани — те, про що заголовок. */
+function SheetPreview({
+  who,
+  capo,
+  chords,
+}: {
+  who: string;
+  capo: string;
+  chords: [string, string, string, string];
+}) {
+  return (
+    <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-lg shadow-black/5">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-medium text-muted-foreground">{who}</span>
+        <span className="text-[10px] font-mono px-2 py-1 rounded bg-amber-50 text-amber-700 border border-amber-100">
+          {capo}
+        </span>
+      </div>
+      <div className="font-mono text-[13px] leading-6 whitespace-pre">
+        <span className="text-amber-700 font-semibold">{chords[0]}</span>
+        {"\n"}
+        Великий Бог, як любиш Ти
+        {"\n"}
+        <span className="text-amber-700 font-semibold">{chords[1]}</span>
+        {"\n"}
+        Серця Своїх дітей
+        {"\n"}
+        <span className="text-amber-700 font-semibold">{chords[2]}</span>
+        {"\n"}
+        І жодна сила в світі цім
+        {"\n"}
+        <span className="text-amber-700 font-semibold">{chords[3]}</span>
+        {"\n"}
+        Не відірве нас від Тебе
+      </div>
+    </div>
+  );
+}
+
+function FeatureCard({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: typeof MusicalNoteIcon;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-black/5 bg-white/70 p-5 hover:bg-white hover:shadow-md hover:-translate-y-0.5 transition-all">
+      <div className="size-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center mb-4">
+        <Icon className="size-5" />
+      </div>
+      <h3 className="font-semibold mb-1">{title}</h3>
+      <p className="text-sm text-muted-foreground leading-relaxed">
+        {description}
+      </p>
+    </div>
+  );
+}
 
 export default function Landing() {
   return (
@@ -89,173 +194,159 @@ export default function Landing() {
         <div className="mx-auto max-w-3xl text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/70 px-3 py-1 text-xs text-muted-foreground mb-6">
             <span className="size-1.5 rounded-full bg-emerald-500" />
-            Платформа для прославлення
+            Для гуртів прославлення
           </div>
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-semibold tracking-tight leading-[1.05] text-foreground">
-            Усе для твого{" "}
+            Спільний аркуш.{" "}
             <span className="bg-gradient-to-r from-amber-600 to-rose-500 bg-clip-text text-transparent">
-              гурту прославлення
-            </span>{" "}
-            в одному застосунку
+              Особистий вигляд.
+            </span>
           </h1>
           <p className="mt-5 text-base sm:text-lg text-muted-foreground max-w-xl mx-auto">
-            Пісні, акорди, розклади служінь і спільна робота гурту — просто, швидко й під рукою на сцені.
+            Гурт веде одну пісню — але кожен бачить її по-своєму: своє капо,
+            свої згорнуті секції, свої примітки. А під живу гру застосунок сам
+            згенерує пед із акордів цієї ж пісні.
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4 sm:justify-center">
-            <Link to="/register" className="sm:w-auto">
+            <a href={SUPPORT_TELEGRAM_URL} target="_blank" rel="noreferrer">
               <Button size="lg" className="w-full sm:w-auto h-12 px-6 text-base">
-                Почати безкоштовно
+                Написати мені
                 <ArrowRightIcon className="size-4" />
               </Button>
-            </Link>
-            <Link to="/login" className="sm:w-auto">
+            </a>
+            <Link to="/register" className="sm:w-auto">
               <Button
                 size="lg"
                 variant="outline"
                 className="w-full sm:w-auto h-12 px-6 text-base"
               >
-                У мене вже є акаунт
+                Створити акаунт
               </Button>
             </Link>
           </div>
 
           <p className="mt-4 text-xs text-muted-foreground">
-            Без реклами · Без оплати · Працює офлайн
+            Безкоштовно · Без реклами · Одне посилання, будь-який пристрій
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Гурт поки заводжу вручну — напиши, і зберу твій склад сам.
           </p>
         </div>
 
-        {/* Phone mock */}
-        <div className="mx-auto mt-12 sm:mt-16 max-w-sm">
-          <div className="relative rounded-[2rem] border border-black/10 bg-white shadow-2xl shadow-black/10 p-3">
-            <div className="rounded-[1.5rem] bg-gradient-to-b from-amber-50 to-white p-5 min-h-[420px] flex flex-col gap-3">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Неділя · 10:00</span>
-                <span>Сетлист</span>
-              </div>
-              {[
-                { t: "Свят, Свят, Свят", k: "G" },
-                { t: "Великий Бог", k: "D" },
-                { t: "Достоєн Агнець", k: "A" },
-                { t: "Ім’я понад іменами", k: "E" },
-              ].map((s, i) => (
-                <div
-                  key={i}
-                  className="rounded-xl bg-white border border-black/5 px-4 py-3 flex items-center justify-between shadow-sm"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="size-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-semibold">
-                      {i + 1}
-                    </div>
-                    <span className="font-medium">{s.t}</span>
-                  </div>
-                  <span className="text-xs font-mono px-2 py-1 rounded bg-muted text-muted-foreground">
-                    {s.k}
-                  </span>
-                </div>
-              ))}
-            </div>
+        {/* Один аркуш — два екрани */}
+        <div className="mx-auto mt-12 sm:mt-16 max-w-2xl">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <SheetPreview
+              who="Оля · вокал"
+              capo="без капо"
+              chords={["D       A", "Bm      G", "D       A", "G       D"]}
+            />
+            <SheetPreview
+              who="Андрій · гітара"
+              capo="капо 2 · грає C"
+              chords={["C       G", "Am      F", "C       G", "F       C"]}
+            />
           </div>
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            Одна й та сама пісня в базі гурту. Різні екрани.
+          </p>
         </div>
       </section>
 
-      {/* Features */}
-      <section id="features" className="px-5 py-14 sm:py-20 border-t border-black/5">
+      {/* Ядро 1 — персоналізація */}
+      <section
+        id="personal"
+        className="px-5 py-14 sm:py-20 border-t border-black/5"
+      >
         <div className="mx-auto max-w-5xl">
           <div className="max-w-2xl mb-10 sm:mb-14">
             <p className="text-sm font-medium text-amber-700 mb-2">
-              Можливості
+              Персональний показ
             </p>
             <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
-              Усе, що потрібно гурту прославлення
+              Один аркуш на гурт — своя версія в кожного
             </h2>
             <p className="mt-3 text-muted-foreground">
-              Від першої ідеї пісні до сетлиста на сцені — Just Worship супроводжує кожен крок служіння.
+              Аркуш спільний і завжди актуальний. Але те, як він виглядає на
+              твоєму екрані, налаштовуєш тільки ти — і нікому цим не заважаєш.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {features.map((f) => (
-              <div
-                key={f.title}
-                className="group rounded-2xl border border-black/5 bg-white/70 p-5 hover:bg-white hover:shadow-md hover:-translate-y-0.5 transition-all"
-              >
-                <div className="size-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center mb-4">
-                  <f.icon className="size-5" />
-                </div>
-                <h3 className="font-semibold mb-1">{f.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {f.description}
-                </p>
-              </div>
+            {personalFeatures.map((f) => (
+              <FeatureCard key={f.title} {...f} />
             ))}
           </div>
         </div>
       </section>
 
-      {/* Highlighted big feature */}
-      <section className="px-5 py-14 sm:py-20 border-t border-black/5">
-        <div className="mx-auto max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-12 items-center">
-          <div>
+      {/* Ядро 2 — звук */}
+      <section
+        id="sound"
+        className="px-5 py-14 sm:py-20 border-t border-black/5"
+      >
+        <div className="mx-auto max-w-5xl">
+          <div className="max-w-2xl mb-10 sm:mb-14">
             <p className="text-sm font-medium text-amber-700 mb-2">
-              Спільна робота
+              Звук під живу гру
             </p>
             <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
-              Редагуйте пісні разом — у реальному часі
+              Пед просто з аркуша, без мультитреків
             </h2>
             <p className="mt-3 text-muted-foreground">
-              Один змінив акорд — інший побачив одразу. Без надсилання файлів,
-              без «у кого остання версія». Тільки музика і служіння.
+              Гурт, якому потрібен фон і темп, зазвичай упирається не в музику,
+              а в організацію: треки, ноутбук, пульт, людина, яка все це веде.
+              Тут пед бере акорди прямо з пісні, а керує ним будь-хто з
+              телефона.
             </p>
-            <ul className="mt-6 space-y-3 text-sm">
-              {[
-                "Одночасне редагування пісні гуртом",
-                "Історія змін і відкат версій",
-                "Коментарі та нотатки до куплетів",
-              ].map((t) => (
-                <li key={t} className="flex items-start gap-3">
-                  <div className="mt-1 size-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs">
-                    ✓
-                  </div>
-                  <span>{t}</span>
-                </li>
-              ))}
-            </ul>
           </div>
-          <div className="rounded-2xl border border-black/10 bg-white p-5 shadow-xl shadow-black/5">
-            <div className="text-xs text-muted-foreground mb-3 font-mono">
-              Великий Бог · D
-            </div>
-            <div className="font-mono text-sm leading-7 whitespace-pre">
-              <span className="text-amber-700 font-semibold">D       </span>
-              <span className="text-amber-700 font-semibold">A</span>
-              {"\n"}
-              Великий Бог, як любиш Ти
-              {"\n"}
-              <span className="text-amber-700 font-semibold">Bm      </span>
-              <span className="text-amber-700 font-semibold">G</span>
-              {"\n"}
-              Серця Своїх дітей
-              {"\n"}
-              <span className="text-amber-700 font-semibold">D       </span>
-              <span className="text-amber-700 font-semibold">A</span>
-              {"\n"}
-              І жодна сила в світі цім
-              {"\n"}
-              <span className="text-amber-700 font-semibold">G       </span>
-              <span className="text-amber-700 font-semibold">D</span>
-              {"\n"}
-              Не відірве нас від Тебе
-            </div>
-            <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-              <div className="flex -space-x-2">
-                <div className="size-6 rounded-full bg-amber-300 border-2 border-white" />
-                <div className="size-6 rounded-full bg-rose-300 border-2 border-white" />
-                <div className="size-6 rounded-full bg-emerald-300 border-2 border-white" />
-              </div>
-              3 учасники зараз редагують
-            </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {soundFeatures.map((f) => (
+              <FeatureCard key={f.title} {...f} />
+            ))}
           </div>
+        </div>
+      </section>
+
+      {/* Основа */}
+      <section className="px-5 py-14 sm:py-20 border-t border-black/5">
+        <div className="mx-auto max-w-5xl">
+          <div className="max-w-2xl mb-10 sm:mb-14">
+            <p className="text-sm font-medium text-amber-700 mb-2">Основа</p>
+            <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
+              І звичайні речі, без яких перше й друге не працює
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {baseFeatures.map((f) => (
+              <FeatureCard key={f.title} {...f} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Чим це не є */}
+      <section className="px-5 py-14 sm:py-20 border-t border-black/5">
+        <div className="mx-auto max-w-2xl">
+          <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight">
+            Чим це не є
+          </h2>
+          <ul className="mt-6 space-y-3 text-sm text-muted-foreground">
+            {[
+              "Не бібліотека чужих пісень: пісні вносить сам гурт, свої.",
+              "Не проєкція на екран залу.",
+              "Не планування служителів і розкладу людей.",
+              "Не бібліотека мультитреків.",
+            ].map((t) => (
+              <li key={t} className="flex items-start gap-3">
+                <span className="mt-2 size-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
+                <span>{t}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
@@ -263,25 +354,26 @@ export default function Landing() {
       <section className="px-5 py-16 sm:py-24 border-t border-black/5">
         <div className="mx-auto max-w-2xl text-center rounded-3xl border border-black/10 bg-gradient-to-br from-amber-50 via-white to-rose-50 p-8 sm:p-12">
           <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
-            Готовий служити простіше?
+            Спробуєш зі своїм гуртом?
           </h2>
           <p className="mt-3 text-muted-foreground">
-            Створи акаунт за 30 секунд і запроси свій гурт.
+            Напиши мені — заведу гурт, перенесу перші пісні й покажу, як це
+            працює. Продукт молодий, тож роблю це особисто для кожного гурту.
           </p>
           <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:justify-center">
-            <Link to="/register">
+            <a href={SUPPORT_TELEGRAM_URL} target="_blank" rel="noreferrer">
               <Button size="lg" className="w-full sm:w-auto h-12 px-6 text-base">
-                Створити акаунт
+                Написати мені
                 <ArrowRightIcon className="size-4" />
               </Button>
-            </Link>
-            <Link to="/login">
+            </a>
+            <Link to="/register">
               <Button
                 size="lg"
                 variant="ghost"
                 className="w-full sm:w-auto h-12 px-6 text-base"
               >
-                Увійти
+                Створити акаунт самому
               </Button>
             </Link>
           </div>
