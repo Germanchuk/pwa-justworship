@@ -10,15 +10,17 @@ export interface CollabPeer {
 
 export interface SongState extends Partial<Song> {
   /**
-   * Чиїми очима я дивлюсь на примітки (нік члена гурту). `null` = своїми.
+   * Чиїми очима я дивлюсь на примітки — НАБІР ніків членів гурту. Порожній
+   * набір = своїми (`NOTE-19`): останню галочку зняти не можна, вона просто
+   * нормалізується назад у мене.
    *
-   * Діє ЛИШЕ в режимі приміток: там я бачу рівно те, що бачить обраний
-   * учасник, і нові примітки створюю для нього. У режимах читання й
+   * Діє ЛИШЕ в режимі приміток: там я бачу те, що бачить КОЖЕН з відмічених,
+   * і нові примітки створюю одним записом для всіх них. У режимах читання й
    * редагування вибір ігнорується — там завжди видно тільки свої примітки
-   * (див. `useNotesViewer`). Стан per-user і локальний, у спільний документ
-   * не пишеться.
+   * (див. `useNotesViewers`). Стан per-user і локальний, у спільний документ
+   * не пишеться й між сесіями не памʼятається.
    */
-  notesAudience: string | null;
+  notesAudience: string[];
   status: Status;
   song: Partial<Song>;
   connectionStatus: CollabConnectionStatus;
@@ -28,7 +30,7 @@ export interface SongState extends Partial<Song> {
 }
 
 const initialState: SongState = {
-  notesAudience: null,
+  notesAudience: [],
   status: "pending",
   song: {},
   connectionStatus: "connecting",

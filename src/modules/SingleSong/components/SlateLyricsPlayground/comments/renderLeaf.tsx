@@ -1,7 +1,7 @@
 import type { RenderLeafProps } from "slate-react";
 
 import { useCanEditContent } from "../../../mode";
-import { useNotesViewer } from "../../../redux/selectors";
+import { useNotesViewers } from "../../../redux/selectors";
 import type { CommentMark, CustomText } from "../types";
 import {
   DEFAULT_COMMENT_COLOR,
@@ -10,11 +10,12 @@ import {
   highlightBg,
   isStrike,
 } from "./colors";
-import { isVisibleTo } from "./visibility";
+import { isVisibleToAll } from "./visibility";
 
 export const RenderLeaf = ({ attributes, children, leaf }: RenderLeafProps) => {
-  // Не обовʼязково я: у режимі приміток можна дивитись очима іншого учасника.
-  const viewer = useNotesViewer();
+  // Не обовʼязково я: у режимі приміток можна дивитись очима кількох
+  // учасників одразу — тоді видно те, що бачить КОЖЕН з них.
+  const viewers = useNotesViewers();
   // Сірий натяк на чужі примітки виправданий лише там, де правка може їх
   // зачепити — у режимі редагування. У читанні нічого не видалиш, у примітках
   // я дивлюсь очима конкретної людини; в обох чужих міток не видно взагалі.
@@ -39,7 +40,7 @@ export const RenderLeaf = ({ attributes, children, leaf }: RenderLeafProps) => {
   const marks: CommentMark[] = Array.isArray(raw) ? raw : [];
 
   for (const c of marks) {
-    const shown = isVisibleTo(c, viewer);
+    const shown = isVisibleToAll(c, viewers);
     if (!shown && !hintOthers) continue;
     const color = shown
       ? c.color ?? DEFAULT_COMMENT_COLOR

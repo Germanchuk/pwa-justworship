@@ -17,7 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-import { useNotesViewer } from "../../../redux/selectors";
+import { useNotesViewers } from "../../../redux/selectors";
 import { useCurrentUsername } from "../elements/hooks";
 import type { CommentMark, CustomText } from "../types";
 import {
@@ -27,7 +27,7 @@ import {
   STRIKE_COLOR,
 } from "./colors";
 import { setPendingFocus } from "./pendingFocus";
-import { isVisibleTo, privateTo, publicVisibility } from "./visibility";
+import { isVisibleToAll, publicVisibility, restCount } from "./visibility";
 import {
   addHighlight,
   addNote,
@@ -50,16 +50,16 @@ const generateId = (): string => {
 
 const getCaretMarks = (
   editor: Editor,
-  viewer: string | undefined,
+  viewers: string[],
 ): CommentMark[] => {
-  if (!viewer) return [];
+  if (viewers.length === 0) return [];
   const { selection } = editor;
   if (!selection || !Range.isCollapsed(selection)) return [];
   try {
     const [leaf] = Editor.leaf(editor, selection.anchor);
     const arr = (leaf as CustomText).comment;
     if (!Array.isArray(arr)) return [];
-    return arr.filter((m) => isVisibleTo(m, viewer));
+    return arr.filter((m) => isVisibleToAll(m, viewers));
   } catch {
     return [];
   }
@@ -164,10 +164,11 @@ type OpenContext =
 
 export const CommentsFab = () => {
   const editor = useSlate();
-  // `me` — автор нової примітки (завжди я, хто б її не адресат).
-  // `viewer` — чиї примітки зараз показуються й кому адресуються нові.
+  // `me` — автор нової примітки (завжди я, хто б не був адресатом).
+  // `viewers` — чиї примітки зараз показуються й кому адресуються нові:
+  // відмічених може бути кілька, і тоді примітка створюється ОДНА на всіх.
   const me = useCurrentUsername();
-  const viewer = useNotesViewer();
+  const viewers = useNotesViewers();
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<AddPhase>("kind");
   const [openCtx, setOpenCtx] = useState<OpenContext>(null);
@@ -177,8 +178,8 @@ export const CommentsFab = () => {
   useRafPin(wrapRef);
 
   const { selection } = editor;
-  const hasSel = !!viewer && !!selection && Range.isExpanded(selection);
-  const liveMarksAtCaret = !hasSel ? getCaretMarks(editor, viewer) : [];
+  const hasSel = viewers.length > 0 && !!selection && Range.isExpanded(selection);
+  const liveMarksAtCaret = !hasSel ? getCaretMarks(editor, viewers) : [];
   const hasMarksAtCaret = liveMarksAtCaret.length > 0;
   const visible = hasSel || hasMarksAtCaret || open;
 
@@ -214,20 +215,20 @@ export const CommentsFab = () => {
   };
 
   const applyHighlight = (color: string) => {
-    if (!viewer) return;
+    if (viewers.length === 0) return;
     const sel = restoreSelection();
     if (!sel || !Range.isExpanded(sel)) {
       setOpen(false);
       return;
     }
-    addHighlight(editor, generateId(), privateTo(viewer), color, me);
+    addHighlight(editor, generateId(), [...viewers], color, me);
     Transforms.deselect(editor);
     savedSel.current = null;
     setOpen(false);
   };
 
   const applyNote = (color: string) => {
-    if (!viewer) return;
+    if (viewers.length === 0) return;
     const sel = restoreSelection();
     if (!sel || !Range.isExpanded(sel)) {
       setOpen(false);
@@ -235,14 +236,14 @@ export const CommentsFab = () => {
     }
     const id = generateId();
     setPendingFocus(id);
-    addNote(editor, id, privateTo(viewer), color, "", me);
+    addNote(editor, id, [...viewers], color, "", me);
     Transforms.deselect(editor);
     savedSel.current = null;
     setOpen(false);
   };
 
   const applyPublicNote = () => {
-    if (!viewer) return;
+    if (viewers.length === 0) return;
     const sel = restoreSelection();
     if (!sel || !Range.isExpanded(sel)) {
       setOpen(false);
@@ -257,7 +258,7 @@ export const CommentsFab = () => {
   };
 
   const doDelete = (commentId: string) => {
-    removeComment(editor, commentId);
+    removeComment(editor, commentId, viewers);
     setOpen(false);
   };
 
@@ -278,7 +279,7 @@ export const CommentsFab = () => {
       savedSel.current = sel;
       setOpenCtx({ mode: "add" });
     } else {
-      const marks = getCaretMarks(editor, viewer);
+      const marks = getCaretMarks(editor, viewers);
       if (marks.length > 0) {
         savedSel.current = sel ?? null;
         setOpenCtx({ mode: "manage", marks });
@@ -407,6 +408,9 @@ export const CommentsFab = () => {
           {openCtx.mode === "manage" &&
             openCtx.marks.map((m) => {
               const noted = hasNote(editor, m.commentId);
+              // Скільки адресатів переживе видалення: коментар ширший за мій
+              // вибір не зникає, а звужується — кнопка має казати це чесно.
+              const rest = restCount(m, viewers);
               return (
                 <div
                   key={m.commentId}
@@ -414,7 +418,11 @@ export const CommentsFab = () => {
                 >
                   <ColoredIconButton
                     color={m.color}
-                    title="Видалити повністю"
+                    title={
+                      rest > 0
+                        ? `Видалити у вибраних (лишиться ще в ${rest})`
+                        : "Видалити повністю"
+                    }
                     destructive
                     onClick={() => doDelete(m.commentId)}
                   >

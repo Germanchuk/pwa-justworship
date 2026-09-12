@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   setSong,
@@ -23,26 +24,34 @@ export const useSetSong = () => {
 // Режим пісні тут більше не живе: він читається зі шляху — див.
 // `#modules/SingleSong/mode`.
 
-/** Сирий вибір із дропдауна: нік учасника або `null` (= я). */
-export const useNotesAudience = (): string | null =>
-  useSelector((state: any) => state.song.notesAudience as string | null);
+/** Сирий вибір із дропдауна: ніки відмічених учасників (порожньо = я). */
+export const useNotesAudience = (): string[] =>
+  useSelector((state: any) => state.song.notesAudience as string[]);
 
 export const useSetNotesAudience = () => {
   const dispatch = useDispatch();
-  return (username: string | null) => dispatch(setNotesAudience(username));
+  return (usernames: string[]) => dispatch(setNotesAudience(usernames));
 };
 
 /**
- * Нік, чиї примітки зараз показуються й редагуються — ЄДИНЕ джерело правди
- * для всієї системи приміток (`isVisibleTo`, картки, FAB, втрачені коментарі).
+ * Набір ніків, чиї примітки зараз показуються й редагуються — ЄДИНЕ джерело
+ * правди для всієї системи приміток (`isVisibleToAll`, картки, FAB, втрачені
+ * коментарі).
  *
- * У режимі приміток це обраний у дропдауні учасник (за замовчуванням я сам),
- * у решті режимів — завжди я: поза режимом приміток чужі примітки не
- * показуються незалежно від того, що лишилось вибраним у дропдауні.
+ * У режимі приміток це відмічені в дропдауні учасники (за замовчуванням я
+ * сам), у решті режимів — завжди я один: поза режимом приміток чужі примітки
+ * не показуються незалежно від того, що лишилось вибраним (`NOTE-22`).
+ *
+ * `useMemo` тут не косметика: масив іде в deps `NoteHeadsProvider`, і новий
+ * масив на кожен рендер перераховував би розкладку карток по всій пісні.
  */
-export const useNotesViewer = (): string | undefined => {
+export const useNotesViewers = (): string[] => {
   const me = useSelector((state: any) => state.user?.username as string | undefined);
   const audience = useNotesAudience();
   const canAnnotate = useCanAnnotate();
-  return canAnnotate ? audience ?? me : me;
+  return useMemo(() => {
+    const mine = me ? [me] : [];
+    if (!canAnnotate) return mine;
+    return audience.length > 0 ? audience : mine;
+  }, [canAnnotate, audience, me]);
 };
