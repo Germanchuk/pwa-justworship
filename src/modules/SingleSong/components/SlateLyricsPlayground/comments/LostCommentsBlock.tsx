@@ -5,7 +5,7 @@ import { ChevronDown, Copy, Strikethrough, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { useCanAnnotate } from "../../../mode";
-import { useNotesViewer } from "../../../redux/selectors";
+import { useNotesViewers } from "../../../redux/selectors";
 import { highlightBg, isStrike, STRIKE_INK } from "./colors";
 import {
   type LostComment,
@@ -13,7 +13,7 @@ import {
   listLostComments,
   removeLostComment,
 } from "./lostComments";
-import { isVisibleTo } from "./visibility";
+import { isVisibleToAll } from "./visibility";
 
 const formatTime = (ts: number): string => {
   try {
@@ -24,9 +24,9 @@ const formatTime = (ts: number): string => {
 };
 
 export const LostCommentsBlock = ({ ydoc }: { ydoc: Y.Doc }) => {
-  // Втрачені коментарі належать тому ж адресатові, що й решта приміток:
-  // дивлюсь очима іншого — бачу його втрачені, не свої.
-  const viewer = useNotesViewer();
+  // Втрачені коментарі належать тим самим адресатам, що й решта приміток:
+  // дивлюсь очима вокалістів — бачу їхні втрачені, не свої.
+  const viewer = useNotesViewers();
   // Видалення примітки — дія режиму приміток; в інших режимах лишається
   // перегляд і копіювання.
   const canAnnotate = useCanAnnotate();
@@ -42,7 +42,7 @@ export const LostCommentsBlock = ({ ydoc }: { ydoc: Y.Doc }) => {
   }, [ydoc]);
 
   const visible = items
-    .filter((c) => isVisibleTo(c, viewer))
+    .filter((c) => isVisibleToAll(c, viewer))
     .sort((a, b) => b.timestamp - a.timestamp);
 
   if (visible.length === 0) return null;
@@ -119,6 +119,8 @@ export const LostCommentsBlock = ({ ydoc }: { ydoc: Y.Doc }) => {
               {canAnnotate && (
                 <button
                   type="button"
+                  // Надгробок, а не жива підказка: звужувати тут нічого —
+                  // «видалити» прибирає запис в усіх адресатів одразу.
                   onClick={() => removeLostComment(ydoc, c.commentId)}
                   className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
                   title="Видалити"

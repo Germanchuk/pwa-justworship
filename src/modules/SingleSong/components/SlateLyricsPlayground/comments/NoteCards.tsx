@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { ReactEditor, useSlateStatic } from "slate-react";
 
 import { useCanAnnotate } from "../../../mode";
+import { useNotesViewers } from "../../../redux/selectors";
 import type { NoteRecord } from "../types";
 import { cardBg, cardBorder, DEFAULT_COMMENT_COLOR } from "./colors";
 import { consumePendingFocus } from "./pendingFocus";
+import { restCount } from "./visibility";
 import { updateCommentBody } from "./withComments";
 import "./comments.css";
 
@@ -14,9 +16,11 @@ type CardProps = {
   commentId: string;
   note: NoteRecord;
   canEdit: boolean;
+  /** Скільки адресатів у примітки ПОНАД тих, чиїми очима я дивлюсь. */
+  rest: number;
 };
 
-const NoteCard = ({ commentId, note, canEdit }: CardProps) => {
+const NoteCard = ({ commentId, note, canEdit, rest }: CardProps) => {
   const editor = useSlateStatic();
   const [draft, setDraft] = useState(note.body);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,6 +94,21 @@ const NoteCard = ({ commentId, note, canEdit }: CardProps) => {
         placeholder={canEdit ? "Ваш коментар…" : ""}
         rows={Math.min(6, Math.max(1, draft.split("\n").length))}
       />
+      {rest > 0 && (
+        /*
+          Ця примітка ширша за мій вибір: окрім відмічених, її бачить ще `rest`
+          людей (`NOTE-31`). Знак потрібен саме тут, бо видалення ЗВУЖУЄ —
+          без нього моє «видалити» тихо лишало б картку комусь іще.
+          Публічні коментарі сюди не потрапляють: їхню публічність уже видно
+          за сірим кольором, і значок висів би на кожній картці.
+        */
+        <span
+          className="note-card__rest"
+          title={`Цю примітку бачить ще ${rest} поза вибраними`}
+        >
+          +{rest}
+        </span>
+      )}
     </div>
   );
 };
@@ -109,6 +128,7 @@ export const NoteCards = ({
   // Текст примітки правиться лише в режимі приміток; в інших режимах картка
   // видима, але read-only.
   const canAnnotate = useCanAnnotate();
+  const viewers = useNotesViewers();
 
   if (notes.length === 0) return null;
 
@@ -120,6 +140,7 @@ export const NoteCards = ({
           commentId={commentId}
           note={note}
           canEdit={canAnnotate}
+          rest={restCount(note, viewers)}
         />
       ))}
     </div>

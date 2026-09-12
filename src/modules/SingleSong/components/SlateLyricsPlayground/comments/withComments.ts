@@ -14,6 +14,7 @@ import {
   writeNote,
   writeNoteBody,
 } from "./noteStore";
+import { narrowAudience } from "./visibility";
 
 const LEGACY_ANCHOR_TYPE = "comment-anchor";
 
@@ -257,8 +258,21 @@ export const convertHighlightToNote = (
   }
 };
 
-/** Видалити коментар повністю: мітки з тексту + запис примітки. */
-export const removeComment = (editor: Editor, commentId: string): void => {
+/**
+ * Видалити коментар У ВИБРАНИХ адресатів.
+ *
+ * Коментар один на всіх, кому належить, тож видалення не зносить його, а
+ * ЗВУЖУЄ: з `visibleFor` (і в мітках на тексті, і в записі примітки) зникають
+ * ті, чиїми очима я дивлюсь. Не лишилось нікого — тоді вже зносимо. Так,
+ * дивлячись очима трьох вокалістів, я не можу стерти підказку четвертому,
+ * якого на екрані не бачив. Виняток — публічний коментар: `narrowAudience`
+ * віддає для нього `null`, тобто повне знесення (див. `visibility.ts`).
+ */
+export const removeComment = (
+  editor: Editor,
+  commentId: string,
+  audience: string[],
+): void => {
   Editor.withoutNormalizing(editor, () => {
     const matches: Array<[CustomText, Path]> = [];
     for (const [n, p] of Editor.nodes(editor, {
@@ -270,27 +284,41 @@ export const removeComment = (editor: Editor, commentId: string): void => {
       matches.push([n as CustomText, p]);
     }
     for (const [leaf, p] of matches) {
-      const filtered = getMarks(leaf).filter(
-        (c) => c.commentId !== commentId,
-      );
-      if (filtered.length === 0) {
+      const next: CommentMark[] = [];
+      for (const mark of getMarks(leaf)) {
+        if (mark.commentId !== commentId) {
+          next.push(mark);
+          continue;
+        }
+        const rest = narrowAudience(mark, audience);
+        if (rest) next.push({ ...mark, visibleFor: rest });
+      }
+      if (next.length === 0) {
         Transforms.unsetNodes(editor, "comment", { at: p });
       } else {
         Transforms.setNodes(
           editor,
-          { comment: filtered } as Partial<CustomText>,
+          { comment: next } as Partial<CustomText>,
           { at: p },
         );
       }
     }
 
-    deleteNote(editor, commentId);
+    const note = readNote(editor, commentId);
+    if (!note) return;
+    const rest = narrowAudience(note, audience);
+    if (rest) writeNote(editor, commentId, { ...note, visibleFor: rest });
+    else deleteNote(editor, commentId);
   });
 };
 
 /**
  * Прибрати лише картку, лишивши підсвітку на тексті — тобто понизити примітку
  * назад до виділення (`NOTE-4`).
+ *
+ * На відміну від `removeComment`, діє на ВЕСЬ коментар, а не на вибраних:
+ * картка в коментаря одна на всіх адресатів, тож «прибрати її лише для двох з
+ * трьох» не існує як операція. Понизивши спільну примітку, понижуєш її всім.
  */
 export const removeNoteOnly = (editor: Editor, commentId: string): void => {
   deleteNote(editor, commentId);

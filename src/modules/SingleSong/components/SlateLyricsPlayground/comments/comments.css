@@ -25,6 +25,21 @@
   width: 100%;
 }
 
+/* «+N» — скільки людей бачить цю примітку поза вибраними адресатами
+   (NOTE-31). Дрібний і блідий: у переважній більшості карток його немає
+   взагалі, і він не має конкурувати з текстом підказки. */
+.note-card__rest {
+  flex: none;
+  align-self: center;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  color: rgba(0, 0, 0, 0.55);
+  user-select: none;
+}
+
 .note-card__textarea {
   flex: 1;
   border: none;

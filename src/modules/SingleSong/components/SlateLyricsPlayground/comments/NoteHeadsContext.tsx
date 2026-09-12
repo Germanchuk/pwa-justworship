@@ -2,13 +2,13 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 import type { Element } from "slate";
 import { ReactEditor, useSlate } from "slate-react";
 
-import { useNotesViewer } from "../../../redux/selectors";
+import { useNotesViewers } from "../../../redux/selectors";
 import { useDisplay } from "../display/useDisplay";
 import { useCurrentUsername } from "../elements/hooks";
 import type { NoteRecord } from "../types";
 import { collectNoteHeads, rowKey } from "./noteHeads";
 import { readNotes } from "./noteStore";
-import { isVisibleTo } from "./visibility";
+import { isVisibleToAll } from "./visibility";
 
 type NoteHeads = {
   /** `rowKey` → commentId[]; де саме малюється кожна картка. */
@@ -58,7 +58,7 @@ export const useNoteHeadsFor = (
 ): Array<{ commentId: string; note: NoteRecord }> => {
   const editor = useSlate();
   const { heads, notes } = useContext(NoteHeadsCtx);
-  const viewer = useNotesViewer();
+  const viewers = useNotesViewers();
 
   let key: string | null = null;
   try {
@@ -77,7 +77,7 @@ export const useNoteHeadsFor = (
     const note = notes[commentId];
     // Мітка без запису — це просто виділення (`NOTE-1`), картки не має.
     if (!note) continue;
-    if (!isVisibleTo(note, viewer)) continue;
+    if (!isVisibleToAll(note, viewers)) continue;
     out.push({ commentId, note });
   }
   return out;
