@@ -1,4 +1,4 @@
-import {ReactNode, useContext, useEffect} from "react";
+import {ReactNode, useContext, useEffect, useLayoutEffect} from "react";
 import {PageBarContext} from "#layout/PageBar/context";
 
 export const usePageBar = () => {
@@ -21,15 +21,14 @@ export const usePageBarContent = (content: ReactNode | null) => {
 }
 
 /**
- * Показати стан сторінки рамкою центральної панелі. `null` — звичайна
- * рамка. Знімається при виході зі сторінки, тож чужий колір ніде не
- * лишається.
+ * Прибрати верхній бар, поки сторінка відкрита. Layout-ефект, а не звичайний:
+ * бар ховається до першого малювання, тож не блимає при відкритті сторінки.
  */
-export const usePageBarStatus = (color: string | null) => {
-  const { setStatusColor } = usePageBar();
+export const useHidePageBar = () => {
+  const { setHidden } = usePageBar();
 
-  useEffect(() => {
-    setStatusColor(color);
-    return () => setStatusColor(null);
-  }, [color, setStatusColor]);
+  useLayoutEffect(() => {
+    setHidden(true);
+    return () => setHidden(false);
+  }, [setHidden]);
 }

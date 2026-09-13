@@ -1,7 +1,7 @@
 import { createContext, useContext, type ReactNode } from "react";
-import { useMatch, useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
-import { Routes, bandPath } from "#constants/routes";
+import { bandPath } from "#constants/routes";
 
 /**
  * Режим роботи з піснею (per-user, локальний — у спільний документ не пишеться).
@@ -63,26 +63,10 @@ export const SongModeProvider = ({
   </ForcedSongModeContext.Provider>
 );
 
-type SongRouteParams = Partial<Record<"bandId" | "songId" | "mode", string>>;
-
-/**
- * Пісня в поточному шляху разом із режимом.
- *
- * Свідомо `useMatch` по всьому URL, а не `useParams()` — та сама причина, що
- * й у `useUrlBandId`: `SongControls` (а з ними й перемикач режимів) оголошені
- * в `SingleSong`, але РЕНДЕРЯТЬСЯ в `PageBar` всередині `TopBar`,
- * тобто вище пісенного `<Route>`, і route-контекст там про пісню не знає.
- */
-const useSongRouteParams = (): SongRouteParams | undefined => {
-  const withMode = useMatch(Routes.SingleSongMode);
-  const bare = useMatch(Routes.SingleSong);
-  return withMode?.params ?? bare?.params;
-};
-
 export const useSongMode = (): SongMode => {
   const forced = useContext(ForcedSongModeContext);
-  const params = useSongRouteParams();
-  return forced ?? parseSongMode(params?.mode) ?? "read";
+  const params = useParams();
+  return forced ?? parseSongMode(params.mode) ?? "read";
 };
 
 /**
@@ -91,10 +75,9 @@ export const useSongMode = (): SongMode => {
  */
 export const useSetSongMode = () => {
   const navigate = useNavigate();
-  const params = useSongRouteParams();
+  const { bandId, songId } = useParams();
 
   return (mode: SongMode) => {
-    const { bandId, songId } = params ?? {};
     if (!bandId || !songId) return;
     navigate(bandPath.song(bandId, songId, mode), { replace: true });
   };

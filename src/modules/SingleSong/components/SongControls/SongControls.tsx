@@ -1,165 +1,159 @@
-import {
-  PauseIcon,
-  PlayIcon,
-  StopIcon,
-} from "@heroicons/react/24/outline";
-import {MoreOptions} from "./MoreOptions/MoreOptions";
-import {ModeSwitch} from "./ModeSwitch/ModeSwitch";
-import React, {useCallback, useEffect, useMemo, useState} from "react";
+import React, {useEffect, useState} from "react";
+import {ArrowLeftIcon} from "@heroicons/react/24/outline";
+import {Loader2} from "lucide-react";
+import {useSelector} from "react-redux";
+import {useNavigate} from "react-router-dom";
+
+import {Button} from "@/components/ui/button";
+import {cn} from "@/lib/utils";
+import {bandPath} from "#constants/routes";
+import {useBandId} from "#modules/Band/BandLayout";
 import ChordsProgressionPlayer from "../../services/ChordsProgressionPlayer/ChordsProgressionPlayer";
-import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import {ConnectionStatus} from "../ConnectionStatus/ConnectionStatus";
+import {useCanAnnotate, useCanPlay, useSongMode} from "../../mode";
+import {useConnectionIndicator} from "../ConnectionStatus/useConnectionIndicator";
 import {NotesAudienceSelect} from "../SlateLyricsPlayground/comments/NotesAudienceSelect";
-import { useCanAnnotate, useCanPlay } from "../../mode";
-import { useBandOrNull } from "#modules/Band/BandLayout";
-import { AudioDestination } from "#modules/Band/audio/AudioDestination";
-import BandAudioChannel from "#modules/Band/audio/bandAudioChannel";
-import { hostStateFor, routeFor } from "#modules/Band/audio/hostView";
-import { songTarget } from "#modules/Band/audio/types";
-import { useAudioHostStatus } from "#modules/Band/audio/useBandAudio";
-import { useCurrentUsername } from "../SlateLyricsPlayground/elements/hooks";
-import { useSongId } from "../../redux/selectors";
+import {MODES, ModeSwitch} from "./ModeSwitch/ModeSwitch";
+import {PlaybackControls} from "./PlaybackControls";
+import {SongActions} from "./SongActions";
 
+/** Відкрите меню — налаштування пристрою (`APP-29`), за замовчуванням закрите. */
+const MENU_STORAGE_KEY = "songMenuOpen";
+
+function readMenuOpen() {
+  try {
+    return localStorage.getItem(MENU_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Навігація сторінки пісні (`APP-24`–`APP-29`): «назад» і кнопка меню, що
+ * висять у правому верхньому куті поверх пісні. Постійної панелі тут немає —
+ * місце віддане пісні.
+ *
+ *   закрито:        [←][📖]
+ *   відкрито: [←][▶][⏹][📖]   ← кнопки поточного режиму
+ *                       [📖]
+ *                       [✏️]   ← перемикач режимів
+ *                       [🗒]
+ *                       [🎹] … ← дії з піснею
+ *
+ * Меню закривається ЛИШЕ своєю кнопкою (`APP-28`): вибір режиму, дія чи тап
+ * повз нього панель не згортають — хто керує звуком, тримає її відкритою.
+ */
 export const SongControls = () => {
-  // Програвання акордів — функція режиму читання.
+  const [open, setOpen] = useState(readMenuOpen);
   const canPlay = useCanPlay();
-  // Вибір, чиї примітки я бачу, — функція режиму приміток. Кнопки програвання
-  // й ця не перетинаються в часі, тож ділять те саме місце в панелі.
-  const canAnnotate = useCanAnnotate();
-  const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
-  const [localState, setLocalState] = useState(player.getState());
 
-  const band = useBandOrNull();
-  const username = useCurrentUsername();
-  const songId = useSongId();
-  const hostStatus = useAudioHostStatus();
-
-  // Хост онлайн і озброєний → кнопки стають пультом: команди їдуть у
-  // band-кімнату, звук грає планшет за пультом. Інакше — локально, як завжди.
-  // Правило одне на застосунок (`routeFor`): звук, що вже йде з цього
-  // пристрою, лишається його — хост, який озброївся посеред пісні, забирає
-  // НАСТУПНИЙ запуск, а не той, що звучить.
-  const remoteActive = routeFor({ localState, status: hostStatus }) === "host";
-  // Хост грає ІНШУ пісню (або ціле служіння) → мої кнопки в idle; мій плей
-  // перехоплює («останній перемагає»).
-  const hostState = songId == null ? "idle" : hostStateFor(hostStatus, songTarget(songId));
-  const hostOnMySong = remoteActive && hostState !== "idle";
-  const playbackState = remoteActive ? hostState : localState;
-
-  const hostDesignated =
-    (band as {audioHostUserId?: number | null} | null)?.audioHostUserId != null;
-
-  useEffect(() => player.onStateChange(setLocalState), [player]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(MENU_STORAGE_KEY, String(open));
+    } catch {
+      // приватний режим / заборонене сховище — стан просто не переживе сесію
+    }
+  }, [open]);
 
   // Вийшли з режиму читання — глушимо СВІЙ звук. Хоста не чіпаємо: він грає
-  // для всього гурту, а не для цього екрана.
+  // для всього гурту, а не для цього екрана. Живе тут, а не біля кнопок
+  // програвання: ті змонтовані лише у відкритому меню.
   useEffect(() => {
-    if (!canPlay) player.stop();
-  }, [canPlay, player]);
-
-  const sendCommand = useCallback(
-    (action: "play" | "pause" | "resume" | "stop") => {
-      // Пісні немає — командувати нема чим: хост відкриває документ саме по
-      // цьому id.
-      if (songId == null) return;
-      BandAudioChannel.getInstance().sendCommand({
-        action,
-        target: songTarget(songId, action === "play" ? player.getStartChordTokenKey() : null),
-        issuedBy: username ?? null,
-      });
-    },
-    [songId, player, username],
-  );
-
-  const handlePrimaryAction = useCallback(() => {
-    if (remoteActive) {
-      sendCommand(hostOnMySong && playbackState === "paused" ? "resume" : "play");
-      return;
-    }
-    if (playbackState === "paused") {
-      player.resume();
-      return;
-    }
-    player.play().catch((error) => {
-      console.error("Failed to start chord progression playback", error);
-    });
-  }, [remoteActive, hostOnMySong, playbackState, player, sendCommand]);
-
-  const handlePause = useCallback(() => {
-    if (remoteActive) {
-      sendCommand("pause");
-      return;
-    }
-    player.pause();
-  }, [remoteActive, player, sendCommand]);
-
-  const handleStop = useCallback(() => {
-    if (remoteActive) {
-      sendCommand("stop");
-      return;
-    }
-    player.stop();
-  }, [remoteActive, player, sendCommand]);
-
-  const isLoading = playbackState === "loading";
-  const isPlaying = playbackState === "playing";
-  const isPaused = playbackState === "paused";
+    if (!canPlay) ChordsProgressionPlayer.getInstance().stop();
+  }, [canPlay]);
 
   return (
-    <div className="w-full flex justify-between items-center gap-1">
-      {/* Перемикач режимів і «три крапки» стоять праворуч завжди — це вхід у
-          пісню, який не має їздити по панелі. Усе, що зʼявляється й зникає з
-          режимом (плеєр, адресат приміток), тулиться ліворуч, тож жодна кнопка
-          не міняє місця, коли сусідня зникла. */}
-      <div className="flex gap-1 items-center min-w-0">
-        {/* Стан звʼязку малюється рамкою самої панелі — місця не займає. */}
-        <ConnectionStatus />
-        {canPlay && (
-          <div className="flex gap-1 items-center">
-            {/* Куди йде звук: на хоста чи з цього пристрою (хост офлайн). */}
-            <AudioDestination
-              route={remoteActive ? "host" : "local"}
-              status={hostStatus}
-              hostDesignated={hostDesignated}
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              className="rounded-full border-dashed"
-              onClick={isPlaying ? handlePause : handlePrimaryAction}
-              disabled={isLoading}
-              aria-label={isPlaying ? "Pause progression" : isPaused ? "Resume progression" : "Play progression"}
-            >
-              {isLoading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : isPlaying ? (
-                <PauseIcon className="w-6 h-6" />
-              ) : (
-                <PlayIcon className="w-6 h-6" />
-              )}
-            </Button>
-            {(isPlaying || isPaused) && (
-              <Button
-                variant="outline"
-                size="icon"
-                className="rounded-full border-dashed"
-                onClick={handleStop}
-                disabled={isLoading}
-                aria-label="Stop progression"
-              >
-                <StopIcon className="w-6 h-6" />
-              </Button>
-            )}
-          </div>
-        )}
-        {canAnnotate && <NotesAudienceSelect />}
+    <div
+      className="fixed right-2 z-40 flex flex-col items-end gap-1"
+      style={{ top: "max(0.5rem, env(safe-area-inset-top))" }}
+    >
+      <div className="glass flex items-center gap-1 rounded-2xl p-1">
+        <BackButton />
+        {open && <ModeActions />}
+        <MenuButton open={open} onToggle={() => setOpen((value) => !value)} />
       </div>
 
-      <div className="flex gap-1 items-center shrink-0">
-        <ModeSwitch />
-        <MoreOptions />
-      </div>
+      {open && (
+        <div className="glass flex flex-col items-center gap-1 rounded-2xl p-1">
+          <ModeSwitch />
+          <SongActions />
+        </div>
+      )}
     </div>
-  )
-}
+  );
+};
+
+/** Рядок меню: те, що стосується поточного режиму. У редагуванні — нічого. */
+const ModeActions = () => {
+  const canPlay = useCanPlay();
+  const canAnnotate = useCanAnnotate();
+  if (canPlay) return <PlaybackControls />;
+  if (canAnnotate) return <NotesAudienceSelect />;
+  return null;
+};
+
+/**
+ * «Назад» туди, звідки прийшли (`APP-25`). `idx` — лічильник записів історії,
+ * який веде сам роутер: 0 означає, що пісня — перший екран сесії (посилання,
+ * старт застосунку), і крок назад вивів би із застосунку. Режими історії не
+ * додають (`MODE-26`), тож і `idx` вони не зсувають.
+ */
+const BackButton = () => {
+  const navigate = useNavigate();
+  const bandId = useBandId();
+  const isLoading = useSelector((state: any) => state.viewConfig.globalLoader);
+
+  const goBack = () => {
+    if ((window.history.state?.idx ?? 0) > 0) {
+      navigate(-1);
+    } else {
+      navigate(bandPath.songs(bandId));
+    }
+  };
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="rounded-full"
+      onClick={goBack}
+      aria-label="Назад"
+      title="Назад"
+    >
+      {isLoading ? (
+        <Loader2 className="size-6 animate-spin" />
+      ) : (
+        <ArrowLeftIcon className="size-6" />
+      )}
+    </Button>
+  );
+};
+
+/**
+ * Кнопка меню несе те, що треба бачити й при закритому меню (`APP-26`):
+ * іконку поточного режиму і стан звʼязку кольором рамки (`COLLAB-5`).
+ */
+const MenuButton = ({ open, onToggle }: { open: boolean; onToggle: () => void }) => {
+  const mode = useSongMode();
+  const connection = useConnectionIndicator();
+  const Icon = MODES.find((item) => item.key === mode)!.Icon;
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="icon"
+        className={cn("rounded-full transition-colors", open && "bg-accent")}
+        style={connection.color ? { borderColor: connection.color } : undefined}
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-label={open ? "Сховати меню пісні" : "Меню пісні"}
+        title={open ? "Сховати меню пісні" : "Меню пісні"}
+      >
+        <Icon className="size-5" />
+      </Button>
+      <span className="sr-only" role="status">
+        {connection.label}
+      </span>
+    </>
+  );
+};
