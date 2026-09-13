@@ -27,14 +27,14 @@ const normalizeContent = (content: ReactNode | null) => {
 
 export const PageBarProvider = ({ children }: { children: ReactNode }) => {
   const [content, _setContent] = useState<ReactNode>(<DefaultTitle>{APP_TITLE}</DefaultTitle>);
-  const [statusColor, setStatusColor] = useState<string | null>(null);
+  const [hidden, setHidden] = useState(false);
 
   const setContent = useCallback((content: ReactNode | null) => {
     _setContent(normalizeContent(content));
   }, []);
 
   return (
-    <PageBarContext.Provider value={{ content, setContent, statusColor, setStatusColor }}>
+    <PageBarContext.Provider value={{ content, setContent, hidden, setHidden }}>
       {children}
     </PageBarContext.Provider>
   );

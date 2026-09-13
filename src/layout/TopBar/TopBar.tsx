@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { ChevronDownIcon, ChevronUpIcon, HomeIcon } from "@heroicons/react/24/outline";
 import { Routes } from "#constants/routes";
 import { useSelector } from "react-redux";
-import classNames from "classnames";
 import {PageBar} from "#layout/PageBar/PageBar";
 import {usePageBar} from "#layout/PageBar/hooks";
 import { Button } from "@/components/ui/button";
@@ -20,10 +19,11 @@ type Props = {
 
 export default function TopBar({ visible, onToggle }: Props) {
   const isLoading = useSelector((state: any) => state.viewConfig.globalLoader);
-  // Стан сторінки світиться рамкою центральної панелі — тієї самої, у якій
-  // живуть її елементи. Бічні кнопки (додому, згортання) глобальні, тож
-  // лишаються нейтральними: колір стосується сторінки, а не всієї оболонки.
-  const { statusColor } = usePageBar();
+  // Сторінка, що відмовилась від бару (пісня), не отримує й кнопки згортання:
+  // згортати нема чого.
+  const { hidden } = usePageBar();
+  if (hidden) return null;
+
   return (
     <>
       {/* Схований бар зникає з потоку цілком — саме його висоту й забирає
@@ -43,14 +43,7 @@ export default function TopBar({ visible, onToggle }: Props) {
               </div>
 
               <div
-                className={
-                  classNames(
-                    "flex-1 flex gap-2 glass rounded-2xl p-1 items-center justify-end"
-                  )
-                }
-                // Тільки колір: товщина рамки лишається штатною (1px), інакше
-                // панель починає виглядати як попередження, а не як панель.
-                style={statusColor ? { borderColor: statusColor } : undefined}
+                className="flex-1 flex gap-2 glass rounded-2xl p-1 items-center justify-end"
               >
                 <PageBar />
               </div>

@@ -1,7 +1,8 @@
+import {TrashIcon} from "@heroicons/react/24/outline";
 import {Modal} from "#components";
 import {songApi} from "../../../api";
 import {bandPath} from "#constants/routes";
-import {useBandOrNull} from "#modules/Band/BandLayout";
+import {useBandId} from "#modules/Band/BandLayout";
 import {addNotificationWithTimeout} from "#layout/slices/notificationsSlice";
 import {useDispatch} from "react-redux";
 import {useCanEditContent} from "../../../mode";
@@ -11,9 +12,16 @@ import { Button } from "@/components/ui/button";
 
 const Trigger = (props) => {
   return (
-    <li className="inline-flex items-center justify-center gap-2 w-full h-8 px-3 mb-1 rounded-md text-xs font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 cursor-pointer" {...props}>
-      Видалити пісню
-    </li>
+    <Button
+      variant="ghost"
+      size="icon"
+      className="rounded-full text-destructive hover:text-destructive"
+      aria-label="Видалити пісню"
+      title="Видалити пісню"
+      {...props}
+    >
+      <TrashIcon className="size-6" />
+    </Button>
   )
 }
 
@@ -21,11 +29,9 @@ const Content = () => {
   const dispatch = useDispatch<any>();
   const song = useSong();
   const navigate = useNavigate();
-  // Меню живе в нижній панелі — вище band-роутів, тож гурт беремо м'яко.
-  const bandId = useBandOrNull()?.id;
+  const bandId = useBandId();
 
   const deleteSong = async () => {
-    if (bandId == null) return;
     songApi.deleteSong(bandId, song.id).then(() => {
       navigate(bandPath.songs(bandId));
     })

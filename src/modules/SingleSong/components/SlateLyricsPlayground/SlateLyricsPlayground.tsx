@@ -127,7 +127,7 @@ function CollabView({ songId }: { songId: string | number }) {
   }, [editor, synced]);
 
   // Віддаємо редактор споживачам поза деревом <Slate> (експорт у .docx з
-  // футерних SongControls) — див. `songEditorRegistry.ts`.
+  // меню пісні) — див. `songEditorRegistry.ts`.
   useEffect(() => {
     setActiveSongEditor(editor);
     return () => setActiveSongEditor(null);

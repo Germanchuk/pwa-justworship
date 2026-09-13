@@ -5,12 +5,11 @@ type PageBarContextType = {
   setContent: (content: ReactNode | null) => void;
   content: ReactNode;
   /**
-   * Колір стану сторінки — ним світиться рамка центральної панелі, або
-   * `null` (звичайна рамка). Тим самим каналом, що й вміст: сторінка знає
-   * свій стан, панель лише показує.
+   * Сторінка, якій бар не потрібен зовсім (пісня, `APP-24`): тоді оболонка
+   * не малює його, а сторінка ставить своє керування сама.
    */
-  setStatusColor: (color: string | null) => void;
-  statusColor: string | null;
+  setHidden: (hidden: boolean) => void;
+  hidden: boolean;
 };
 
 export const PageBarContext = createContext<PageBarContextType | null>(null);

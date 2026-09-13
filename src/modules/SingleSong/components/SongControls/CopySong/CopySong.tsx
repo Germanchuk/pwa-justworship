@@ -2,23 +2,23 @@ import {useDispatch} from "react-redux";
 import {useNavigate} from "react-router-dom";
 import {DocumentDuplicateIcon} from "@heroicons/react/24/outline";
 
+import {Button} from "@/components/ui/button";
 import {songApi} from "#modules/SingleSong/api";
 import {bandPath} from "#constants/routes";
-import {useBandOrNull} from "#modules/Band/BandLayout";
+import {useBandId} from "#modules/Band/BandLayout";
 import {addNotificationWithTimeout} from "#layout/slices/notificationsSlice";
 
 import {useSong} from "../../../redux/selectors";
 
-/** Пункт меню "Скопіювати": створює копію пісні на бекенді й відкриває її. */
-export default function CopySong({ className }: { className?: string }) {
+/** Дія «Скопіювати»: створює копію пісні на бекенді й відкриває її (`LIB-9`). */
+export default function CopySong() {
   const dispatch = useDispatch<any>();
   const navigate = useNavigate();
   const song = useSong();
-  // Меню живе в нижній панелі — вище band-роутів, тож гурт беремо м'яко.
-  const bandId = useBandOrNull()?.id;
+  const bandId = useBandId();
 
   const copySong = () => {
-    if (!song?.id || bandId == null) return;
+    if (!song?.id) return;
     songApi.copySong(bandId, song.id as string).then((data) => {
       navigate(bandPath.song(bandId, data.data.id));
     })
@@ -31,9 +31,15 @@ export default function CopySong({ className }: { className?: string }) {
   };
 
   return (
-    <li className={className} onClick={copySong}>
-      <DocumentDuplicateIcon className="w-4" />
-      Скопіювати
-    </li>
+    <Button
+      variant="ghost"
+      size="icon"
+      className="rounded-full"
+      onClick={copySong}
+      aria-label="Скопіювати пісню"
+      title="Скопіювати пісню"
+    >
+      <DocumentDuplicateIcon className="size-6" />
+    </Button>
   );
 }

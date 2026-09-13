@@ -12,8 +12,6 @@ import { useBandOrNull } from "#modules/Band/BandLayout";
 const cache = new Map<string, BandMember[]>();
 
 export const useBandMembers = (): BandMember[] => {
-  // Компонент живе в нижній панелі, тобто вище band-роутів і переживає
-  // навігацію на кадр — гурту може вже й не бути.
   const band = useBandOrNull();
   const key = band == null ? null : String(band.id);
   const [members, setMembers] = useState<BandMember[]>(() =>
