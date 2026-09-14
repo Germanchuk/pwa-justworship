@@ -18,6 +18,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.5.1",
+    date: "2026-09-15",
+    changes: [
+      "Виправлено збій при перемиканні в режим приміток: застосунок падав у будь-якій пісні, відкритій після іншої.",
+    ],
+  },
+  {
     version: "1.5.0",
     date: "2026-09-13",
     changes: [

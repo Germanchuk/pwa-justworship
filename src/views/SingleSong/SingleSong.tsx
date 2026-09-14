@@ -20,7 +20,7 @@ export default function SingleSong() {
   React.useEffect(() => {
     return () => {
       dispatch(setSong({})); // reset song
-      dispatch(setNotesAudience(null)); // своїми примітками, не чужими
+      dispatch(setNotesAudience([])); // своїми примітками, не чужими
     }
   }, []);
 

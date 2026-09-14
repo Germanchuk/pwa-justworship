@@ -1,4 +1,4 @@
-import { createSlice } from '@reduxjs/toolkit';
+import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import { Song, Status } from '../../../models';
 
 export type CollabConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
@@ -49,7 +49,7 @@ const songSlice = createSlice({
     resetSong: (state) => {
       state.song = {};
     },
-    setNotesAudience: (state, action) => {
+    setNotesAudience: (state, action: PayloadAction<string[]>) => {
       state.notesAudience = action.payload;
     },
     setStatus: (state, action) => {
