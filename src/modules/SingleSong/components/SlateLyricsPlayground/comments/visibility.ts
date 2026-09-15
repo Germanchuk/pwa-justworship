@@ -80,4 +80,3 @@ export const isPrivateTo = (
   return list.length === 1 && list[0] === username;
 };
 
-export const publicVisibility = (): string[] => [AUDIENCE_ALL];

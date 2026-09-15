@@ -63,12 +63,14 @@ export const useAnnotationRange = (editor: Editor) => {
     };
   }, [editor]);
 
-  const clear = useCallback(() => {
-    setRange(null);
+  // Програмний вибір (щойно створена позначка стає обраною, `NOTE-7`):
+  // нативне виділення знімаємо, щоб воно не лишалось висіти поверх.
+  const select = useCallback((next: BaseRange | null) => {
     window.getSelection()?.removeAllRanges();
+    setRange(next);
   }, []);
 
-  return { range, clear };
+  return { range, select };
 };
 
 /**
