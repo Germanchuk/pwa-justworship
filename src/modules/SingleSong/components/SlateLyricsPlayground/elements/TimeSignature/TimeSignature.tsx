@@ -3,6 +3,7 @@ import type { RenderElementProps } from "slate-react";
 import { Node } from "slate";
 import { useSlateStatic } from "slate-react";
 import { useCanEditContent } from "../../../../mode";
+import { MetaBadge } from "../MetaBadge/MetaBadge";
 import { setVoidText } from "../setVoidText";
 import { TimeSignatureModal } from "./TimeSignatureModal";
 
@@ -16,15 +17,13 @@ export function TimeSignature(props: RenderElementProps) {
 
   return (
     <div {...attributes} className="song-meta-line">
-      <span
-        contentEditable={false}
-        className={`song-meta-badge ${isReadonly ? "song-meta-badge--readonly" : ""}`}
+      <MetaBadge
+        label="Розмір:"
+        value={value}
+        readonly={isReadonly}
         title={isReadonly ? "Розмір змінюється в режимі редагування" : undefined}
-        onClick={() => !isReadonly && setOpen(true)}
-      >
-        <span className="song-meta-badge__label">Розмір:</span>
-        <span className="song-meta-badge__value">{value}</span>
-      </span>
+        onOpen={() => setOpen(true)}
+      />
       {children}
       {open && (
         <TimeSignatureModal

@@ -9,7 +9,6 @@ import { withHeader } from "./withHeader";
 import { withMetaSchema } from "./withMetaSchema";
 import { withComments } from "./comments/withComments";
 import { withModeGuard } from "./mode/withModeGuard";
-import { ModeBlockedTooltip } from "./mode/ModeBlockedTooltip";
 import { RenderLeaf } from "./comments/renderLeaf";
 import { NoteHeadsProvider } from "./comments/NoteHeadsContext";
 import { CommentsFab } from "./comments/CommentsFab";
@@ -19,7 +18,7 @@ import { isPrivateTo } from "./comments/visibility";
 import { useCollabProvider } from "./useCollabProvider";
 import { useFillViewportHeight } from "./useFillViewportHeight";
 import { setActiveSongEditor } from "./songEditorRegistry";
-import { useCanAnnotate, useCanEditContent, useSongMode } from "../../mode";
+import { useCanAnnotate, useCanEditContent } from "../../mode";
 import { useConnectionStatus } from "../../redux/selectors";
 import { useCurrentUsername } from "./elements/hooks";
 import { SlatePlayerBridge } from "./player/SlatePlayerBridge";
@@ -34,24 +33,13 @@ interface Props {
 function DecoratedEditable({
   placeholder,
   readOnly,
-  canEditContent,
 }: {
   placeholder?: string;
   readOnly: boolean;
-  canEditContent: boolean;
 }) {
   const decorate = usePlayerDecorate();
   const editableRef = useRef<HTMLDivElement | null>(null);
   useFillViewportHeight(editableRef);
-
-  // Drag&drop тексту НЕ проходить через `withModeGuard`: slate-react сам
-  // викликає `Transforms.delete` на перетягнутому діапазоні, а вже потім
-  // `insertData` (яку guard відсікає) — вийшло б видалення без вставки.
-  // Тому в режимі приміток гасимо перетягування на рівні DOM-події:
-  // `preventDefault` для slate-react означає "подію вже оброблено".
-  const blockDragWhenNotEditing = (e: React.DragEvent) => {
-    if (!canEditContent) e.preventDefault();
-  };
 
   return (
     <Editable
@@ -62,8 +50,6 @@ function DecoratedEditable({
       renderLeaf={(props) => <RenderLeaf {...props} />}
       decorate={decorate}
       onContextMenu={(e) => e.preventDefault()}
-      onDragStart={blockDragWhenNotEditing}
-      onDrop={blockDragWhenNotEditing}
       placeholder={placeholder}
     />
   );
@@ -81,7 +67,6 @@ function CollabView({ songId }: { songId: string | number }) {
   // Режим — per-user і локальний, тож НЕ входить у deps редактора: пересоздання
   // Yjs-редактора на кожне перемикання відʼєднало б документ. Guard читає
   // актуальне значення через ref.
-  const mode = useSongMode();
   const canEditContent = useCanEditContent();
   const canAnnotate = useCanAnnotate();
   const canEditRef = useRef(canEditContent);
@@ -108,8 +93,7 @@ function CollabView({ songId }: { songId: string | number }) {
         pushLostComment(ydoc, data);
       },
     });
-    // Найзовнішній guard: поза режимом редагування вміст пісні незмінний
-    // (у режимі приміток редактор лишається contentEditable заради виділення).
+    // Найзовнішній guard: поза режимом редагування вміст пісні незмінний.
     e = withModeGuard(e, () => canEditRef.current);
     return e;
   }, [sharedRoot, ydoc]);
@@ -133,11 +117,11 @@ function CollabView({ songId }: { songId: string | number }) {
     return () => setActiveSongEditor(null);
   }, [editor]);
 
-  // Режим читання вимикає contentEditable — прибираємо каретку, щоб після
-  // повернення в edit/notes не лишалось "привида" старого селекшна.
+  // Поза редагуванням contentEditable вимкнений — прибираємо каретку, щоб
+  // після повернення в edit не лишалось "привида" старого селекшна.
   useEffect(() => {
-    if (mode === "read") Transforms.deselect(editor);
-  }, [editor, mode]);
+    if (!canEditContent) Transforms.deselect(editor);
+  }, [editor, canEditContent]);
 
   // DEBUG (тільки dev): доступ до Slate-структури пісні з консолі.
   //   __slate()  — дерево, яке розгортається кліками в консолі
@@ -182,14 +166,15 @@ function CollabView({ songId }: { songId: string | number }) {
         {/* Розкладка карток приміток рахується один раз на зміну документа,
             а не в кожному рядку — див. `comments/NoteHeadsContext.tsx`. */}
         <NoteHeadsProvider>
+          {/* Читання й примітки — без contentEditable: тап не ставить
+              каретку й не відкриває клавіатуру (`MODE-6`, `MODE-19`).
+              Виділення під позначку в примітках — `useAnnotationRange`. */}
           <DecoratedEditable
-            readOnly={mode === "read"}
-            canEditContent={canEditContent}
+            readOnly={!canEditContent}
             placeholder={canEditContent ? "Почніть друкувати..." : undefined}
           />
         </NoteHeadsProvider>
         {canAnnotate && <CommentsFab />}
-        <ModeBlockedTooltip />
       </SlatePlayerBridge>
     </Slate>
   );

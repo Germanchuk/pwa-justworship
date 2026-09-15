@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { RenderElementProps } from "slate-react";
 import { useSlate } from "slate-react";
 import { useCanEditContent } from "../../../../mode";
+import { MetaBadge } from "../MetaBadge/MetaBadge";
 import { KeyPickerModal, type KeyChangeMode } from "./KeyPickerModal";
 import type { SongKeyElement } from "../../types";
 import type { SongKeyValue } from "../../transposition/model";
@@ -36,19 +37,15 @@ export function SongKey(props: RenderElementProps) {
 
   return (
     <div {...attributes} className="song-meta-line">
-      <span
-        contentEditable={false}
-        className={`song-meta-badge ${isReadonly ? "song-meta-badge--readonly" : ""}`}
+      <MetaBadge
+        label="Тональність:"
+        value={display(songKey.keyValue || "C")}
+        readonly={isReadonly}
         title={
           isReadonly ? "Тональність змінюється в режимі редагування" : undefined
         }
-        onClick={() => !isReadonly && setOpen(true)}
-      >
-        <span className="song-meta-badge__label">Тональність:</span>
-        <span className="song-meta-badge__value">
-          {display(songKey.keyValue || "C")}
-        </span>
-      </span>
+        onOpen={() => setOpen(true)}
+      />
       {myCapo > 0 && (
         <span contentEditable={false} className="song-meta-note">
           З капою: {keyDisplayName(effectiveKey)}

@@ -4,6 +4,7 @@ import { useSlateStatic } from "slate-react";
 import { Switch } from "@/components/ui/switch";
 import { useCapoApplies, useSettingsEditable } from "../../../../mode";
 import { useCurrentUsername } from "../hooks";
+import { MetaBadge } from "../MetaBadge/MetaBadge";
 import { CapoModal } from "./CapoModal";
 import type { CapoElement } from "../../types";
 import { setCapo, setCapoEnabled } from "../../transposition/operations";
@@ -55,23 +56,17 @@ export function Capo(props: RenderElementProps) {
   // його можна й у читанні: музикант має могти поставити своє капо.
   return (
     <div {...attributes} className="song-meta-line">
-      <span
-        contentEditable={false}
-        className={`song-meta-badge ${
-          interactive ? "" : "song-meta-badge--readonly song-meta-badge--inert"
+      <MetaBadge
+        label="Капо:"
+        value={rawValue}
+        valueClassName={`${isEmpty ? "song-meta-badge__value--placeholder" : ""} ${
+          !isEmpty && !active ? "song-meta-badge__value--muted" : ""
         }`}
-        onClick={() => interactive && setOpen(true)}
+        readonly={!interactive}
+        className={interactive ? "" : "song-meta-badge--inert"}
         title={interactive ? undefined : title}
-      >
-        <span className="song-meta-badge__label">Капо:</span>
-        <span
-          className={`song-meta-badge__value ${
-            isEmpty ? "song-meta-badge__value--placeholder" : ""
-          } ${!isEmpty && !active ? "song-meta-badge__value--muted" : ""}`}
-        >
-          {rawValue}
-        </span>
-      </span>
+        onOpen={() => setOpen(true)}
+      />
 
       {/* Свіч завжди в DOM: при капо=0 (або коли режим його не застосовує)
           просто disabled, щоб рядок не стрибав при зміні стану. */}

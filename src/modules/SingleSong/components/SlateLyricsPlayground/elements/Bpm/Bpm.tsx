@@ -4,6 +4,7 @@ import { Node } from "slate";
 import { useSlateStatic } from "slate-react";
 import { useCanEditContent } from "../../../../mode";
 import { extractHeader } from "../../../../services/ChordsProgressionPlayer/extractHeader";
+import { MetaBadge } from "../MetaBadge/MetaBadge";
 import { setVoidText } from "../setVoidText";
 import { BpmModal } from "./BpmModal";
 
@@ -31,25 +32,17 @@ export function Bpm(props: RenderElementProps) {
 
   return (
     <div {...attributes} className="song-meta-line">
-      <span
-        contentEditable={false}
-        className={`song-meta-badge ${isReadonly ? "song-meta-badge--readonly" : ""}`}
+      <MetaBadge
+        label="Темп:"
+        value={value || 0}
+        valueClassName={isEmpty ? "song-meta-badge__value--placeholder" : ""}
+        readonly={isReadonly}
         title={isReadonly ? "Темп змінюється в режимі редагування" : undefined}
-        onClick={() => {
-          if (isReadonly) return;
+        onOpen={() => {
           setScale(tempoScaleFor(extractHeader(editor.children).timeSignature[1]));
           setOpen(true);
         }}
-      >
-        <span className="song-meta-badge__label">Темп:</span>
-        <span
-          className={`song-meta-badge__value ${
-            isEmpty ? "song-meta-badge__value--placeholder" : ""
-          }`}
-        >
-          {value || 0}
-        </span>
-      </span>
+      />
       {children}
       <BpmModal
         open={open}

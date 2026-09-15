@@ -36,17 +36,11 @@ export function BpmModal({
   const initialValue = current && current >= BPM_MIN && current <= max ? current : 80;
   const [draft, setDraft] = useState<number>(initialValue);
 
-  // The Drawer stays mounted (so vaul can animate close); re-sync the draft and
-  // dismiss the mobile keyboard each time it opens.
+  // The Drawer stays mounted (so vaul can animate close); re-sync the draft
+  // each time it opens.
   useEffect(() => {
     if (!open) return;
     setDraft(initialValue);
-    if (
-      document.activeElement &&
-      typeof (document.activeElement as HTMLElement).blur === "function"
-    ) {
-      (document.activeElement as HTMLElement).blur();
-    }
   }, [open, initialValue]);
 
   const commit = () => {
