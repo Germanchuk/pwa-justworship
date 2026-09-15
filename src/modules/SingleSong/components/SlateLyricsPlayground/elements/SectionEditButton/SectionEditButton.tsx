@@ -6,6 +6,7 @@ import { ReactEditor, useSlate } from "slate-react";
 import { useCanEditContent } from "../../../../mode";
 import type { DynamicsStepKey } from "../../constants/dynamicsSteps";
 import type { SectionElement } from "../../types";
+import { releaseTextFocus } from "../releaseTextFocus";
 import { SectionMetaModal } from "./SectionMetaModal";
 import "./SectionEditButton.css";
 
@@ -33,6 +34,7 @@ export const SectionEditButton = ({ lineElement }: { lineElement: Element }) => 
   const onClick = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    releaseTextFocus(editor);
     setOpen(true);
   };
 
@@ -45,8 +47,6 @@ export const SectionEditButton = ({ lineElement }: { lineElement: Element }) => 
       { repeat: next.repeat, dynamicsSteps: next.dynamicsSteps },
       { at: sectionPath },
     );
-    Transforms.deselect(editor);
-    ReactEditor.blur(editor);
   };
 
   return (

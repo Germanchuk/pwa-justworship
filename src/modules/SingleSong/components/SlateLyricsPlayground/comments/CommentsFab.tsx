@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Editor, Range, Transforms, type BaseRange } from "slate";
-import { ReactEditor, useSlate } from "slate-react";
+import { useSlate } from "slate-react";
 import {
   Captions,
   Highlighter,
@@ -27,6 +27,7 @@ import {
   STRIKE_COLOR,
 } from "./colors";
 import { setPendingFocus } from "./pendingFocus";
+import { useAnnotationRange } from "./useAnnotationRange";
 import { isVisibleToAll, publicVisibility, restCount } from "./visibility";
 import {
   addHighlight,
@@ -50,10 +51,10 @@ const generateId = (): string => {
 
 const getCaretMarks = (
   editor: Editor,
+  selection: BaseRange | null,
   viewers: string[],
 ): CommentMark[] => {
   if (viewers.length === 0) return [];
-  const { selection } = editor;
   if (!selection || !Range.isCollapsed(selection)) return [];
   try {
     const [leaf] = Editor.leaf(editor, selection.anchor);
@@ -177,9 +178,11 @@ export const CommentsFab = () => {
 
   useRafPin(wrapRef);
 
-  const { selection } = editor;
-  const hasSel = viewers.length > 0 && !!selection && Range.isExpanded(selection);
-  const liveMarksAtCaret = !hasSel ? getCaretMarks(editor, viewers) : [];
+  // Не `editor.selection`: у режимі приміток редактор read-only, і Slate
+  // тримає там виділення лише на мить застосування позначки.
+  const { range, clear: clearRange } = useAnnotationRange(editor);
+  const hasSel = viewers.length > 0 && !!range && Range.isExpanded(range);
+  const liveMarksAtCaret = !hasSel ? getCaretMarks(editor, range, viewers) : [];
   const hasMarksAtCaret = liveMarksAtCaret.length > 0;
   const visible = hasSel || hasMarksAtCaret || open;
 
@@ -206,7 +209,6 @@ export const CommentsFab = () => {
     const sel = savedSel.current;
     if (!sel) return null;
     try {
-      ReactEditor.focus(editor);
       Transforms.select(editor, sel);
       return sel;
     } catch {
@@ -223,6 +225,7 @@ export const CommentsFab = () => {
     }
     addHighlight(editor, generateId(), [...viewers], color, me);
     Transforms.deselect(editor);
+    clearRange();
     savedSel.current = null;
     setOpen(false);
   };
@@ -238,6 +241,7 @@ export const CommentsFab = () => {
     setPendingFocus(id);
     addNote(editor, id, [...viewers], color, "", me);
     Transforms.deselect(editor);
+    clearRange();
     savedSel.current = null;
     setOpen(false);
   };
@@ -253,6 +257,7 @@ export const CommentsFab = () => {
     setPendingFocus(id);
     addNote(editor, id, publicVisibility(), PUBLIC_COMMENT_COLOR, "", me);
     Transforms.deselect(editor);
+    clearRange();
     savedSel.current = null;
     setOpen(false);
   };
@@ -274,14 +279,14 @@ export const CommentsFab = () => {
   };
 
   const onTriggerMouseDown = (e: React.MouseEvent) => {
-    const sel = editor.selection;
+    const sel = range;
     if (sel && Range.isExpanded(sel)) {
       savedSel.current = sel;
       setOpenCtx({ mode: "add" });
     } else {
-      const marks = getCaretMarks(editor, viewers);
+      const marks = getCaretMarks(editor, sel, viewers);
       if (marks.length > 0) {
-        savedSel.current = sel ?? null;
+        savedSel.current = sel;
         setOpenCtx({ mode: "manage", marks });
       } else {
         savedSel.current = null;
