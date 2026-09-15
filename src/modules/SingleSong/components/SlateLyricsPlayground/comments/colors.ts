@@ -13,14 +13,11 @@ export const COMMENT_PALETTE: CommentColor[] = [
 
 export const DEFAULT_COMMENT_COLOR = COMMENT_PALETTE[0].hex;
 
-// Fixed color for public (visible-to-everyone) comments. Always neutral gray.
-export const PUBLIC_COMMENT_COLOR = "#6B7280";
-
 // Neutral tone for OTHER users' private marks — drawn ONLY in edit mode, where
 // a deletion could wipe out somebody else's anchor: you see that something is
 // annotated there, but neither the real color nor the note body. Distinct from
-// PUBLIC_COMMENT_COLOR so users can tell "someone's private note" apart from a
-// public one at a glance. In read and notes mode these marks aren't drawn.
+// the gray of public comments (#6B7280) so users can tell "someone's private
+// note" apart from a public one at a glance. In read and notes mode these marks aren't drawn.
 export const OTHERS_NEUTRAL_COLOR = "#9CA3AF";
 
 // Закреслення — позначка БЕЗ кольору: замість підсвітки текст перекреслюється
@@ -32,7 +29,7 @@ export const OTHERS_NEUTRAL_COLOR = "#9CA3AF";
 export const STRIKE_COLOR = "strike";
 
 // Реальний колір, яким малюється риска й тонуються картка та кнопки.
-// Навмисно не PUBLIC_COMMENT_COLOR, щоб закреслення не читалось як публічний
+// Навмисно не сірий публічних коментарів, щоб закреслення не читалось як публічний
 // коментар.
 export const STRIKE_INK = "#374151";
 
@@ -42,6 +39,9 @@ const resolveHex = (color: string): string =>
   isStrike(color) ? STRIKE_INK : color;
 
 const HIGHLIGHT_ALPHA = 0.32;
+// Позначка, обрана тапом (`NOTE-36`): помітно густіша за звичайну, щоб серед
+// сусідніх і накладених позначок було видно, яку саме зараз керуємо.
+const SELECTED_ALPHA = 0.6;
 const CARD_BG_ALPHA = 0.18;
 
 const hexToRgb = (hex: string): [number, number, number] => {
@@ -64,6 +64,9 @@ export const hexToRgba = (hex: string, alpha: number): string => {
 
 export const highlightBg = (hex: string): string =>
   hexToRgba(hex, HIGHLIGHT_ALPHA);
+
+export const selectedBg = (hex: string): string =>
+  hexToRgba(hex, isStrike(hex) ? CARD_BG_ALPHA : SELECTED_ALPHA);
 
 export const cardBg = (hex: string): string => hexToRgba(hex, CARD_BG_ALPHA);
 

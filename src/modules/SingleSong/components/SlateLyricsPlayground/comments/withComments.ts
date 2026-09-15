@@ -1,4 +1,13 @@
-import { Editor, Element, Node, Path, Range, Text, Transforms } from "slate";
+import {
+  Editor,
+  Element,
+  Node,
+  Path,
+  Range,
+  Text,
+  Transforms,
+  type BaseRange,
+} from "slate";
 
 import type {
   CommentAnchorElement,
@@ -189,6 +198,96 @@ const hasBlockSelection = (editor: Editor): boolean => {
 
 // ---------- public API ----------
 
+/**
+ * Згорнутий діапазон на першому листку, що несе цей коментар: «курсор» у
+ * позначці, з якого `CommentsFab` бере її в керування.
+ */
+export const commentCaret = (
+  editor: Editor,
+  commentId: string,
+): BaseRange | null => {
+  for (const [, path] of Editor.nodes(editor, {
+    at: [],
+    match: (n) =>
+      Text.isText(n) &&
+      getMarks(n as CustomText).some((c) => c.commentId === commentId),
+  })) {
+    const point = { path, offset: 0 };
+    return { anchor: point, focus: point };
+  }
+  return null;
+};
+
+/**
+ * Уся область позначки: від початку першого її листка до кінця останнього.
+ * Якщо позначка розірвана (частину тексту між шматками видалили), область
+ * накриває й проміжок — «змінити область» (`NOTE-43`) склеює її назад.
+ */
+export const commentRange = (
+  editor: Editor,
+  commentId: string,
+): BaseRange | null => {
+  let first: Path | null = null;
+  let last: [CustomText, Path] | null = null;
+  for (const [n, p] of Editor.nodes(editor, {
+    at: [],
+    match: (m) =>
+      Text.isText(m) &&
+      getMarks(m as CustomText).some((c) => c.commentId === commentId),
+  })) {
+    first ??= p;
+    last = [n as CustomText, p];
+  }
+  if (!first || !last) return null;
+  return {
+    anchor: { path: first, offset: 0 },
+    focus: { path: last[1], offset: last[0].text.length },
+  };
+};
+
+/**
+ * Перенести позначку на нову область (`NOTE-43`): та сама позначка — id,
+ * колір, адресати, автор, картка, — лише на іншому тексті. Область поза
+ * текстом пісні ігнорується, і позначка лишається де була.
+ *
+ * Зняття й накладання — в одному `withoutNormalizing`: інакше між ними
+ * нормалізація побачила б примітку без тексту й винесла б її у втрачені.
+ */
+export const moveComment = (
+  editor: Editor,
+  commentId: string,
+  range: BaseRange,
+): void => {
+  Transforms.select(editor, range);
+  if (!hasBlockSelection(editor)) return;
+
+  Editor.withoutNormalizing(editor, () => {
+    let mark: CommentMark | undefined;
+    const matches: Array<[CustomText, Path]> = [];
+    for (const [n, p] of Editor.nodes(editor, {
+      at: [],
+      match: (m) =>
+        Text.isText(m) &&
+        getMarks(m as CustomText).some((c) => c.commentId === commentId),
+    })) {
+      matches.push([n as CustomText, p]);
+    }
+    for (const [leaf, p] of matches) {
+      const marks = getMarks(leaf);
+      mark ??= marks.find((c) => c.commentId === commentId);
+      const next = marks.filter((c) => c.commentId !== commentId);
+      if (next.length === 0) {
+        Transforms.unsetNodes(editor, "comment", { at: p });
+      } else {
+        Transforms.setNodes(editor, { comment: next } as Partial<CustomText>, {
+          at: p,
+        });
+      }
+    }
+    if (mark) applyMark(editor, mark, `__cMove_${commentId}`);
+  });
+};
+
 /** Кольорове виділення на поточному селекшні. Картки не створює. */
 export const addHighlight = (
   editor: Editor,
@@ -320,6 +419,62 @@ export const removeComment = (
  * картка в коментаря одна на всіх адресатів, тож «прибрати її лише для двох з
  * трьох» не існує як операція. Понизивши спільну примітку, понижуєш її всім.
  */
+/**
+ * Точкова правка позначки — і в кожній мітці на тексті, і в записі примітки,
+ * щоб картка, підсвітка й видимість не розʼїхались.
+ */
+const patchComment = (
+  editor: Editor,
+  commentId: string,
+  patch: Partial<Pick<CommentMark, "color" | "visibleFor">>,
+): void => {
+  Editor.withoutNormalizing(editor, () => {
+    const matches: Array<[CustomText, Path]> = [];
+    for (const [n, p] of Editor.nodes(editor, {
+      at: [],
+      match: (m) =>
+        Text.isText(m) &&
+        getMarks(m as CustomText).some((c) => c.commentId === commentId),
+    })) {
+      matches.push([n as CustomText, p]);
+    }
+    for (const [leaf, p] of matches) {
+      const next = getMarks(leaf).map((mark) =>
+        mark.commentId === commentId ? { ...mark, ...patch } : mark,
+      );
+      Transforms.setNodes(editor, { comment: next } as Partial<CustomText>, {
+        at: p,
+      });
+    }
+
+    const note = readNote(editor, commentId);
+    if (note) writeNote(editor, commentId, { ...note, ...patch });
+  });
+};
+
+/**
+ * Замінити адресатів позначки цілком (`NOTE-37`). Порожній перелік
+ * ігнорується: позначку без адресатів не бачив би ніхто, а видалення — окрема
+ * дія (`NOTE-38`).
+ */
+export const setCommentAudience = (
+  editor: Editor,
+  commentId: string,
+  visibleFor: string[],
+): void => {
+  if (visibleFor.length === 0) return;
+  patchComment(editor, commentId, { visibleFor });
+};
+
+/** Змінити колір позначки, зокрема на закреслення й назад (`NOTE-42`). */
+export const setCommentColor = (
+  editor: Editor,
+  commentId: string,
+  color: string,
+): void => {
+  patchComment(editor, commentId, { color });
+};
+
 export const removeNoteOnly = (editor: Editor, commentId: string): void => {
   deleteNote(editor, commentId);
 };

@@ -1,47 +1,56 @@
-import { useEffect, useRef, useState } from "react";
 import { Editor, Range, Transforms, type BaseRange } from "slate";
-import { useSlate } from "slate-react";
+import { useState } from "react";
+import { ReactEditor, useSlate } from "slate-react";
 import {
-  Captions,
   Highlighter,
-  Megaphone,
   MessageSquareOff,
   MessageSquarePlus,
-  PencilOff,
-  StickyNote,
   Strikethrough,
+  TextSelect,
   Trash2,
-  X,
+  Users,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import { useNotesViewers } from "../../../redux/selectors";
 import { useCurrentUsername } from "../elements/hooks";
 import type { CommentMark, CustomText } from "../types";
 import {
+  cardBorder,
   COMMENT_PALETTE,
+  DEFAULT_COMMENT_COLOR,
   highlightBg,
-  PUBLIC_COMMENT_COLOR,
+  isStrike,
+  selectedBg,
   STRIKE_COLOR,
 } from "./colors";
 import { setPendingFocus } from "./pendingFocus";
 import { useAnnotationRange } from "./useAnnotationRange";
-import { isVisibleToAll, publicVisibility, restCount } from "./visibility";
+import { useBandMembers } from "./useBandMembers";
+import { AUDIENCE_ALL, isVisibleToAll, restCount } from "./visibility";
 import {
   addHighlight,
-  addNote,
+  commentCaret,
+  commentRange,
   convertHighlightToNote,
   hasNote,
   removeComment,
+  moveComment,
   removeNoteOnly,
+  setCommentAudience,
+  setCommentColor,
 } from "./withComments";
-
-const FAB_SIZE = 56;
-const FAB_RIGHT = 8;
-// Vertical anchor for the FAB inside the visual viewport (0 = top, 1 = bottom).
-const FAB_V_RATIO = 0.85;
 
 const generateId = (): string => {
   const c = (globalThis as { crypto?: Crypto }).crypto;
@@ -66,69 +75,27 @@ const getCaretMarks = (
   }
 };
 
+/**
+ * Підсвітка позначок, обраних тапом (`NOTE-36`). Правило на `data-cid`, а не
+ * проп у `RenderLeaf`: так не перемальовується жоден листок, а позначка на
+ * кількох рядках (кілька span з тим самим `data-cid`) виділяється цілком.
+ * `!important` — бо звичайний фон позначки стоїть інлайном.
+ */
+const selectedMarksCss = (marks: CommentMark[]): string =>
+  marks
+    .map((m) => {
+      const color = m.color ?? DEFAULT_COMMENT_COLOR;
+      return `[data-cid="${CSS.escape(m.commentId)}"] {
+  background-color: ${selectedBg(color)} !important;
+  box-shadow: inset 0 -2px 0 ${cardBorder(color)};
+}`;
+    })
+    .join("\n");
+
 const noLoseSelection = (e: React.MouseEvent) => e.preventDefault();
-
-const useRafPin = (ref: React.RefObject<HTMLElement | null>) => {
-  useEffect(() => {
-    const vv =
-      typeof window === "undefined" ? null : window.visualViewport ?? null;
-
-    let raf = 0;
-    let prevTx = NaN;
-    let prevTy = NaN;
-
-    const fallbackWidth = () =>
-      typeof window === "undefined" ? 0 : window.innerWidth;
-    const fallbackHeight = () =>
-      typeof window === "undefined" ? 0 : window.innerHeight;
-
-    const tick = () => {
-      const el = ref.current;
-      if (el) {
-        const left = vv ? vv.offsetLeft : 0;
-        const top = vv ? vv.offsetTop : 0;
-        const width = vv ? vv.width : fallbackWidth();
-        const height = vv ? vv.height : fallbackHeight();
-
-        const tx = left + width - FAB_SIZE - FAB_RIGHT;
-        const ty = top + height * FAB_V_RATIO;
-
-        if (tx !== prevTx || ty !== prevTy) {
-          el.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
-          prevTx = tx;
-          prevTy = ty;
-        }
-      }
-      raf = requestAnimationFrame(tick);
-    };
-
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [ref]);
-};
 
 const iconBtnBase =
   "inline-flex size-14 items-center justify-center rounded-full shadow-md border border-black/10 transition-transform cursor-pointer hover:scale-105 active:scale-95";
-
-const NeutralIconButton = ({
-  onClick,
-  title,
-  children,
-}: {
-  onClick: () => void;
-  title: string;
-  children: React.ReactNode;
-}) => (
-  <button
-    type="button"
-    onMouseDown={noLoseSelection}
-    onClick={onClick}
-    title={title}
-    className={cn(iconBtnBase, "bg-secondary text-secondary-foreground")}
-  >
-    {children}
-  </button>
-);
 
 const ColoredIconButton = ({
   color,
@@ -140,7 +107,6 @@ const ColoredIconButton = ({
   onClick: () => void;
   title: string;
   children: React.ReactNode;
-  destructive?: boolean;
 }) => (
   <button
     type="button"
@@ -156,305 +122,324 @@ const ColoredIconButton = ({
   </button>
 );
 
-type AddPhase = "kind" | "color-highlight" | "color-note";
+/** Кружок кольору позначки; у закреслення кольору нема — його іконка. */
+const ColorDot = ({ color }: { color: string }) =>
+  isStrike(color) ? (
+    <Strikethrough className="size-5" />
+  ) : (
+    <span
+      className="size-5 rounded-full border border-black/10"
+      style={{ backgroundColor: cardBorder(color) }}
+    />
+  );
 
-type OpenContext =
-  | { mode: "add" }
-  | { mode: "manage"; marks: CommentMark[] }
-  | null;
+const menuIconButton = cn(
+  buttonVariants({ variant: "ghost", size: "icon" }),
+  "rounded-full",
+);
+
+/**
+ * Колір позначки (`NOTE-42`): кружок угорі меню, по тапу — та сама палітра,
+ * що й при створенні, разом із закресленням.
+ */
+const MarkColorMenu = ({ mark }: { mark: CommentMark }) => {
+  const editor = useSlate();
+  const color = mark.color ?? DEFAULT_COMMENT_COLOR;
+  const options = [
+    ...COMMENT_PALETTE.map((c) => ({ key: c.name, color: c.hex })),
+    { key: "strike", color: STRIKE_COLOR },
+  ];
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        title="Колір"
+        aria-label="Колір"
+        className={menuIconButton}
+      >
+        <ColorDot color={color} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="left" align="start" className="min-w-0 p-1">
+        {options.map((o) => (
+          <DropdownMenuItem
+            key={o.key}
+            title={o.key === "strike" ? "Закреслення" : o.key}
+            onSelect={() => setCommentColor(editor, mark.commentId, o.color)}
+            className={cn(
+              "justify-center rounded-full p-2",
+              o.color === color && "bg-accent",
+            )}
+          >
+            <ColorDot color={o.color} />
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
+/**
+ * Хто бачить позначку (`NOTE-37`): учасники гурту з галочками, як у виборі
+ * «чиїми очима» (`NotesAudienceSelect`). Правка йде одразу в документ.
+ *
+ *  - останню галочку зняти не можна — для видалення є смітник;
+ *  - зняти можна й тих, чиїми очима я дивлюсь: тоді позначка зникає з мого
+ *    екрана разом із цим меню — я віддав її іншим;
+ *  - публічному коментарю кнопки нема: «всім» — не перелік, міняти нема чого;
+ *  - у гурті з однієї людини — теж нема, вибирати нема з кого.
+ */
+const MarkAudienceMenu = ({ mark }: { mark: CommentMark }) => {
+  const editor = useSlate();
+  const me = useCurrentUsername();
+  const members = useBandMembers();
+
+  const current = mark.visibleFor;
+  if (current.includes(AUDIENCE_ALL)) return null;
+
+  const memberNames = members
+    .map((m) => m.username)
+    .filter((u): u is string => !!u && u !== me);
+  // Хто вже вийшов з гурту, але досі в адресатах, — теж у списку, щоб його
+  // можна було зняти.
+  const former = current.filter((u) => u !== me && !memberNames.includes(u));
+  const ordered = [...(me ? [me] : []), ...memberNames, ...former];
+  if (ordered.length < 2) return null;
+
+  const toggle = (username: string) => {
+    const next = new Set(current);
+    if (!next.delete(username)) next.add(username);
+    // Порядок галочок, а не кліків — як у `NotesAudienceSelect`.
+    setCommentAudience(
+      editor,
+      mark.commentId,
+      ordered.filter((u) => next.has(u)),
+    );
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        title="Хто бачить"
+        aria-label="Хто бачить"
+        className={menuIconButton}
+      >
+        <Users className="size-5" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="left" align="end" className="min-w-48">
+        <DropdownMenuLabel>Хто бачить</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {ordered.map((username) => {
+          const checked = current.includes(username);
+          return (
+            <DropdownMenuCheckboxItem
+              key={username}
+              checked={checked}
+              disabled={checked && current.length === 1}
+              // Меню лишається відкритим: кілька людей — кілька тапів поспіль.
+              onSelect={(e) => e.preventDefault()}
+              onCheckedChange={() => toggle(username)}
+            >
+              {username === me ? "Я" : username}
+            </DropdownMenuCheckboxItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
 
 export const CommentsFab = () => {
   const editor = useSlate();
-  // `me` — автор нової примітки (завжди я, хто б не був адресатом).
-  // `viewers` — чиї примітки зараз показуються й кому адресуються нові:
-  // відмічених може бути кілька, і тоді примітка створюється ОДНА на всіх.
+  // `me` — автор нової позначки (завжди я, хто б не був адресатом).
+  // `viewers` — чиї позначки зараз показуються й кому адресуються нові:
+  // відмічених може бути кілька, і тоді позначка створюється ОДНА на всіх.
   const me = useCurrentUsername();
   const viewers = useNotesViewers();
-  const [open, setOpen] = useState(false);
-  const [phase, setPhase] = useState<AddPhase>("kind");
-  const [openCtx, setOpenCtx] = useState<OpenContext>(null);
-  const savedSel = useRef<BaseRange | null>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
-
-  useRafPin(wrapRef);
-
   // Не `editor.selection`: у режимі приміток редактор read-only, і Slate
   // тримає там виділення лише на мить застосування позначки.
-  const { range, clear: clearRange } = useAnnotationRange(editor);
-  const hasSel = viewers.length > 0 && !!range && Range.isExpanded(range);
-  const liveMarksAtCaret = !hasSel ? getCaretMarks(editor, range, viewers) : [];
-  const hasMarksAtCaret = liveMarksAtCaret.length > 0;
-  const visible = hasSel || hasMarksAtCaret || open;
+  const { range, select } = useAnnotationRange(editor);
+  // Позначка, чию область зараз змінюють (`NOTE-43`). Поки це так, виділення
+  // в тексті — нова область, а не заготовка під нову позначку.
+  const [resizing, setResizing] = useState<string | null>(null);
+  const hasSel =
+    !resizing && viewers.length > 0 && !!range && Range.isExpanded(range);
+  // Обрані позначки: під «курсором», який ставить тап по позначці або
+  // створення нової. Поки вони є, їхнє меню відкрите — без окремої кнопки.
+  const selectedMarks =
+    !hasSel && !resizing ? getCaretMarks(editor, range, viewers) : [];
+  const visible = !!resizing || hasSel || selectedMarks.length > 0;
 
-  useEffect(() => {
-    if (!open) {
-      setPhase("kind");
-      setOpenCtx(null);
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocDown = (e: PointerEvent) => {
-      const target = e.target as Node | null;
-      if (!target) return;
-      if (wrapRef.current && wrapRef.current.contains(target)) return;
-      setOpen(false);
-    };
-    document.addEventListener("pointerdown", onDocDown);
-    return () => document.removeEventListener("pointerdown", onDocDown);
-  }, [open]);
-
-  const restoreSelection = (): BaseRange | null => {
-    const sel = savedSel.current;
-    if (!sel) return null;
-    try {
-      Transforms.select(editor, sel);
-      return sel;
-    } catch {
-      return null;
-    }
-  };
-
+  // Виділення → одразу позначка обраного кольору (`NOTE-7`). Щойно створена
+  // вона стає обраною, як після тапу по ній: звідси до неї дописують текст.
   const applyHighlight = (color: string) => {
-    if (viewers.length === 0) return;
-    const sel = restoreSelection();
-    if (!sel || !Range.isExpanded(sel)) {
-      setOpen(false);
-      return;
-    }
-    addHighlight(editor, generateId(), [...viewers], color, me);
-    Transforms.deselect(editor);
-    clearRange();
-    savedSel.current = null;
-    setOpen(false);
-  };
-
-  const applyNote = (color: string) => {
-    if (viewers.length === 0) return;
-    const sel = restoreSelection();
-    if (!sel || !Range.isExpanded(sel)) {
-      setOpen(false);
-      return;
-    }
+    if (!range || !Range.isExpanded(range) || viewers.length === 0) return;
     const id = generateId();
-    setPendingFocus(id);
-    addNote(editor, id, [...viewers], color, "", me);
-    Transforms.deselect(editor);
-    clearRange();
-    savedSel.current = null;
-    setOpen(false);
-  };
-
-  const applyPublicNote = () => {
-    if (viewers.length === 0) return;
-    const sel = restoreSelection();
-    if (!sel || !Range.isExpanded(sel)) {
-      setOpen(false);
+    try {
+      Transforms.select(editor, range);
+    } catch {
+      select(null);
       return;
     }
-    const id = generateId();
-    setPendingFocus(id);
-    addNote(editor, id, publicVisibility(), PUBLIC_COMMENT_COLOR, "", me);
+    addHighlight(editor, id, [...viewers], color, me);
     Transforms.deselect(editor);
-    clearRange();
-    savedSel.current = null;
-    setOpen(false);
+    select(commentCaret(editor, id));
   };
 
-  const doDelete = (commentId: string) => {
-    removeComment(editor, commentId, viewers);
-    setOpen(false);
+  // Виділяємо всю позначку нативним виділенням — далі користувач тягне
+  // ручки, а `useAnnotationRange` стежить за новою областю.
+  const startResize = (commentId: string) => {
+    const current = commentRange(editor, commentId);
+    const sel = window.getSelection();
+    if (!current || !sel) return;
+    try {
+      const dom = ReactEditor.toDOMRange(editor, current);
+      sel.removeAllRanges();
+      sel.addRange(dom);
+    } catch {
+      return;
+    }
+    setResizing(commentId);
+  };
+
+  // Той самий тап застосовує. Виділення зняли (тап повз) — нічого не міняємо,
+  // позначка просто лишається обраною.
+  const finishResize = () => {
+    if (!resizing) return;
+    if (range && Range.isExpanded(range)) {
+      try {
+        moveComment(editor, resizing, range);
+      } catch {
+        // Область застаріла (документ змінився під ногами) — лишаємо як було.
+      }
+      Transforms.deselect(editor);
+    }
+    select(commentCaret(editor, resizing));
+    setResizing(null);
   };
 
   const doAddNote = (commentId: string) => {
     setPendingFocus(commentId);
     convertHighlightToNote(editor, commentId, "");
-    setOpen(false);
-  };
-
-  const doRemoveNote = (commentId: string) => {
-    removeNoteOnly(editor, commentId);
-    setOpen(false);
-  };
-
-  const onTriggerMouseDown = (e: React.MouseEvent) => {
-    const sel = range;
-    if (sel && Range.isExpanded(sel)) {
-      savedSel.current = sel;
-      setOpenCtx({ mode: "add" });
-    } else {
-      const marks = getCaretMarks(editor, sel, viewers);
-      if (marks.length > 0) {
-        savedSel.current = sel;
-        setOpenCtx({ mode: "manage", marks });
-      } else {
-        savedSel.current = null;
-        setOpenCtx(null);
-      }
-    }
-    e.preventDefault();
-  };
-
-  const onTriggerClick = () => {
-    setOpen((o) => !o);
   };
 
   return (
     <div
-      ref={wrapRef}
+      // Звичайний `fixed`: клавіатура в режимі приміток відкривається лише в
+      // картці, тож підлаштовуватись під visual viewport більше не треба.
+      className="fixed right-2 z-40 flex flex-col items-end gap-2 transition-opacity duration-200"
       style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        width: FAB_SIZE,
-        height: FAB_SIZE,
-        zIndex: 40,
-        willChange: "transform, opacity",
+        bottom: "max(1rem, env(safe-area-inset-bottom))",
         opacity: visible ? 1 : 0,
         pointerEvents: visible ? "auto" : "none",
-        transition: "opacity 180ms ease-out",
       }}
+      onMouseDown={noLoseSelection}
     >
-      <Button
-        variant="secondary"
-        size="icon"
-        aria-label="Коментарі"
-        onMouseDown={onTriggerMouseDown}
-        onClick={onTriggerClick}
-        className="size-14 rounded-full shadow-lg relative"
-      >
-        {open ? (
-          <X className="h-6 w-6" />
-        ) : hasSel ? (
-          <Captions className="h-6 w-6" />
-        ) : (
-          <PencilOff className="h-6 w-6" />
-        )}
-        {!open && hasMarksAtCaret && (
-          <span className="absolute -top-1 -right-1 size-4 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold leading-none flex items-center justify-center">
-            {liveMarksAtCaret.length}
-          </span>
-        )}
-      </Button>
+      {selectedMarks.length > 0 && (
+        <style>{selectedMarksCss(selectedMarks)}</style>
+      )}
 
-      {open && openCtx && (
-        <div
-          onMouseDown={noLoseSelection}
-          className="absolute bottom-full right-0 mb-3 flex flex-col items-end gap-2"
-        >
-          {openCtx.mode === "add" && phase === "kind" && (
-            <>
-              <NeutralIconButton
-                onClick={() => setPhase("color-highlight")}
-                title="Виділити"
-              >
-                <Highlighter className="size-5" />
-              </NeutralIconButton>
-              <NeutralIconButton
-                onClick={() => setPhase("color-note")}
-                title="Нотатка"
-              >
-                <StickyNote className="size-5" />
-              </NeutralIconButton>
-              <NeutralIconButton
-                onClick={applyPublicNote}
-                title="Публічний коментар"
-              >
-                <Megaphone className="size-5" />
-              </NeutralIconButton>
-            </>
-          )}
-
-          {openCtx.mode === "add" &&
-            (phase === "color-highlight" || phase === "color-note") && (
-              <>
-                {COMMENT_PALETTE.map((c) => (
-                  <ColoredIconButton
-                    key={c.name}
-                    color={c.hex}
-                    title={`${phase === "color-highlight" ? "Виділити" : "Нотатка"}: ${c.name}`}
-                    onClick={() =>
-                      phase === "color-highlight"
-                        ? applyHighlight(c.hex)
-                        : applyNote(c.hex)
-                    }
-                  >
-                    {phase === "color-highlight" ? (
-                      <Highlighter className="size-5" />
-                    ) : (
-                      <StickyNote className="size-5" />
-                    )}
-                  </ColoredIconButton>
-                ))}
-                {/*
-                  Закреслення — останнє в списку, тобто НАЙНИЖЧА кнопка, впритул
-                  до самого FAB: контейнер росте вгору (`bottom-full`), тож
-                  останній child опиняється знизу.
-
-                  Іконка тут інша, ніж у кольорових: ті розрізняються кольором,
-                  а ця кольору не має — її відрізняє саме іконка. Вид позначки
-                  (виділення чи нотатка) лишається в підказці.
-                */}
-                <ColoredIconButton
-                  color={STRIKE_COLOR}
-                  title={`${phase === "color-highlight" ? "Виділити" : "Нотатка"}: закреслення`}
-                  onClick={() =>
-                    phase === "color-highlight"
-                      ? applyHighlight(STRIKE_COLOR)
-                      : applyNote(STRIKE_COLOR)
-                  }
-                >
-                  <Strikethrough className="size-5" />
-                </ColoredIconButton>
-              </>
-            )}
-
-          {openCtx.mode === "manage" &&
-            openCtx.marks.map((m) => {
-              const noted = hasNote(editor, m.commentId);
-              // Скільки адресатів переживе видалення: коментар ширший за мій
-              // вибір не зникає, а звужується — кнопка має казати це чесно.
-              const rest = restCount(m, viewers);
-              return (
-                <div
-                  key={m.commentId}
-                  className="flex flex-col items-end gap-1.5"
-                >
-                  <ColoredIconButton
-                    color={m.color}
-                    title={
-                      rest > 0
-                        ? `Видалити у вибраних (лишиться ще в ${rest})`
-                        : "Видалити повністю"
-                    }
-                    destructive
-                    onClick={() => doDelete(m.commentId)}
-                  >
-                    <Trash2 className="size-5" />
-                  </ColoredIconButton>
-                  {noted ? (
-                    <ColoredIconButton
-                      color={m.color}
-                      title="Прибрати нотатку, лишити виділення"
-                      onClick={() => doRemoveNote(m.commentId)}
-                    >
-                      <MessageSquareOff className="size-5" />
-                    </ColoredIconButton>
-                  ) : (
-                    <ColoredIconButton
-                      color={m.color}
-                      title="Додати нотатку"
-                      onClick={() => doAddNote(m.commentId)}
-                    >
-                      <MessageSquarePlus className="size-5" />
-                    </ColoredIconButton>
-                  )}
-                </div>
-              );
-            })}
+      {resizing && (
+        <div className="glass flex flex-col items-center gap-1 rounded-2xl p-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full bg-accent"
+            onClick={finishResize}
+            aria-label="Застосувати область"
+            title="Застосувати область"
+          >
+            <TextSelect className="size-5" />
+          </Button>
         </div>
       )}
+
+      {hasSel && (
+        <>
+          {COMMENT_PALETTE.map((c) => (
+            <ColoredIconButton
+              key={c.name}
+              color={c.hex}
+              title={`Виділити: ${c.name}`}
+              onClick={() => applyHighlight(c.hex)}
+            >
+              <Highlighter className="size-5" />
+            </ColoredIconButton>
+          ))}
+          {/* Іконка інша, ніж у кольорових: ті розрізняються кольором,
+              а закреслення кольору не має. */}
+          <ColoredIconButton
+            color={STRIKE_COLOR}
+            title="Закреслити"
+            onClick={() => applyHighlight(STRIKE_COLOR)}
+          >
+            <Strikethrough className="size-5" />
+          </ColoredIconButton>
+        </>
+      )}
+
+      {/* Меню обраної позначки — у стилі меню пісні (`SongControls`): скляна
+          плашка з безбарвними кнопками. Яку позначку правимо, видно з її
+          підсвітки в тексті (`selectedMarksCss`). */}
+      {selectedMarks.map((m) => {
+        const noted = hasNote(editor, m.commentId);
+        // Скільки адресатів переживе видалення: коментар ширший за мій
+        // вибір не зникає, а звужується — кнопка має казати це чесно.
+        const rest = restCount(m, viewers);
+        const deleteTitle =
+          rest > 0
+            ? `Видалити у вибраних (лишиться ще в ${rest})`
+            : "Видалити повністю";
+        const noteTitle = noted
+          ? "Прибрати нотатку, лишити виділення"
+          : "Додати нотатку";
+        return (
+          <div
+            key={m.commentId}
+            className="glass flex flex-col items-center gap-1 rounded-2xl p-1"
+          >
+            <MarkColorMenu mark={m} />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full"
+              onClick={() => startResize(m.commentId)}
+              aria-label="Змінити область"
+              title="Змінити область"
+            >
+              <TextSelect className="size-5" />
+            </Button>
+            <MarkAudienceMenu mark={m} />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full"
+              onClick={() =>
+                noted
+                  ? removeNoteOnly(editor, m.commentId)
+                  : doAddNote(m.commentId)
+              }
+              aria-label={noteTitle}
+              title={noteTitle}
+            >
+              {noted ? (
+                <MessageSquareOff className="size-5" />
+              ) : (
+                <MessageSquarePlus className="size-5" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full"
+              onClick={() => removeComment(editor, m.commentId, viewers)}
+              aria-label={deleteTitle}
+              title={deleteTitle}
+            >
+              <Trash2 className="size-5" />
+            </Button>
+          </div>
+        );
+      })}
     </div>
   );
 };
