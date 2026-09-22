@@ -1,4 +1,4 @@
-import type { DynamicsStepKey } from "./constants/dynamicsSteps";
+import { isDynamicsStepKey, type DynamicsStepKey } from "./constants/dynamicsSteps";
 import type { SectionChild, SectionElement } from "./types";
 
 /**
@@ -9,11 +9,15 @@ import type { SectionChild, SectionElement } from "./types";
  * стирає або ставить порожній рядок. Тому кожен атрибут мусить мати
  * передбачувану долю, інакше повтори чи динаміка тихо зникають або двояться.
  *
- * Тут — сама логіка, без Slate. Точка застосування одна — `withSections.ts`.
+ * Те саме з копіюванням: вставлена секція теж мусить знати, які атрибути
+ * везе з собою (`clipboardSectionAttrs`).
+ *
+ * Тут — сама логіка, без Slate. Точки застосування — `withSections.ts`
+ * (злиття й ділення) і `withClipboard.ts` (копіювання).
  */
 
 /** Атрибути, долю яких вирішують ці правила. Решта пропсів секції не чіпається. */
-type SectionAttrs = Pick<SectionElement, "repeat" | "collapsedFor" | "dynamicsSteps">;
+export type SectionAttrs = Pick<SectionElement, "repeat" | "collapsedFor" | "dynamicsSteps">;
 
 /**
  * Готує атрибути до `Transforms.setNodes`.
@@ -162,5 +166,27 @@ export const splitSectionAttrs = (
       collapsedFor: undefined,
       dynamicsSteps: lowerSteps,
     },
+  };
+};
+
+/**
+ * Секцію скопіювали цілком — з чим вона приїде на нове місце.
+ *
+ * - повтори й динаміка — так, це зміст секції, заради нього її й копіюють;
+ * - згортання — ні: це чийсь особистий стан перегляду, а не властивість
+ *   секції, тож вставлена секція розгорнута для всіх, як і нова при діленні.
+ *
+ * Частина секції атрибутів не несе зовсім — вона копіюється простим текстом
+ * (`withClipboard.ts`). Фрагмент приходить із буфера обміну, тобто ззовні
+ * редактора, тому значення перевіряються, а не беруться на віру.
+ */
+export const clipboardSectionAttrs = (section: SectionElement): SectionAttrs => {
+  const { repeat, dynamicsSteps } = section;
+  return {
+    repeat: typeof repeat === "number" ? repeat : undefined,
+    dynamicsSteps: Array.isArray(dynamicsSteps)
+      ? stepsOrUndefined(dynamicsSteps.filter(isDynamicsStepKey))
+      : undefined,
+    collapsedFor: undefined,
   };
 };

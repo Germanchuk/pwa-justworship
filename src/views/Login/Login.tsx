@@ -8,6 +8,7 @@ import { loginUser } from "#layout/api";
 import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { setUser } from "#modules/AuthenticatedUser/userSlice";
+import { clearSession } from "#modules/AuthenticatedUser/clearSession";
 import { addNotificationWithTimeout } from "#layout/slices/notificationsSlice";
 import { Routes } from "#constants/routes";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,8 @@ export default function Login() {
       return;
     }
     setIsLoading(true);
-    loginUser({ username, password })
+    clearSession(dispatch)
+      .then(() => loginUser({ username, password }))
       .then((data) => {
         localStorage.setItem("authToken", data.jwt);
         dispatch(setUser(data.user));

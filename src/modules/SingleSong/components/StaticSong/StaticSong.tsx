@@ -11,6 +11,7 @@ import { withHeader } from "../SlateLyricsPlayground/withHeader";
 import { withMetaSchema } from "../SlateLyricsPlayground/withMetaSchema";
 import { withModeGuard } from "../SlateLyricsPlayground/mode/withModeGuard";
 import { withSections } from "../SlateLyricsPlayground/withSections";
+import { withClipboard } from "../SlateLyricsPlayground/withClipboard";
 import "../SlateLyricsPlayground/SlateLyricsPlayground.css";
 
 /**
@@ -79,6 +80,8 @@ export function StaticSong({ docId, slate }: Props) {
     // Примітки лишаються видимими (свої — справжнім кольором), але осиротіти
     // тут нічому: документ ніхто не змінює.
     e = withComments(e, { onNoteOrphaned: () => {} });
+    // Звідси теж копіюють (приспів у пісню) — за тими самими правилами.
+    e = withClipboard(e);
     // Замкнено назавжди: у зібранні пісню не правлять узагалі.
     e = withModeGuard(e, () => false);
     return e;
