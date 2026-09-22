@@ -3,25 +3,24 @@ import {HocuspocusProvider} from "@hocuspocus/provider";
 import {yTextToSlateElement} from "@slate-yjs/core";
 import type {Descendant} from "slate";
 
-import {extractHeader} from "#modules/SingleSong/services/ChordsProgressionPlayer/extractHeader";
-import type {SongContentSnapshot} from "#modules/SingleSong/services/ChordsProgressionPlayer/getMidiFromSlate/getMidiFromSlate";
+import {extractHeader, type SongHeader} from "#modules/SingleSong/services/songChords/extractHeader";
 import {COLLAB_URL} from "#utils/serviceUrls";
 
 export interface SongDocHandle {
   songId: string | number;
   /** Резолвиться після першої синхронізації з сервером. */
   synced: Promise<void>;
-  /** Живий знімок: читає поточний стан Y-документа при кожному виклику. */
-  getSnapshot(): SongContentSnapshot & {name: string | null};
+  /** Шапка пісні: читає поточний стан Y-документа при кожному виклику. */
+  getHeader(): SongHeader;
   destroy(): void;
 }
 
 /**
  * Headless-підключення до документа пісні — без редактора й без Slate-байндингу.
  * Хост звуку відкриває так будь-яку пісню, яку йому скомандували грати:
- * підключився → синхронізувався → конвертнув Y.XmlText у Slate-ноди → грає.
- * Правки, зроблені гуртом під час гри, підхопляться наступним play
- * (contentProvider читає живий документ).
+ * підключився → синхронізувався → прочитав шапку (тональність, темп) → грає.
+ * Правки, зроблені гуртом під час гри, підхопляться наступним вмиканням
+ * (джерело читає живий документ).
  */
 export function openSongDoc(songId: string | number): SongDocHandle {
   const url = COLLAB_URL;
@@ -47,10 +46,8 @@ export function openSongDoc(songId: string | number): SongDocHandle {
   return {
     songId,
     synced,
-    getSnapshot() {
-      const nodes = yTextToSlateElement(sharedRoot).children as Descendant[];
-      const {name, bpm, timeSignature} = extractHeader(nodes);
-      return {nodes, bpm, timeSignature, name};
+    getHeader() {
+      return extractHeader(yTextToSlateElement(sharedRoot).children as Descendant[]);
     },
     destroy() {
       provider.destroy();

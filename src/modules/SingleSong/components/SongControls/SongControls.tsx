@@ -8,7 +8,7 @@ import {Button} from "@/components/ui/button";
 import {cn} from "@/lib/utils";
 import {bandPath} from "#constants/routes";
 import {useBandId} from "#modules/Band/BandLayout";
-import ChordsProgressionPlayer from "../../services/ChordsProgressionPlayer/ChordsProgressionPlayer";
+import DronePlayer from "../../services/DronePlayer/DronePlayer";
 import {useCanAnnotate, useCanPlay, useSongMode} from "../../mode";
 import {useConnectionIndicator} from "../ConnectionStatus/useConnectionIndicator";
 import {NotesAudienceSelect} from "../SlateLyricsPlayground/comments/NotesAudienceSelect";
@@ -32,12 +32,12 @@ function readMenuOpen() {
  * висять у правому верхньому куті поверх пісні. Постійної панелі тут немає —
  * місце віддане пісні.
  *
- *   закрито:        [←][📖]
- *   відкрито: [←][▶][⏹][📖]   ← кнопки поточного режиму
- *                       [📖]
- *                       [✏️]   ← перемикач режимів
- *                       [🗒]
- *                       [🎹] … ← дії з піснею
+ *   закрито:     [←][📖]
+ *   відкрито: [←][▶][📖]   ← кнопки поточного режиму
+ *                    [📖]
+ *                    [✏️]   ← перемикач режимів
+ *                    [🗒]
+ *                    [⧉] … ← дії з піснею
  *
  * Меню закривається ЛИШЕ своєю кнопкою (`APP-28`): вибір режиму, дія чи тап
  * повз нього панель не згортають — хто керує звуком, тримає її відкритою.
@@ -58,7 +58,7 @@ export const SongControls = () => {
   // для всього гурту, а не для цього екрана. Живе тут, а не біля кнопок
   // програвання: ті змонтовані лише у відкритому меню.
   useEffect(() => {
-    if (!canPlay) ChordsProgressionPlayer.getInstance().stop();
+    if (!canPlay) DronePlayer.getInstance().stop();
   }, [canPlay]);
 
   return (

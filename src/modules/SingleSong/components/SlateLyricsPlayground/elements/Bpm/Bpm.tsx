@@ -3,7 +3,7 @@ import type { RenderElementProps } from "slate-react";
 import { Node } from "slate";
 import { useSlateStatic } from "slate-react";
 import { useCanEditContent } from "../../../../mode";
-import { extractHeader } from "../../../../services/ChordsProgressionPlayer/extractHeader";
+import { extractHeader } from "../../../../services/songChords/extractHeader";
 import { MetaBadge } from "../MetaBadge/MetaBadge";
 import { setVoidText } from "../setVoidText";
 import { BpmModal } from "./BpmModal";

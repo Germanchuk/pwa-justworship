@@ -1,35 +1,25 @@
 /**
- * ЗІБРАННЯ — збірка служіння з пунктів списку. Головний шов режиму.
+ * ЗІБРАННЯ — збірка служіння з пунктів списку для показу.
  *
  * Вхід — пункти списку плюс документ кожної пісні (той, що приїжджає з
- * ендпоінта зібрання). Вихід — три речі, і всі три похідні: зібрання нічого не
- * зберігає (ADR-0001).
+ * ендпоінта зібрання). Вихід — ряд елементів, по одному на пункт: документ
+ * пісні як є, згенерований документ програша, або текст примітки. Зібрання
+ * нічого не зберігає (ADR-0001).
  *
- *   1. `items`    — ряд елементів для показу, по одному на пункт: документ
- *                   пісні як є, згенерований документ програша, або текст
- *                   примітки.
- *   2. `segments` — плоска наскрізна черга сегментів усього служіння.
- *   3. `tokens`   — відповідність «токен → сегмент і доля»: тап по акорду стає
- *                   точкою старту.
+ * Звуку зібрання зараз немає (ADR-0003): черга сегментів, адреси старту й
+ * голка відкладені в `archive/chord-player` разом зі старим плеєром. Програш
+ * при цьому лишився — як показ акордів переходу, які гурт грає сам.
  *
- * ─── ЧОМУ ЦЕ МУСИТЬ БУТИ ЧИСТА ФУНКЦІЯ ─────────────────────────────────────
- * Звук зібрання йде на ОДНОМУ пристрої (хост), а програш показує КОЖЕН сам.
- * Недетермінований генератор означав би, що музиканти бачать не те, що звучить
- * (`LIST-35`). Тому тут немає ні часу, ні випадковості, ні читання чогось поза
- * аргументами — ті самі пункти й документи дають той самий результат байт у
- * байт на будь-якому пристрої.
- *
- * ─── ЧОМУ ПРОГРАШ ГЕНЕРУЄТЬСЯ ТЕКСТОМ ──────────────────────────────────────
- * Генератор видає звичайний акордовий РЯДОК і проганяє його тим самим лексером,
- * що й пісні. Одна дорога до звуку й до показу замість двох: програш не може
- * розійтися з правилами такту, а на екрані стає такою самою секцією, з такою
- * самою підсвіткою. Окремим швом генератор не є — він живе тут.
+ * ─── ЧОМУ ЦЕ ЧИСТА ФУНКЦІЯ ─────────────────────────────────────────────────
+ * Кожен музикант рахує програш на своєму пристрої. Ті самі пункти й документи
+ * мусять давати ті самі акорди в усіх — тому тут немає ні часу, ні
+ * випадковості, ні читання чогось поза аргументами.
  *
  * ─── ЩО ТАКЕ СУСІД ─────────────────────────────────────────────────────────
  * Сусід програша — це пункт, що стоїть ПОРУЧ, і лише коли він пісня. Примітка
- * між піснею й програшем — справжня зупинка, тож вести з хвоста тієї пісні нема
- * звідки: цей шов є тишею, як і край списку. Програш при цьому не зникає
- * ніколи (`LIST-39`).
+ * між піснею й програшем — зупинка, тож вести з хвоста тієї пісні нема звідки:
+ * цей шов порожній, як і край списку. Програш при цьому не зникає ніколи
+ * (`LIST-39`).
  */
 
 import type { Descendant } from "slate";
@@ -42,49 +32,20 @@ import {
 } from "#models/listPoint";
 import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/model";
 import { keyDisplayName } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/transposeChords";
-import { extractHeader } from "#modules/SingleSong/services/ChordsProgressionPlayer/extractHeader";
-import { chordLineToProgressionMapWithKeys } from "#modules/SingleSong/services/ChordsProgressionPlayer/getMidiFromSections/utils/chordLineToProgressionMapWithKeys";
+import { extractHeader } from "#modules/SingleSong/services/songChords/extractHeader";
 import {
   isRest,
+  songProgression,
   type ChordEvent,
-} from "#modules/SingleSong/services/ChordsProgressionPlayer/getMidiFromSections/utils/createMidiFromProgression";
-import { getProgressionFromSlate } from "#modules/SingleSong/services/ChordsProgressionPlayer/getMidiFromSlate/getMidiFromSlate";
-import {
-  canRampBetween,
-  pointOfKey,
-  pointOfSegment,
-  pointPrefix,
-  prefixTokenKey,
-  type PlaybackSegment,
-} from "#modules/SingleSong/services/ChordsProgressionPlayer/segments/model";
-import {
-  DEFAULT_BPM,
-  DEFAULT_TIME_SIGNATURE,
-} from "#modules/SingleSong/services/ChordsProgressionPlayer/songDefaults";
+} from "#modules/SingleSong/services/songChords/progression";
 import { transpose as keyDownBy } from "#utils/keyUtils";
 
 /** Пункт списку разом із вмістом своєї пісні — так його віддає ендпоінт. */
 export type GatheringPoint = ListPoint & { slate?: Descendant[] | null };
 
 interface BaseItem {
-  /**
-   * Ключ пункту — той самий, що й у списку: потрібен лише рендеру.
-   *
-   * Тотожність пункту для ПЛЕЙБЕКУ — це його місце в служінні (`p0`, `p1`, …),
-   * а не цей ключ: ключ у кожного пристрою свій (він народжується на межі з
-   * сервером), а порядок однаковий у всіх. Тому по мережі їде місце.
-   */
+  /** Ключ пункту — той самий, що й у списку: потрібен лише рендеру. */
   key: string;
-  /**
-   * Місце пункту в служінні (`p0`, `p1`, …) — те саме, що їде по мережі
-   * попереду ключів токенів (див. `unprefixTokenKey`, там і причина).
-   * Без нього показ не має чим відрізнити свою голку від чужої.
-   *
-   * Стоїть на КОЖНОМУ пункті, включно з примітками, хоч у примітки токенів і
-   * не буває: ряд лишається однорідним, і показу не треба питати, якого виду
-   * пункт, перш ніж спитати про голку.
-   */
-  tokenKeyPrefix: string;
 }
 
 export interface GatheringSongItem extends BaseItem {
@@ -102,8 +63,9 @@ export interface GatheringNoteItem extends BaseItem {
 }
 
 /**
- * Примітка, що звучить, — програш. НЕ третій вид пункту (їх два, `LIST-24`):
- * той самий пункт-примітка, лише показує себе документом, а не рядком.
+ * Програш — примітка, позначена як перехід. НЕ третій вид пункту (їх два,
+ * `LIST-24`): той самий пункт-примітка, лише показує себе документом, а не
+ * рядком.
  */
 export interface GatheringSoundingItem extends BaseItem {
   kind: "sounding";
@@ -115,35 +77,20 @@ export interface GatheringSoundingItem extends BaseItem {
 
 export type GatheringItem = GatheringSongItem | GatheringNoteItem | GatheringSoundingItem;
 
-/** Де в служінні звучить цей токен: сегмент черги плюс зсув у ньому. */
-export interface TokenPosition {
-  /** Індекс сегмента в наскрізній черзі. */
-  segmentIndex: number;
-  segmentId: string;
-  /** Зсув від початку сегмента в імпульсах. */
-  beats: number;
-}
-
 export interface Gathering {
   items: GatheringItem[];
-  segments: PlaybackSegment[];
-  /** Ключ — токен із префіксом пункту, як він їде по мережі. */
-  tokens: Map<string, TokenPosition>;
 }
 
-/** Усе, що зібранню треба знати про пісню. Читається з документа один раз. */
+/** Усе, що програшу треба знати про пісню-сусіда. Читається з документа один раз. */
 interface SongContext {
-  bpm: number;
-  timeSignature: [number, number];
   key: SongKeyValue;
   progression: ChordEvent[];
 }
 
 const readSong = (nodes: Descendant[] | null | undefined): SongContext => {
   const safe = Array.isArray(nodes) ? nodes : [];
-  const { bpm, timeSignature, key } = extractHeader(safe);
-  const { progression } = getProgressionFromSlate({ nodes: safe, bpm, timeSignature }, null);
-  return { bpm, timeSignature, key, progression };
+  const { timeSignature, key } = extractHeader(safe);
+  return { key, progression: songProgression(safe, timeSignature[0]) };
 };
 
 // ─── Акорди програша ────────────────────────────────────────────────────────
@@ -151,8 +98,7 @@ const readSong = (nodes: Descendant[] | null | undefined): SongContext => {
 /**
  * Ступінь тональності як назва акорда; `semitones` — скільки півтонів угору
  * від тоніки. Пишеться дієзами, бо дієзами записані самі тональності
- * (`keyUtils.keys`): у бемольній пісні луп прозвучить правильно, а виглядатиме
- * енгармонічно (`Eb` → `D#`).
+ * (`keyUtils.keys`): у бемольній пісні виглядатиме енгармонічно (`Eb` → `D#`).
  */
 const degree = (key: SongKeyValue, semitones: number): string =>
   // `keyUtils.transpose` рахує ВНИЗ, тож вгору на N — це вниз на 12 − N.
@@ -176,136 +122,46 @@ const firstSoundingChord = (progression: ChordEvent[]): string | null =>
 /** Один акорд — один такт: `| Am | D7 |`. */
 const barsOf = (chords: string[]): string => `| ${chords.join(" | ")} |`;
 
-// ─── Збірка ─────────────────────────────────────────────────────────────────
-
-/** Частина програша до того, як вона стала сегментом і рядком документа. */
-interface SoundingPart {
-  suffix: "intro" | "loop" | "outro";
-  text: string;
-  kind: "once" | "loop";
-  bpm: number;
-  timeSignature: [number, number];
-  rampTempo?: boolean;
-}
-
 /**
- * Три частини програша: вступ у старому, луп у новому, вихід у першу пісню.
- * Відсутня частина означає, що з того боку сусіда немає, — і цей шов є тишею.
+ * Рядки програша: вихід із попередньої пісні на домінанту, коло I–IV у
+ * тональності наступної, вхід у її перший акорд. Відсутній рядок означає, що з
+ * того боку сусіда немає, — і цей шов порожній.
  */
-const soundingParts = (prev: SongContext | null, next: SongContext | null): SoundingPart[] => {
-  // Луп живе в тональності, розмірі й темпі НАСТУПНОЇ пісні: він веде саме в
-  // неї. Немає наступної — лишаємось там, звідки прийшли; немає жодної —
-  // програш усе одно звучить, просто в дефолтних (`LIST-39`).
-  const home = next ?? prev;
-  const key = home?.key ?? "C";
-  const timeSignature = home?.timeSignature ?? DEFAULT_TIME_SIGNATURE;
-  const bpm = home?.bpm ?? DEFAULT_BPM;
-
-  const parts: SoundingPart[] = [];
+const soundingLines = (prev: SongContext | null, next: SongContext | null): string[] => {
+  // Коло живе в тональності НАСТУПНОЇ пісні: воно веде саме в неї. Немає
+  // наступної — лишаємось там, звідки прийшли; немає жодної — у дефолтній
+  // (`LIST-39`).
+  const key = (next ?? prev)?.key ?? "C";
+  const lines: string[] = [];
 
   if (prev) {
-    // Вступ — хвіст попередньої пісні: її тональність, розмір і темп. Усе нове
-    // починається аж на межі вступ→луп (ADR-0002).
     const departure = lastSoundingChord(prev.progression);
-    parts.push({
-      suffix: "intro",
-      text: barsOf([...(departure ? [departure] : []), dominantSeventh(key)]),
-      kind: "once",
-      bpm: prev.bpm,
-      timeSignature: prev.timeSignature,
-    });
+    lines.push(barsOf([...(departure ? [departure] : []), dominantSeventh(key)]));
   }
 
-  parts.push({
-    suffix: "loop",
-    text: barsOf([tonic(key), subdominant(key)]),
-    kind: "loop",
-    bpm,
-    timeSignature,
-    // Рампити нема ВІД чого без вступу, нема КУДИ без наступної пісні (луп
-    // лишається в темпі попередньої), і нема ЧИМ при різних знаменниках: BPM
-    // рахує імпульси, а імпульс у 4/4 і в 6/8 — різні одиниці (ADR-0002).
-    rampTempo:
-      prev != null && next != null && canRampBetween(prev.timeSignature, timeSignature),
-  });
+  lines.push(barsOf([tonic(key), subdominant(key)]));
 
-  // Пісня, у якій не звучить жоден акорд (немає розмічених тактів), — така
-  // сама тиша, як і відсутній сусід: приходити нема в що, тож виходу немає.
+  // Пісня, у якій не звучить жоден акорд (немає розмічених тактів), — такий
+  // самий порожній шов, як і відсутній сусід: входити нема в що.
   const arrival = next ? firstSoundingChord(next.progression) : null;
-  if (arrival) {
-    parts.push({
-      suffix: "outro",
-      text: barsOf([arrival]),
-      kind: "once",
-      bpm,
-      timeSignature,
-    });
-  }
+  if (arrival) lines.push(barsOf([arrival]));
 
-  return parts;
+  return lines;
 };
 
 /** Документ програша: текст примітки заголовком секції, під ним акорди. */
-const soundingNodes = (text: string, parts: SoundingPart[]): Descendant[] =>
+const soundingNodes = (text: string, lines: string[]): Descendant[] =>
   [
     {
       type: "section",
       children: [
         { type: "line", children: [{ text }] },
-        ...parts.map((part) => ({ type: "chord-line", children: [{ text: part.text }] })),
+        ...lines.map((line) => ({ type: "chord-line", children: [{ text: line }] })),
       ],
     },
   ] as unknown as Descendant[];
 
-/**
- * «Грай звідси й до кінця служіння» (`LIST-43`): черга від названого місця й
- * далі без жодної зміни. Далі — усе за планом: програші, паузи, наступні
- * пісні.
- *
- * ─── АДРЕСА БУВАЄ ГРУБОЮ Й ТОЧНОЮ ──────────────────────────────────────────
- * `p3` — з початку пункту; `p3:0:1:2` — з конкретного акорда в ньому. Це одна
- * адреса, а не дві різні речі: точна — уточнення грубої, і пункт у ній той
- * самий перший (`pointOfKey`). Тому по мережі їде ОДНЕ поле, а не поле плюс
- * необов'язкове уточнення.
- *
- * ─── ЧОГО НЕ ЗНАЙШЛИ, ТЕ ЗАГРУБЛЮЄМО ───────────────────────────────────────
- * Акорда немає в цьому знімку (у того, хто ріже чергу, список свіжіший або
- * старіший) — грає з початку СВОГО пункту: та сама пісня, просто спочатку.
- * А от невідомий ПУНКТ не грає нічого: почати з початку служіння посеред
- * зібрання гірше за тишу, з якої видно, що команда не вийшла.
- */
-export const sliceFrom = (gathering: Gathering, from: string): PlaybackSegment[] => {
-  const at = gathering.tokens.get(from);
-  if (at == null) return sliceFromPoint(gathering.segments, pointOfKey(from));
-
-  const head = gathering.segments[at.segmentIndex]!;
-  return [trimToToken(head, from), ...gathering.segments.slice(at.segmentIndex + 1)];
-};
-
-const sliceFromPoint = (
-  segments: ReadonlyArray<PlaybackSegment>,
-  fromPoint: string,
-): PlaybackSegment[] => {
-  const start = segments.findIndex((segment) => pointOfSegment(segment) === fromPoint);
-  return start < 0 ? [] : segments.slice(start);
-};
-
-/**
- * Сегмент, що починається з названого акорда.
- *
- * ⚠️ ЛУП НЕ РІЖЕТЬСЯ. Він коло, і обрізаний ішов би обрізаним КОЖНЕ коло, а не
- * лише перше — тобто тап у програші беззвучно вкоротив би сам програш. Тап у
- * лупі веде на початок кола: два такти на 80 BPM — це ~6 с, і чекати їх
- * чесніше, ніж грати не той луп.
- */
-const trimToToken = (segment: PlaybackSegment, tokenKey: string): PlaybackSegment => {
-  if (segment.kind !== "once") return segment;
-
-  const start = segment.progression.findIndex(
-    (event) => prefixTokenKey(event.tokenKey ?? null, segment.tokenKeyPrefix) === tokenKey,
-  );
-  return start <= 0 ? segment : { ...segment, progression: segment.progression.slice(start) };
-};
+// ─── Збірка ─────────────────────────────────────────────────────────────────
 
 export function buildGathering(points: ReadonlyArray<GatheringPoint>): Gathering {
   const numbers = numberSongs(points);
@@ -313,111 +169,33 @@ export function buildGathering(points: ReadonlyArray<GatheringPoint>): Gathering
     point.kind === "song" ? readSong(point.slate) : null,
   );
 
-  const items: GatheringItem[] = [];
-  const segments: PlaybackSegment[] = [];
-
-  points.forEach((point, index) => {
-    const tokenPrefix = pointPrefix(index);
-
+  const items = points.map((point, index): GatheringItem => {
     if (point.kind === "song") {
-      const song = songs[index]!;
-      items.push({
+      return {
         kind: "song",
         key: point.key,
-        tokenKeyPrefix: tokenPrefix,
         point,
         number: numbers[index]!,
         nodes: Array.isArray(point.slate) ? point.slate : [],
-      });
-      segments.push({
-        id: tokenPrefix,
-        tokenKeyPrefix: tokenPrefix,
-        progression: song.progression,
-        bpm: song.bpm,
-        timeSignature: song.timeSignature,
-        kind: "once",
-      });
-      return;
+      };
+    }
+
+    if (!point.sounding) {
+      return { kind: "note", key: point.key, point, text: point.text };
     }
 
     // Сусід — лише пункт поруч, і лише пісня: примітка між ними означає
-    // зупинку, тобто тишу на цьому шві.
+    // зупинку, тобто порожній шов.
     const prev = songs[index - 1] ?? null;
     const next = songs[index + 1] ?? null;
-
-    if (!point.sounding) {
-      items.push({
-        kind: "note",
-        key: point.key,
-        tokenKeyPrefix: tokenPrefix,
-        point,
-        text: point.text,
-      });
-      // Пауза не звучить, але темп і розмір у неї є: транспорт має з чим стати
-      // й чим піти далі. Беремо в найближчої пісні — своїх у тиші не буває.
-      const near = prev ?? next;
-      segments.push({
-        id: `${tokenPrefix}:pause`,
-        progression: [],
-        bpm: near?.bpm ?? DEFAULT_BPM,
-        timeSignature: near?.timeSignature ?? DEFAULT_TIME_SIGNATURE,
-        kind: "pause",
-      });
-      return;
-    }
-
-    const parts = soundingParts(prev, next);
-    items.push({
+    return {
       kind: "sounding",
       key: point.key,
-      tokenKeyPrefix: tokenPrefix,
       point,
       text: point.text,
-      nodes: soundingNodes(point.text, parts),
-    });
-
-    parts.forEach((part, partIndex) => {
-      segments.push({
-        id: `${tokenPrefix}:${part.suffix}`,
-        tokenKeyPrefix: tokenPrefix,
-        // Кожна частина — свій рядок документа, тож лексується своїм номером
-        // рядка й СВОЇМ розміром: вступ ще в старому, луп уже в новому.
-        progression: chordLineToProgressionMapWithKeys(
-          part.text,
-          0,
-          partIndex,
-          part.timeSignature[0],
-        ),
-        bpm: part.bpm,
-        timeSignature: part.timeSignature,
-        kind: part.kind,
-        ...(part.rampTempo === undefined ? {} : { rampTempo: part.rampTempo }),
-      });
-    });
+      nodes: soundingNodes(point.text, soundingLines(prev, next)),
+    };
   });
 
-  return { items, segments, tokens: mapTokens(segments) };
+  return { items };
 }
-
-/**
- * Токен → де він звучить уперше.
- *
- * Саме вперше: секція з повтором дає той самий ключ кілька разів, а «грай
- * звідси» означає початок, а не другий прохід.
- */
-const mapTokens = (segments: PlaybackSegment[]): Map<string, TokenPosition> => {
-  const tokens = new Map<string, TokenPosition>();
-
-  segments.forEach((segment, segmentIndex) => {
-    let beats = 0;
-    for (const event of segment.progression) {
-      const key = prefixTokenKey(event.tokenKey ?? null, segment.tokenKeyPrefix);
-      if (key != null && !tokens.has(key)) {
-        tokens.set(key, { segmentIndex, segmentId: segment.id, beats });
-      }
-      beats += Math.max(0, event.duration || 0);
-    }
-  });
-
-  return tokens;
-};

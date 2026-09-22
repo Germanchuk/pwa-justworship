@@ -1,9 +1,6 @@
 import * as Tone from "tone";
 
-import { buildGathering, sliceFrom } from "#modules/Gathering/buildGathering";
-import { fetchGathering } from "#modules/Gathering/gatheringSource";
-import ChordsProgressionPlayer from "#modules/SingleSong/services/ChordsProgressionPlayer/ChordsProgressionPlayer";
-import { formatDate } from "#utils/utils";
+import DronePlayer from "#modules/SingleSong/services/DronePlayer/DronePlayer";
 import BandAudioChannel from "./bandAudioChannel";
 import { openSongDoc, type SongDocHandle } from "./openSongDoc";
 import type { AudioHostPlaybackState, PlaybackCommand, PlaybackTarget } from "./types";
@@ -11,44 +8,28 @@ import type { AudioHostPlaybackState, PlaybackCommand, PlaybackTarget } from "./
 export interface AudioHostEngineState {
   armed: boolean;
   state: AudioHostPlaybackState;
-  /** Що зараз на хості: пісня чи служіння — і яке саме. */
+  /** Яка пісня зараз на хості. */
   playing: PlaybackTarget | null;
   playingName: string | null;
-  /** Пункт, на якому служіння чекає «продовжити» (`LIST-41`); `null` — не чекає. */
-  awaitingAt: string | null;
   controlledBy: string | null;
 }
 
 type EngineListener = (state: AudioHostEngineState) => void;
 
 /**
- * Двигун режиму хоста: слухає команди з band-кімнати, головним плеєром грає
- * скомандоване й публікує свій статус назад у кімнату. Активний лише поки
- * відкрита сторінка «режим хоста».
+ * Двигун режиму хоста: слухає команди з band-кімнати, вмикає й вимикає дрон
+ * скомандованої пісні й публікує свій статус назад у кімнату. Активний лише
+ * поки відкрита сторінка «режим хоста».
  *
- * ─── ДВА ВИПАДКИ, ОДИН ТРАНСПОРТ ───────────────────────────────────────────
- * Команда буває про пісню або про служіння (`PLAY-38`), і це різні дороги до
- * звуку: пісня приїжджає живим collab-документом, служіння — одним HTTP-
- * запитом і збіркою `buildGathering`. Далі вони сходяться в ОДИН плеєр — тому
- * пісня й зібрання не можуть звучати одночасно (`PLAY-40`) і тому ж хост
- * лишається однією річчю, а не двома двигунами.
- *
- * ─── ЧОМУ СЛУЖІННЯ ПЕРЕЧИТУЄТЬСЯ ЩОРАЗУ ────────────────────────────────────
- * Хост читає служіння з того самого ендпоінта, що й екрани гурту, і читає його
- * на кожен запуск — так само, як підхоплює правки пісні (`PLAY-34`). Збірка
- * чиста, тож з ОДНАКОВОГО знімка виходить однакова черга.
- *
- * ⚠️ Однаковий він не завжди: екран читає знімок, коли його відкрили, а хост —
- * коли натиснули «грати». Правка, збережена між цими двома митями, дійде до
- * хоста й не дійде до екрана. Знімок екрана тим часом свідомо не оновлюється
- * (`LIST-32`), тож на служінні це саме та рідкість, заради якої не варто
- * заводити третій шлях; на генеральній репетиції — привід перевідкрити екран.
+ * Пісня приїжджає живим collab-документом (`openSongDoc`), і з нього береться
+ * лише шапка: тональність для дрона, темп для метронома. Звук зібрання
+ * відкладено разом зі старим плеєром (ADR-0003, `archive/chord-player`).
  */
 class AudioHostEngine {
   static instance: AudioHostEngine;
 
   private channel = BandAudioChannel.getInstance();
-  private player = ChordsProgressionPlayer.getInstance();
+  private player = DronePlayer.getInstance();
   private identity: { userId: number | null; username: string | null } = {
     userId: null,
     username: null,
@@ -82,7 +63,6 @@ class AudioHostEngine {
       state: this.loading ? "loading" : this.player.getState(),
       playing: this.playing,
       playingName: this.playingName,
-      awaitingAt: this.player.getAwaitingPoint(),
       controlledBy: this.controlledBy,
     };
   }
@@ -105,10 +85,6 @@ class AudioHostEngine {
         void this.execute(command);
       }),
       this.player.onStateChange(() => this.publish()),
-      this.player.onChordChange(() => this.publish()),
-      // Очікування — окрема подія: у лупі програша ні стан, ні акорд не
-      // міняються, а кнопка в гурту має з'явитись саме тоді.
-      this.player.onAwaitingContinueChange(() => this.publish()),
     );
     this.publish();
   }
@@ -142,24 +118,14 @@ class AudioHostEngine {
 
   private async execute(command: PlaybackCommand) {
     if (!this.running || !this.armed) return;
+    // Команду іншого виду (старий клієнт, звук зібрання) мовчки пропускаємо:
+    // виконати її нічим, а зупиняти через неї те, що грає, — не нам.
+    if (command.target?.kind !== "song") return;
     this.controlledBy = command.issuedBy ?? null;
 
     switch (command.action) {
       case "play":
         await this.play(command.target);
-        break;
-      case "pause":
-        this.player.pause();
-        break;
-      case "resume":
-        this.player.resume();
-        break;
-      case "continue":
-        // «Продовжити» тисне будь-хто з гурту, і тисне ОДИН раз на всіх
-        // (`LIST-41`): звук один, черга одна, і рухає її той, у кого вона в
-        // руках. Тиснуть частіше за раз — тому команда несе ПУНКТ, з якого
-        // продовжують, і другу зупинку підряд другий натиск не проковтне.
-        this.player.next(command.target.kind === "gathering" ? command.target.from : undefined);
         break;
       case "stop":
         this.player.stop();
@@ -169,25 +135,28 @@ class AudioHostEngine {
   }
 
   private async play(target: PlaybackTarget) {
-    // Спершу глушимо те, що грало (`PLAY-40`), і аж потім вантажимо нове.
-    // Порядок саме такий, бо між командою і звуком стоїть завантаження: якби
-    // старе глушив лише запуск нового, невдалий старт лишив би гурт слухати
-    // попереднє під написом про нове.
-    this.player.stop();
-
-    // Ціль публікуємо ще до звуку: доти, доки вантажаться семпли, гурт має
+    // Ціль публікуємо ще до звуку: доки відкривається документ пісні, гурт має
     // бачити в кімнаті, ЩО саме зараз піднімається — інакше екран, який
-    // натиснув, півсекунди виглядає так, ніби команда не дійшла.
+    // натиснув, секунду виглядає так, ніби команда не дійшла.
     this.playing = target;
     this.loading = true;
     this.publish();
 
     let started = false;
     try {
-      started =
-        target.kind === "song"
-          ? await this.playSong(target)
-          : await this.playGathering(target);
+      // Інша пісня — перепідключаємось до її документа.
+      if (!this.songHandle || String(this.songHandle.songId) !== String(target.songId)) {
+        this.closeSong();
+        this.songHandle = openSongDoc(target.songId);
+        await this.songHandle.synced;
+
+        const handle = this.songHandle;
+        this.player.setSource(() => handle.getHeader());
+      }
+
+      this.playingName = this.songHandle.getHeader().name;
+      await this.player.play();
+      started = this.player.getState() !== "idle";
     } catch (error) {
       console.error("[audio-host] failed to play", target, error);
     } finally {
@@ -203,55 +172,10 @@ class AudioHostEngine {
     }
   }
 
-  private async playSong(target: Extract<PlaybackTarget, { kind: "song" }>) {
-    // Інша пісня — перепідключаємось до її документа.
-    if (!this.songHandle || String(this.songHandle.songId) !== String(target.songId)) {
-      this.closeSong();
-      this.songHandle = openSongDoc(target.songId);
-      await this.songHandle.synced;
-
-      const handle = this.songHandle;
-      this.player.setContentProvider(() => handle.getSnapshot());
-    }
-
-    this.playingName = this.songHandle.getSnapshot().name;
-    this.player.setStartChordTokenKey(target.startTokenKey);
-    await this.player.play();
-    // Пісня без розмічених тактів не має чого грати — плеєр мовчки лишається
-    // в тиші, і ціллю це не є.
-    return this.player.getState() !== "idle";
-  }
-
-  private async playGathering(target: Extract<PlaybackTarget, { kind: "gathering" }>) {
-    const bandId = this.channel.getBandId();
-    if (bandId == null) return false;
-
-    // Пісня й служіння — різні дороги до звуку, і тримати відкритим документ
-    // пісні, поки грає служіння, нема заради чого: наступний запуск пісні
-    // відкриє його наново.
-    this.closeSong();
-
-    const list = await fetchGathering(bandId, target.listId);
-    this.playingName = formatDate(list.date) ?? null;
-
-    // Адреса приїжджає з екрана: пункт або акорд у ньому (`sliceFrom`). Тап по
-    // акорду й «грати» — та сама дорога, різна лише точність адреси.
-    const queue = sliceFrom(buildGathering(list.points), target.from);
-    if (queue.length === 0) {
-      // Пункту немає в тому списку, що бачить хост (див. `sliceFrom`):
-      // краще тиша, з якої видно, що команда не вийшла.
-      console.warn("[audio-host] gathering point not found", target);
-      return false;
-    }
-
-    await this.player.playQueue(queue);
-    return this.player.getState() !== "idle";
-  }
-
-  /** Відпустити документ пісні — разом із провайдером, що його читає. */
+  /** Відпустити документ пісні — разом із джерелом, що його читає. */
   private closeSong() {
     if (!this.songHandle) return;
-    this.player.setContentProvider(null);
+    this.player.setSource(null);
     this.songHandle.destroy();
     this.songHandle = null;
   }
@@ -266,11 +190,6 @@ class AudioHostEngine {
       state: state.state,
       playing: state.playing,
       playingName: state.playingName,
-      awaitingAt: state.awaitingAt,
-      // У зібранні ключ приходить із ознакою пункту попереду — так він і їде
-      // в кімнату (`PLAY-39`): без неї той самий акорд спалахнув би одразу в
-      // кількох піснях служіння.
-      currentTokenKey: this.player.getCurrentChord()?.tokenKey ?? null,
       controlledBy: this.controlledBy,
       updatedAt: Date.now(),
     });

@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import { configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react-swc";
 import { VitePWA } from "vite-plugin-pwa";
 // @ts-ignore
@@ -62,4 +63,8 @@ export default defineConfig({
       ],
     },
   })],
+  test: {
+    // Заморожений знімок старого звуку не тестується (ADR-0003, `archive/`).
+    exclude: [...configDefaults.exclude, "archive/**"],
+  },
 });

@@ -23,8 +23,9 @@ import { setActiveSongEditor } from "./songEditorRegistry";
 import { useCanAnnotate, useCanEditContent } from "../../mode";
 import { useConnectionStatus } from "../../redux/selectors";
 import { useCurrentUsername } from "./elements/hooks";
-import { SlatePlayerBridge } from "./player/SlatePlayerBridge";
-import { usePlayerDecorate } from "./player/usePlayerDecorate";
+import { useChordDecorate } from "./useChordDecorate";
+import DronePlayer from "../../services/DronePlayer/DronePlayer";
+import { extractHeader } from "../../services/songChords/extractHeader";
 import "./SlateLyricsPlayground.css";
 import "./types";
 
@@ -41,7 +42,7 @@ function DecoratedEditable({
   readOnly: boolean;
   editableRef: RefObject<HTMLDivElement | null>;
 }) {
-  const decorate = usePlayerDecorate();
+  const decorate = useChordDecorate();
   useFillViewportHeight(editableRef);
 
   return (
@@ -125,6 +126,15 @@ function CollabView({ songId }: { songId: string | number }) {
     return () => setActiveSongEditor(null);
   }, [editor]);
 
+  // Дрон грає ЦЮ пісню: тональність і темп читаються з документа на кожне
+  // «увімкнути», тож правка шапки діє з наступного вмикання (`PLAY-34`).
+  useEffect(() => {
+    const player = DronePlayer.getInstance();
+    const source = () => extractHeader(editor.children as Descendant[]);
+    player.setSource(source);
+    return () => player.setSource(null);
+  }, [editor]);
+
   // Поза редагуванням contentEditable вимкнений — прибираємо каретку, щоб
   // після повернення в edit не лишалось "привида" старого селекшна.
   useEffect(() => {
@@ -173,22 +183,20 @@ function CollabView({ songId }: { songId: string | number }) {
       initialValue={editor.children}
       onValueChange={relayoutColumns}
     >
-      <SlatePlayerBridge editor={editor}>
-        <LostCommentsBlock ydoc={ydoc} />
-        {/* Розкладка карток приміток рахується один раз на зміну документа,
-            а не в кожному рядку — див. `comments/NoteHeadsContext.tsx`. */}
-        <NoteHeadsProvider>
-          {/* Читання й примітки — без contentEditable: тап не ставить
-              каретку й не відкриває клавіатуру (`MODE-6`, `MODE-19`).
-              Виділення під позначку в примітках — `useAnnotationRange`. */}
-          <DecoratedEditable
-            editableRef={editableRef}
-            readOnly={!canEditContent}
-            placeholder={canEditContent ? "Почніть друкувати..." : undefined}
-          />
-        </NoteHeadsProvider>
-        {canAnnotate && <CommentsFab />}
-      </SlatePlayerBridge>
+      <LostCommentsBlock ydoc={ydoc} />
+      {/* Розкладка карток приміток рахується один раз на зміну документа,
+          а не в кожному рядку — див. `comments/NoteHeadsContext.tsx`. */}
+      <NoteHeadsProvider>
+        {/* Читання й примітки — без contentEditable: тап не ставить
+            каретку й не відкриває клавіатуру (`MODE-6`, `MODE-19`).
+            Виділення під позначку в примітках — `useAnnotationRange`. */}
+        <DecoratedEditable
+          editableRef={editableRef}
+          readOnly={!canEditContent}
+          placeholder={canEditContent ? "Почніть друкувати..." : undefined}
+        />
+      </NoteHeadsProvider>
+      {canAnnotate && <CommentsFab />}
     </Slate>
   );
 }

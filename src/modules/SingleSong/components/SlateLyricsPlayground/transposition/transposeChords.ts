@@ -12,7 +12,7 @@
 import * as Transposer from "chord-transposer";
 
 import { isChord, transpose as keyDownBy } from "#utils/keyUtils";
-import { tokenizeChordLine } from "../../../services/ChordsProgressionPlayer/getMidiFromSections/utils/chordLineToProgressionMapWithKeys";
+import { tokenizeChordLine } from "../../../services/songChords/chordLineToProgressionMapWithKeys";
 import type { SongKeyValue } from "./model";
 
 const SEPARATORS = new Set(["|", "."]);

@@ -25,11 +25,8 @@ export type CustomText = {
   text: string;
   bold?: true;
   comment?: CommentMark[];
-  // Decoration-only marks injected by `usePlayerDecorate`. Never persisted.
+  // Decoration-only marks injected by `useChordDecorate`. Never persisted.
   chordToken?: true;
-  chordTokenKey?: string;
-  chordPlayingNow?: boolean;
-  chordSelected?: boolean;
   chordInvalid?: boolean;
   /** Такт, поділений нечисто — підкреслюється цілком, від риски до риски. */
   barInvalid?: boolean;

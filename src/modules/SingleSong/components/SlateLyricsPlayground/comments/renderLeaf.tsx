@@ -82,18 +82,9 @@ export const RenderLeaf = ({ attributes, children, leaf }: RenderLeafProps) => {
 
   if (t.chordToken || t.chordInvalid) {
     const classes = ["chord-token"];
-    if (t.chordPlayingNow) classes.push("chord-playing-now");
-    if (t.chordSelected) classes.push("chord-selected");
     if (t.chordInvalid) classes.push("chord-invalid");
     if (t.chordSilence) classes.push("chord-silence");
-    node = (
-      <span
-        className={classes.join(" ")}
-        data-chord-token-key={t.chordTokenKey}
-      >
-        {node}
-      </span>
-    );
+    node = <span className={classes.join(" ")}>{node}</span>;
   }
 
   return <span {...attributes}>{node}</span>;

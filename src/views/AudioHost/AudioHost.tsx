@@ -14,26 +14,59 @@ import {
   METRONOME_TRIM_RANGE,
   setMetronomeTrim,
   subscribeMetronomeTrim,
-} from "#modules/SingleSong/services/ChordsProgressionPlayer/metronomeTrim";
+} from "#modules/SingleSong/services/DronePlayer/metronomeTrim";
+import {padTrim} from "#modules/SingleSong/services/DronePlayer/padTrim";
 import {Button} from "@/components/ui/button";
 import {Slider} from "@/components/ui/slider";
 
 const STATE_LABELS: Record<AudioHostEngineState["state"], string> = {
   idle: "Тиша — чекаю команду",
-  // Вантажитись може і пісня, і ціле служіння — назва того, що піднімається,
-  // стоїть рядком нижче.
+  // Назва пісні, що піднімається, стоїть рядком нижче.
   loading: "Завантажую…",
   playing: "Грає",
-  paused: "На паузі",
 };
 
 const useMetronomeTrim = () =>
   useSyncExternalStore(subscribeMetronomeTrim, getMetronomeTrim);
+const usePadTrim = () => useSyncExternalStore(padTrim.subscribe, padTrim.get);
 
-const formatTrim = (trim: number): string => {
-  if (isMetronomeMuted(trim)) return "Вимк.";
+const formatTrim = (trim: number, muted: boolean): string => {
+  if (muted) return "Вимк.";
   return `${trim > 0 ? "+" : ""}${trim} дБ`;
 };
+
+/** Жива ручка пульта: діє одразу й не зберігається (`liveTrim`). */
+const TrimSlider = ({
+  label,
+  value,
+  range,
+  muted,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  range: [number, number];
+  muted: boolean;
+  onChange: (value: number) => void;
+}) => (
+  <div className="w-full max-w-sm text-left">
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="text-sm font-semibold text-stone-800">{label}</span>
+      <span className="text-xs font-semibold text-stone-600 tabular-nums">
+        {formatTrim(value, muted)}
+      </span>
+    </div>
+    <Slider
+      min={range[0]}
+      max={range[1]}
+      step={1}
+      value={[value]}
+      onValueChange={([next]) => onChange(next)}
+      aria-label={`Гучність: ${label.toLowerCase()}`}
+      className="mt-2"
+    />
+  </div>
+);
 
 /**
  * Режим хоста звуку: цю сторінку відкривають на пристрої за пультом.
@@ -48,6 +81,7 @@ export default function AudioHost() {
   const engine = useMemo(() => AudioHostEngine.getInstance(), []);
   const [engineState, setEngineState] = useState<AudioHostEngineState>(engine.getState());
   const metronomeTrim = useMetronomeTrim();
+  const padTrimValue = usePadTrim();
 
   // Дубль-сесія: той самий акаунт уже веде звук з іншого пристрою.
   const hostStatus = useAudioHostStatus();
@@ -158,34 +192,31 @@ export default function AudioHost() {
               )}
             </div>
 
-            {(engineState.state === "playing" || engineState.state === "paused") && (
+            {engineState.state === "playing" && (
               <Button variant="outline" className="gap-2" onClick={() => engine.stopPlayback()}>
                 <StopIcon className="size-5" />
                 Зупинити
               </Button>
             )}
 
-            {/* Гучність кліку — ручка пульта: діє наживо й не зберігається. */}
-            <div className="w-full max-w-sm text-left">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-sm font-semibold text-stone-800">Метроном</span>
-                <span className="text-xs font-semibold text-stone-600 tabular-nums">
-                  {formatTrim(metronomeTrim)}
-                </span>
-              </div>
-              <Slider
-                min={METRONOME_TRIM_RANGE[0]}
-                max={METRONOME_TRIM_RANGE[1]}
-                step={1}
-                value={[metronomeTrim]}
-                onValueChange={([trim]) => setMetronomeTrim(trim)}
-                aria-label="Гучність метронома"
-                className="mt-2"
-              />
-              <p className="text-xs text-stone-400 mt-1.5 m-0">
-                Чутно одразу. Не зберігається — після перезавантаження знову 0 дБ.
-              </p>
-            </div>
+            {/* Ручки пульта: пед у лівому каналі, клік у правому (`PLAY-43`). */}
+            <TrimSlider
+              label="Пед"
+              value={padTrimValue}
+              range={padTrim.range}
+              muted={padTrim.isMuted(padTrimValue)}
+              onChange={padTrim.set}
+            />
+            <TrimSlider
+              label="Метроном"
+              value={metronomeTrim}
+              range={METRONOME_TRIM_RANGE}
+              muted={isMetronomeMuted(metronomeTrim)}
+              onChange={setMetronomeTrim}
+            />
+            <p className="text-xs text-stone-400 max-w-sm m-0 -mt-3">
+              Чутно одразу. Не зберігається — після перезавантаження знову 0 дБ.
+            </p>
 
             <p className="text-xs text-stone-400 max-w-sm m-0">
               Не закривай цю сторінку і не блокуй екран: звук іде з цього
