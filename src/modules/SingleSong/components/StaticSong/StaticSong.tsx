@@ -5,7 +5,7 @@ import { Editable, Slate, withReact } from "slate-react";
 import { renderElement } from "../SlateLyricsPlayground/renderElement";
 import { RenderLeaf } from "../SlateLyricsPlayground/comments/renderLeaf";
 import { NoteHeadsProvider } from "../SlateLyricsPlayground/comments/NoteHeadsContext";
-import { usePlayerDecorate } from "../SlateLyricsPlayground/player/usePlayerDecorate";
+import { useChordDecorate } from "../SlateLyricsPlayground/useChordDecorate";
 import { withComments } from "../SlateLyricsPlayground/comments/withComments";
 import { withHeader } from "../SlateLyricsPlayground/withHeader";
 import { withMetaSchema } from "../SlateLyricsPlayground/withMetaSchema";
@@ -46,18 +46,15 @@ import "../SlateLyricsPlayground/SlateLyricsPlayground.css";
 interface Props {
   /**
    * Тотожність документа: пісня це чи згенерований програш — байдуже. Потрібен
-   * лише як ключ пересоздання редактора — і як зачіпка під плеєр.
+   * лише як ключ пересоздання редактора.
    */
   docId: string | number;
   slate: Descendant[];
 }
 
 function StaticEditable() {
-  // Та сама декорація, що й у пісні: підсвітка акордів, показ капо, приглушені
-  // слоти після `!`. Голку («зараз грає») дає контекст ЗВЕРХУ: у зібранні її
-  // ставить пункт, віддаючи вниз лише свої токени (`GatheringItemView`), а поза
-  // ним контекст порожній за замовчуванням — і показ лишається тим самим.
-  const decorate = usePlayerDecorate();
+  // Та сама декорація, що й у пісні: показ капо, приглушені слоти після `!`.
+  const decorate = useChordDecorate();
 
   return (
     <Editable

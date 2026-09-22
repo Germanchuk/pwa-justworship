@@ -5,7 +5,7 @@
  * ПОЗА React-деревом `<Slate>`. Тож ні
  * `useSlateStatic`, ні React-контекст туди не дістають. Оскільки на сторінці
  * завжди відкрита рівно одна пісня, тримаємо модульний сінглтон — той самий
- * патерн, що `ChordsProgressionPlayer.setContentProvider`.
+ * патерн, що `DronePlayer.setSource`.
  *
  * Редактор — єдине джерело правди про вміст пісні: у redux лежить лише
  * `{ id }` (див. `views/SingleSong/SingleSong.tsx`).

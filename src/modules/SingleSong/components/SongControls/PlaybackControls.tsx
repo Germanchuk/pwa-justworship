@@ -1,10 +1,6 @@
-import {
-  PauseIcon,
-  PlayIcon,
-  StopIcon,
-} from "@heroicons/react/24/outline";
-import React, {useCallback, useEffect, useMemo, useState} from "react";
-import ChordsProgressionPlayer from "../../services/ChordsProgressionPlayer/ChordsProgressionPlayer";
+import { PlayIcon, StopIcon } from "@heroicons/react/24/outline";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import DronePlayer from "../../services/DronePlayer/DronePlayer";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useBand } from "#modules/Band/BandLayout";
@@ -16,9 +12,12 @@ import { useAudioHostStatus } from "#modules/Band/audio/useBandAudio";
 import { useCurrentUsername } from "../SlateLyricsPlayground/elements/hooks";
 import { useSongId } from "../../redux/selectors";
 
-/** «Грати» / «пауза» / «стоп» пісні — рядок меню пісні в режимі читання (`PLAY-2`). */
+/**
+ * «Увімкнути / вимкнути дрон» — одна кнопка в рядку меню пісні (`PLAY-2`).
+ * Паузи немає: дрон вмикають і вимикають, позиції в пісні в нього немає.
+ */
 export const PlaybackControls = () => {
-  const player = useMemo(() => ChordsProgressionPlayer.getInstance(), []);
+  const player = useMemo(() => DronePlayer.getInstance(), []);
   const [localState, setLocalState] = useState(player.getState());
 
   const band = useBand();
@@ -26,17 +25,16 @@ export const PlaybackControls = () => {
   const songId = useSongId();
   const hostStatus = useAudioHostStatus();
 
-  // Хост онлайн і озброєний → кнопки стають пультом: команди їдуть у
-  // band-кімнату, звук грає планшет за пультом. Інакше — локально, як завжди.
+  // Хост онлайн і озброєний → кнопка стає пультом: команди їдуть у
+  // band-кімнату, звук грає планшет за пультом. Інакше — локально.
   // Правило одне на застосунок (`routeFor`): звук, що вже йде з цього
   // пристрою, лишається його — хост, який озброївся посеред пісні, забирає
-  // НАСТУПНИЙ запуск, а не той, що звучить.
+  // НАСТУПНЕ вмикання, а не те, що звучить.
   const remoteActive = routeFor({ localState, status: hostStatus }) === "host";
-  // Хост грає ІНШУ пісню (або ціле служіння) → мої кнопки в idle; мій плей
-  // перехоплює («останній перемагає»).
+  // Хост грає ІНШУ пісню → моя кнопка вимкнена; моє вмикання перехоплює
+  // («останній перемагає»).
   const hostState = songId == null ? "idle" : hostStateFor(hostStatus, songTarget(songId));
-  const hostOnMySong = remoteActive && hostState !== "idle";
-  const playbackState = remoteActive ? hostState : localState;
+  const state = remoteActive ? hostState : localState;
 
   const hostDesignated =
     (band as {audioHostUserId?: number | null}).audioHostUserId != null;
@@ -44,52 +42,35 @@ export const PlaybackControls = () => {
   useEffect(() => player.onStateChange(setLocalState), [player]);
 
   const sendCommand = useCallback(
-    (action: "play" | "pause" | "resume" | "stop") => {
+    (action: "play" | "stop") => {
       // Пісні немає — командувати нема чим: хост відкриває документ саме по
       // цьому id.
       if (songId == null) return;
       BandAudioChannel.getInstance().sendCommand({
         action,
-        target: songTarget(songId, action === "play" ? player.getStartChordTokenKey() : null),
+        target: songTarget(songId),
         issuedBy: username ?? null,
       });
     },
-    [songId, player, username],
+    [songId, username],
   );
 
-  const handlePrimaryAction = useCallback(() => {
+  const isLoading = state === "loading";
+  const isPlaying = state === "playing";
+
+  const handleToggle = useCallback(() => {
     if (remoteActive) {
-      sendCommand(hostOnMySong && playbackState === "paused" ? "resume" : "play");
+      sendCommand(isPlaying ? "stop" : "play");
       return;
     }
-    if (playbackState === "paused") {
-      player.resume();
+    if (isPlaying) {
+      player.stop();
       return;
     }
     player.play().catch((error) => {
-      console.error("Failed to start chord progression playback", error);
+      console.error("Failed to start the drone", error);
     });
-  }, [remoteActive, hostOnMySong, playbackState, player, sendCommand]);
-
-  const handlePause = useCallback(() => {
-    if (remoteActive) {
-      sendCommand("pause");
-      return;
-    }
-    player.pause();
-  }, [remoteActive, player, sendCommand]);
-
-  const handleStop = useCallback(() => {
-    if (remoteActive) {
-      sendCommand("stop");
-      return;
-    }
-    player.stop();
-  }, [remoteActive, player, sendCommand]);
-
-  const isLoading = playbackState === "loading";
-  const isPlaying = playbackState === "playing";
-  const isPaused = playbackState === "paused";
+  }, [remoteActive, isPlaying, player, sendCommand]);
 
   return (
     <div className="flex gap-1 items-center">
@@ -103,30 +84,19 @@ export const PlaybackControls = () => {
         variant="outline"
         size="icon"
         className="rounded-full border-dashed"
-        onClick={isPlaying ? handlePause : handlePrimaryAction}
+        onClick={handleToggle}
         disabled={isLoading}
-        aria-label={isPlaying ? "Pause progression" : isPaused ? "Resume progression" : "Play progression"}
+        aria-label={isPlaying ? "Вимкнути дрон" : "Увімкнути дрон"}
+        title={isPlaying ? "Вимкнути дрон" : "Увімкнути дрон"}
       >
         {isLoading ? (
           <Loader2 className="size-4 animate-spin" />
         ) : isPlaying ? (
-          <PauseIcon className="w-6 h-6" />
+          <StopIcon className="w-6 h-6" />
         ) : (
           <PlayIcon className="w-6 h-6" />
         )}
       </Button>
-      {(isPlaying || isPaused) && (
-        <Button
-          variant="outline"
-          size="icon"
-          className="rounded-full border-dashed"
-          onClick={handleStop}
-          disabled={isLoading}
-          aria-label="Stop progression"
-        >
-          <StopIcon className="w-6 h-6" />
-        </Button>
-      )}
     </div>
   );
-}
+};

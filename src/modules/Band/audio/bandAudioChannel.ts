@@ -15,7 +15,7 @@ type CommandListener = (command: PlaybackCommand) => void;
  *
  * Чому синглтон, а не контекст: кнопки служіння живуть у верхньому барі —
  * НАД band-роутами, контекст туди не дістає (той самий паттерн, що
- * ChordsProgressionPlayer). Підключенням керує BandAudioBridge у BandLayout.
+ * DronePlayer). Підключенням керує BandAudioBridge у BandLayout.
  */
 class BandAudioChannel {
   static instance: BandAudioChannel;
