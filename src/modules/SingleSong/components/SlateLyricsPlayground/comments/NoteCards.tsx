@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ReactEditor, useSlateStatic } from "slate-react";
 
 import { useCanAnnotate } from "../../../mode";
@@ -7,10 +7,47 @@ import type { NoteRecord } from "../types";
 import { cardBg, cardBorder, DEFAULT_COMMENT_COLOR } from "./colors";
 import { consumePendingFocus } from "./pendingFocus";
 import { restCount } from "./visibility";
-import { updateCommentBody } from "./withComments";
+import { readNote, updateCommentBody } from "./withComments";
 import "./comments.css";
 
 const SAVE_DEBOUNCE_MS = 300;
+
+/**
+ * Поле росте під свій текст замість скролу — з урахуванням переносів, а не
+ * лише `\n`. Перераховуємо на кожну зміну тексту і на зміну ШИРИНИ (поворот,
+ * інша кількість колонок): вужче поле — більше перенесених рядків.
+ *
+ * CSS `field-sizing: content` робив би те саме, але iOS Safari його ще не знає.
+ */
+const useAutoHeight = (
+  ref: React.RefObject<HTMLTextAreaElement | null>,
+  value: string,
+) => {
+  const fit = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(fit, [value]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let width = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      // Власна зміна висоти теж будить обсервер — реагуємо лише на ширину.
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      fit();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+};
 
 type CardProps = {
   commentId: string;
@@ -24,17 +61,41 @@ const NoteCard = ({ commentId, note, canEdit, rest }: CardProps) => {
   const editor = useSlateStatic();
   const [draft, setDraft] = useState(note.body);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Набране, але ще не записане в документ; `null` — записувати нічого. */
+  const unsaved = useRef<string | null>(null);
+  const focused = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useAutoHeight(textareaRef, draft);
 
+  /**
+   * Поки поле у фокусі — ним володіє користувач, поза фокусом — документ.
+   *
+   * Без цього правила власний запис повертався сюди як новий `note.body` із
+   * запізненням (операція → onChange Slate → ререндер усього документа), і
+   * `setDraft` відкочував поле назад — букви, набрані за цей час, зникали.
+   * Ціна: чужу правку ТІЄЇ Ж примітки видно лише після виходу з поля.
+   */
   useEffect(() => {
-    setDraft(note.body);
+    if (!focused.current) setDraft(note.body);
   }, [note.body]);
 
-  useEffect(() => {
-    return () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    };
-  }, []);
+  const flush = () => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = null;
+    if (unsaved.current === null) return;
+    const body = unsaved.current;
+    unsaved.current = null;
+    try {
+      updateCommentBody(editor, commentId, body);
+    } catch {
+      // Редактор уже відмонтований — писати нікуди.
+    }
+  };
+
+  // На відмонтуванні не губимо хвіст, що ще чекав на дебаунс.
+  const flushRef = useRef(flush);
+  flushRef.current = flush;
+  useEffect(() => () => flushRef.current(), []);
 
   // Автофокус, якщо примітку щойно створив цей користувач (CommentsFab
   // позначає commentId через setPendingFocus).
@@ -49,10 +110,26 @@ const NoteCard = ({ commentId, note, canEdit, rest }: CardProps) => {
 
   const onChange = (value: string) => {
     setDraft(value);
+    unsaved.current = value;
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => {
-      updateCommentBody(editor, commentId, value);
-    }, SAVE_DEBOUNCE_MS);
+    debounceTimer.current = setTimeout(flush, SAVE_DEBOUNCE_MS);
+  };
+
+  const onFocus = () => {
+    focused.current = true;
+    releaseEditorFocus();
+  };
+
+  /**
+   * Віддаємо поле документу: дописуємо хвіст і читаємо тіло ПРЯМО з редактора —
+   * `note.body` у пропсах ще старий, доки не прийде ререндер, і на мить
+   * показав би текст без щойно набраних букв.
+   */
+  const onBlur = () => {
+    focused.current = false;
+    flush();
+    const body = readNote(editor, commentId)?.body;
+    if (body !== undefined) setDraft(body);
   };
 
   /**
@@ -88,11 +165,12 @@ const NoteCard = ({ commentId, note, canEdit, rest }: CardProps) => {
         ref={textareaRef}
         className="note-card__textarea"
         value={draft}
-        onFocus={releaseEditorFocus}
+        onFocus={onFocus}
+        onBlur={onBlur}
         onChange={(e) => canEdit && onChange(e.target.value)}
         readOnly={!canEdit}
         placeholder={canEdit ? "Ваш коментар…" : ""}
-        rows={Math.min(6, Math.max(1, draft.split("\n").length))}
+        rows={1}
       />
       {rest > 0 && (
         /*

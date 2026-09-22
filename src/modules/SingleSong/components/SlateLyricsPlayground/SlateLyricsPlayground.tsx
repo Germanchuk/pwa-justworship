@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 import { createEditor, Transforms, type Descendant, type Editor } from "slate";
 import { Slate, Editable, withReact } from "slate-react";
 import { withYjs, withYHistory, YjsEditor } from "@slate-yjs/core";
 
 import { renderElement } from "./renderElement";
 import { withSections } from "./withSections";
+import { withClipboard } from "./withClipboard";
 import { withHeader } from "./withHeader";
 import { withMetaSchema } from "./withMetaSchema";
 import { withComments } from "./comments/withComments";
@@ -17,6 +18,7 @@ import { pushLostComment } from "./comments/lostComments";
 import { isPrivateTo } from "./comments/visibility";
 import { useCollabProvider } from "./useCollabProvider";
 import { useFillViewportHeight } from "./useFillViewportHeight";
+import { useColumnsRelayout } from "./useColumnsRelayout";
 import { setActiveSongEditor } from "./songEditorRegistry";
 import { useCanAnnotate, useCanEditContent } from "../../mode";
 import { useConnectionStatus } from "../../redux/selectors";
@@ -33,12 +35,13 @@ interface Props {
 function DecoratedEditable({
   placeholder,
   readOnly,
+  editableRef,
 }: {
   placeholder?: string;
   readOnly: boolean;
+  editableRef: RefObject<HTMLDivElement | null>;
 }) {
   const decorate = usePlayerDecorate();
-  const editableRef = useRef<HTMLDivElement | null>(null);
   useFillViewportHeight(editableRef);
 
   return (
@@ -57,6 +60,10 @@ function DecoratedEditable({
 
 function CollabView({ songId }: { songId: string | number }) {
   const { ydoc, sharedRoot, synced } = useCollabProvider(songId);
+  // Вузол редактора живе тут, а не в `DecoratedEditable`: перерахунок колонок
+  // чіпляється до `<Slate onValueChange>`, тобто до цього ж рівня.
+  const editableRef = useRef<HTMLDivElement | null>(null);
+  const relayoutColumns = useColumnsRelayout(editableRef);
   const status = useConnectionStatus();
   const me = useCurrentUsername();
   const meRef = useRef(me);
@@ -93,6 +100,7 @@ function CollabView({ songId }: { songId: string | number }) {
         pushLostComment(ydoc, data);
       },
     });
+    e = withClipboard(e);
     // Найзовнішній guard: поза режимом редагування вміст пісні незмінний.
     e = withModeGuard(e, () => canEditRef.current);
     return e;
@@ -160,7 +168,11 @@ function CollabView({ songId }: { songId: string | number }) {
   }
 
   return (
-    <Slate editor={editor} initialValue={editor.children}>
+    <Slate
+      editor={editor}
+      initialValue={editor.children}
+      onValueChange={relayoutColumns}
+    >
       <SlatePlayerBridge editor={editor}>
         <LostCommentsBlock ydoc={ydoc} />
         {/* Розкладка карток приміток рахується один раз на зміну документа,
@@ -170,6 +182,7 @@ function CollabView({ songId }: { songId: string | number }) {
               каретку й не відкриває клавіатуру (`MODE-6`, `MODE-19`).
               Виділення під позначку в примітках — `useAnnotationRange`. */}
           <DecoratedEditable
+            editableRef={editableRef}
             readOnly={!canEditContent}
             placeholder={canEditContent ? "Почніть друкувати..." : undefined}
           />

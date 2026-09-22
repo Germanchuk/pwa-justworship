@@ -1,4 +1,4 @@
-import { Editor, Element, Node, Transforms, type Descendant, type Path } from "slate";
+import { Editor, Element, Node, Range, Transforms, type Descendant, type Path } from "slate";
 import { keys as VALID_KEYS } from "#utils/keyUtils";
 
 import type { SongMetaRowElement } from "./types";
@@ -76,7 +76,21 @@ export function makeDefaultMetaRow(): Descendant {
  * a brief moment with two header blocks, then normalizer collapses).
  */
 export const withHeader = (editor: Editor) => {
-  const { normalizeNode } = editor;
+  const { normalizeNode, insertBreak, insertSoftBreak } = editor;
+
+  // Enter у шапці нічого не робить. Розрив назви дав би дві назви, і ремонт
+  // нижче стер би справжній рядок мета-даних разом із темпом, капо й
+  // примітками, підставивши значення за замовчуванням.
+  const inHeader = () =>
+    editor.selection !== null && Range.start(editor.selection).path[0] < 2;
+
+  editor.insertBreak = () => {
+    if (!inHeader()) insertBreak();
+  };
+
+  editor.insertSoftBreak = () => {
+    if (!inHeader()) insertSoftBreak();
+  };
 
   editor.normalizeNode = (entry) => {
     const [node, path] = entry;

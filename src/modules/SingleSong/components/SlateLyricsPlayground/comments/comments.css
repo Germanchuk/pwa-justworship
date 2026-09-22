@@ -44,7 +44,10 @@
   flex: 1;
   border: none;
   outline: none;
-  resize: vertical;
+  /* Висоту веде `useAutoHeight` під текст — ні ручного ресайзу, ні скролу. */
+  resize: none;
+  overflow: hidden;
+  box-sizing: border-box;
   background: transparent;
   font: inherit;
   /* iOS Safari zooms into inputs with font-size < 16px on focus.
