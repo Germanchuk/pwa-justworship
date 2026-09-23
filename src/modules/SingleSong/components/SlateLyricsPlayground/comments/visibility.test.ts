@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AUDIENCE_ALL,
+  countWithMember,
   isPrivateTo,
   isVisibleToAll,
   narrowAudience,
@@ -84,5 +85,43 @@ describe("isPrivateTo", () => {
   it("спільна позначка вже не приватна — адресат дізнається про втрату", () => {
     expect(isPrivateTo(forThem("me", "anna"), "me")).toBe(false);
     expect(isPrivateTo(forThem(AUDIENCE_ALL), "me")).toBe(false);
+  });
+});
+
+describe("countWithMember", () => {
+  // Я — anna. Позначки: моя приватна, спільна з bohdan, спільна з vika,
+  // приватна bohdan.
+  const marks = [
+    forThem("anna"),
+    forThem("anna", "bohdan"),
+    forThem("anna", "vika"),
+    forThem("bohdan"),
+  ];
+
+  it("невідмічений: скільки в нього разом з уже відміченими", () => {
+    expect(countWithMember(marks, ["anna"], "bohdan")).toBe(1);
+    expect(countWithMember(marks, ["anna"], "vika")).toBe(1);
+  });
+
+  it("відмічений: те, що зараз на екрані", () => {
+    expect(countWithMember(marks, ["anna"], "anna")).toBe(3);
+    expect(countWithMember(marks, ["anna", "bohdan"], "anna")).toBe(1);
+    expect(countWithMember(marks, ["anna", "bohdan"], "bohdan")).toBe(1);
+  });
+
+  it("спільних немає — нуль у всіх", () => {
+    expect(countWithMember(marks, ["anna", "bohdan"], "vika")).toBe(0);
+    expect(countWithMember(marks, ["bohdan", "vika"], "bohdan")).toBe(0);
+  });
+
+  it("порожній набір — скільки в людини особисто, без інших відмічених", () => {
+    expect(countWithMember(marks, [], "anna")).toBe(3);
+    expect(countWithMember(marks, [], "bohdan")).toBe(2);
+    expect(countWithMember(marks, [], "vika")).toBe(1);
+  });
+
+  it("публічні не рахуються: вони застарілі й від вибору не залежать", () => {
+    const withPublic = [...marks, forThem(AUDIENCE_ALL)];
+    expect(countWithMember(withPublic, ["anna"], "bohdan")).toBe(1);
   });
 });

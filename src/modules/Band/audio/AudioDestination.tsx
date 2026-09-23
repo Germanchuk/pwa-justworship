@@ -12,7 +12,7 @@ import type { AudioHostStatus } from "./types";
  *
  * Маршрут на хост — імʼя того, чий пристрій зараз звучить на весь зал. Звук
  * з цього пристрою — нічого: це звичайний випадок, підпис лише займав би
- * місце в рядку меню (колишнє «звук тут» прибрано 2026-09-23).
+ * місце біля кнопки дрона (колишнє «звук тут» прибрано 2026-09-23).
  *
  * ⚠️ Напис читає МАРШРУТ, а не статус хоста. Це та сама відповідь, яку слухають
  * кнопки поруч, тож розійтись вони не можуть.
@@ -27,10 +27,10 @@ export const AudioDestination = ({ route, status }: Props) => {
   if (route !== "host") return null;
   return (
     <span
-      className="flex h-9 items-center gap-0.5 px-1.5 text-[10px] font-semibold text-blue-900 max-w-28"
+      className="glass flex h-13 items-center gap-0.5 rounded-[19px] px-2 text-xs font-semibold text-blue-900 max-w-32"
       title={`Звук грає: ${status?.username ?? "хост"}`}
     >
-      <SpeakerWaveIcon className="size-3.5 shrink-0" />
+      <SpeakerWaveIcon className="size-4 shrink-0" />
       <span className="truncate">{status?.username ?? "хост"}</span>
     </span>
   );

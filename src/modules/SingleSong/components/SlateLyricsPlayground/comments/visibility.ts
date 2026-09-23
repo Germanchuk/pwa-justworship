@@ -80,3 +80,23 @@ export const isPrivateTo = (
   return list.length === 1 && list[0] === username;
 };
 
+
+/**
+ * Число біля імені у виборі «чиїми очима» (`NOTE-45`): скільки позначок у
+ * цієї людини разом з уже відміченими — тобто видимих набору «відмічені +
+ * вона». Для відміченого це рівно те, що зараз на екрані. З порожнім набором
+ * — скільки в неї особисто, число в дужках.
+ *
+ * Публічні не рахуємо: вони застарілі (`NOTE-3`) і однаково додавались би
+ * до кожного числа, нічого не кажучи про вибір.
+ */
+export const countWithMember = (
+  marks: { visibleFor?: string[] }[],
+  audience: Audience,
+  username: string,
+): number => {
+  const withMember = audience.includes(username) ? audience : [...audience, username];
+  return marks.filter(
+    (m) => !m.visibleFor?.includes(AUDIENCE_ALL) && isVisibleToAll(m, withMember),
+  ).length;
+};

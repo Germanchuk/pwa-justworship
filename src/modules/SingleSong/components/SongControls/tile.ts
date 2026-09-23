@@ -1,16 +1,16 @@
 /**
  * Форма кнопки меню пісні: кнопка — це сама скляна плитка, квадрат із
- * заокругленими кутами, а не кругла кнопка всередині плашки. 44px — ціль для
- * пальця на сцені.
+ * заокругленими кутами, а не кругла кнопка всередині плашки. 52px — з
+ * запасом над мінімальною ціллю для пальця: меню тиснуть на сцені.
  */
-export const MENU_TILE = "glass size-11 shrink-0 rounded-2xl";
+export const MENU_TILE = "glass size-13 shrink-0 rounded-[19px]";
 
 /**
- * Кілька кнопок, що діють як одне ціле (перемикач режимів, рядок меню, меню
+ * Кілька кнопок, що діють як одне ціле (перемикач режимів, палітра, меню
  * позначки), — одна скляна плашка зі спільним фоном. Напрямок (`flex-col`)
- * додає викликач. Разом із рамкою плашка 44px завширшки — як `MENU_TILE`.
+ * додає викликач. Разом із рамкою плашка 52px завширшки — як `MENU_TILE`.
  */
-export const MENU_GROUP = "glass flex items-center gap-0.5 rounded-2xl p-[3px]";
+export const MENU_GROUP = "glass flex items-center gap-0.5 rounded-[19px] p-[3px]";
 
-/** Кнопка всередині `MENU_GROUP`: без свого скла, фон — спільний. */
-export const MENU_GROUP_ITEM = "size-9 shrink-0 rounded-xl";
+/** Кнопка всередині `MENU_GROUP` (44px): без свого скла, фон — спільний. */
+export const MENU_GROUP_ITEM = "size-11 shrink-0 rounded-[14px]";

@@ -10,13 +10,13 @@ import { songTarget } from "#modules/Band/audio/types";
 import { useAudioHostStatus } from "#modules/Band/audio/useBandAudio";
 import { useCurrentUsername } from "../SlateLyricsPlayground/elements/hooks";
 import { useSongId } from "../../redux/selectors";
-import { MENU_GROUP_ITEM } from "./tile";
+import { MENU_TILE } from "./tile";
 
 /**
- * «Увімкнути / вимкнути дрон» — одна кнопка в рядку меню пісні (`PLAY-2`).
+ * «Увімкнути / вимкнути дрон» — окрема плитка під «⋯» у меню пісні (`PLAY-2`).
  * Паузи немає: дрон вмикають і вимикають, позиції в пісні в нього немає —
  * тому й кнопка виглядає як вимикач живлення, а не як «грати / стоп»:
- * увімкнена залита, вимкнена — прозора на фоні рядка меню.
+ * увімкнена залита, вимкнена — скляна, як решта плиток.
  */
 export const PlaybackControls = () => {
   const player = useMemo(() => DronePlayer.getInstance(), []);
@@ -71,7 +71,7 @@ export const PlaybackControls = () => {
   }, [remoteActive, isPlaying, player, sendCommand]);
 
   return (
-    <div className="flex items-center gap-0.5">
+    <div className="flex items-center gap-2">
       {/* Звук піде на хоста — чий пристрій звучить на зал. */}
       <AudioDestination
         route={remoteActive ? "host" : "local"}
@@ -81,9 +81,9 @@ export const PlaybackControls = () => {
         variant="ghost"
         size="icon"
         className={cn(
-          MENU_GROUP_ITEM,
+          MENU_TILE,
           isPlaying &&
-            "bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:text-primary-foreground",
+            "border-primary bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:text-primary-foreground",
         )}
         onClick={handleToggle}
         disabled={isLoading}
@@ -92,9 +92,9 @@ export const PlaybackControls = () => {
         title={isPlaying ? "Вимкнути дрон" : "Увімкнути дрон"}
       >
         {isLoading ? (
-          <Loader2 className="size-5 animate-spin" />
+          <Loader2 className="size-6 animate-spin" />
         ) : (
-          <Power className="size-5" strokeWidth={2.25} />
+          <Power className="size-6" strokeWidth={2.25} />
         )}
       </Button>
     </div>
