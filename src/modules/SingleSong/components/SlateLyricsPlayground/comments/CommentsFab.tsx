@@ -138,10 +138,10 @@ const ColoredIconButton = ({
 /** Кружок кольору позначки; у закреслення кольору нема — його іконка. */
 const ColorDot = ({ color }: { color: string }) =>
   isStrike(color) ? (
-    <Strikethrough className="size-5" />
+    <Strikethrough className="size-6" />
   ) : (
     <span
-      className="size-5 rounded-full border border-black/10"
+      className="size-6 rounded-full border border-black/10"
       style={{ backgroundColor: cardBorder(color) }}
     />
   );
@@ -236,7 +236,7 @@ const MarkAudienceMenu = ({ mark }: { mark: CommentMark }) => {
         aria-label="Хто бачить"
         className={menuIconButton}
       >
-        <Users className="size-5" />
+        <Users className="size-6" />
       </DropdownMenuTrigger>
       <DropdownMenuContent side="left" align="end" className="min-w-48">
         <DropdownMenuLabel>Хто бачить</DropdownMenuLabel>
@@ -336,14 +336,14 @@ export const CommentsFab = () => {
     convertHighlightToNote(editor, commentId, "");
   };
 
-  // Кнопки стоять одразу під меню пісні (`NOTE-9`) — порталом у його слот.
-  // Лінія над ними відділяє зону позначки від меню пісні.
+  // Кнопки стоять одразу під меню пісні (`NOTE-9`) — порталом у його слот;
+  // проміжок до меню той самий, що між усіма групами меню.
   if (!slot) return null;
 
   return createPortal(
     <div
       {...{ [ANNOTATION_UI]: "" }}
-      className="mt-3 flex flex-col items-end gap-2 border-t-2 border-black/20 pt-3 transition-opacity duration-200"
+      className="flex flex-col items-end gap-2 transition-opacity duration-200"
       style={{
         opacity: visible ? 1 : 0,
         pointerEvents: visible ? "auto" : "none",
@@ -363,7 +363,7 @@ export const CommentsFab = () => {
           aria-label="Застосувати область"
           title="Застосувати область"
         >
-          <TextSelect className="size-5" />
+          <TextSelect className="size-6" />
         </Button>
       )}
 
@@ -376,7 +376,7 @@ export const CommentsFab = () => {
               title={`Виділити: ${c.name}`}
               onClick={() => applyHighlight(c.hex)}
             >
-              <Highlighter className="size-5" />
+              <Highlighter className="size-6" />
             </ColoredIconButton>
           ))}
           {/* Іконка інша, ніж у кольорових: ті розрізняються кольором,
@@ -386,7 +386,7 @@ export const CommentsFab = () => {
             title="Закреслити"
             onClick={() => applyHighlight(STRIKE_COLOR)}
           >
-            <Strikethrough className="size-5" />
+            <Strikethrough className="size-6" />
           </ColoredIconButton>
         </div>
       )}
@@ -417,7 +417,7 @@ export const CommentsFab = () => {
               aria-label="Змінити область"
               title="Змінити область"
             >
-              <TextSelect className="size-5" />
+              <TextSelect className="size-6" />
             </Button>
             <MarkAudienceMenu mark={m} />
             <Button
@@ -433,9 +433,9 @@ export const CommentsFab = () => {
               title={noteTitle}
             >
               {noted ? (
-                <MessageSquareOff className="size-5" />
+                <MessageSquareOff className="size-6" />
               ) : (
-                <MessageSquarePlus className="size-5" />
+                <MessageSquarePlus className="size-6" />
               )}
             </Button>
             <Button
@@ -446,7 +446,7 @@ export const CommentsFab = () => {
               aria-label={deleteTitle}
               title={deleteTitle}
             >
-              <Trash2 className="size-5" />
+              <Trash2 className="size-6" />
             </Button>
           </div>
         );

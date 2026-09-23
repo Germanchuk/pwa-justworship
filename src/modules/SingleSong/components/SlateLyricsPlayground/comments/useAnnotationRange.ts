@@ -62,11 +62,15 @@ export const useAnnotationRange = (editor: Editor) => {
     };
 
     const onClickOutside = (e: MouseEvent) => {
-      const target = e.target as Element | null;
+      // Шлях, а не `target.closest`: тап по кольору палітри створює позначку,
+      // палітра зникає, і до цього обробника кнопка доходить уже відірваною
+      // від сторінки — `closest` її панелі не знайшов би, і щойно обрана
+      // позначка скинулась би (`NOTE-7`). Шлях фіксується на старті події.
+      const path = e.composedPath();
       // Усередині редактора вирішує `onClick`; острівці (картка примітки)
       // вибір не скидають.
-      if (!target || root.contains(target)) return;
-      if (target.closest?.(KEEP_RANGE)) return;
+      if (path.includes(root)) return;
+      if (path.some((n) => n instanceof Element && n.matches(KEEP_RANGE))) return;
       // Протягування мишею, що закінчилось поза піснею, лишає виділення.
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed) return;

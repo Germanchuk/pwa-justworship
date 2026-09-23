@@ -73,6 +73,24 @@ const collectLiveCommentIds = (editor: Editor): Set<string> => {
   return live;
 };
 
+/**
+ * Усі позначки документа — по одній на `commentId`, лише ті, що ще щось
+ * підсвічують (як `collectLiveCommentIds`). Для лічильників у виборі «чиїми
+ * очима» (`NOTE-45`).
+ */
+export const listMarks = (editor: Editor): CommentMark[] => {
+  const byId = new Map<string, CommentMark>();
+  for (const [n] of Editor.nodes(editor, {
+    at: [],
+    match: (m) => Text.isText(m) && (m as CustomText).text.length > 0,
+  })) {
+    for (const mark of getMarks(n as CustomText)) {
+      if (!byId.has(mark.commentId)) byId.set(mark.commentId, mark);
+    }
+  }
+  return [...byId.values()];
+};
+
 export const withComments = (
   editor: Editor,
   opts: WithCommentsOptions = {},

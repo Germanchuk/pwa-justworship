@@ -49,7 +49,7 @@ export const SongActions = () => {
         "relative focus-within:ring-[3px] focus-within:ring-ring/50",
       )}
     >
-      <EllipsisHorizontalIcon className="size-6" />
+      <EllipsisHorizontalIcon className="size-7" />
       <select
         value=""
         onChange={run}
