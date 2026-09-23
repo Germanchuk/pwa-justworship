@@ -19,7 +19,7 @@ afterEach(() => {
 const makeTick = () => ({volume: {value: 0}});
 
 describe("metronomeTrim", () => {
-  it("дефолт — базова гучність, з якою клік звучав завжди", () => {
+  it("дефолт — базова гучність кліку", () => {
     expect(getMetronomeTrim()).toBe(0);
     expect(getMetronomeVolumeDb()).toBe(METRONOME_BASE_DB);
   });
