@@ -18,10 +18,16 @@ import { ReactEditor } from "slate-react";
  *    переходить у керування нею — як раніше з кареткою (`NOTE-36`).
  *
  * Згорнуте чи зникле виділення браузера діапазон НЕ скидає: так воно зникає й
- * від тапу по самому FAB, а позначка має лягти туди, що виділяли. Скидає лише
- * тап по пісні — так само, як раніше каретка лишалась, поки не тапнеш деінде
- * в тексті.
+ * від тапу по самому FAB, а позначка має лягти туди, що виділяли. Скидає тап:
+ *  - по пісні — стає новою точкою (див. вище);
+ *  - повз пісню (поле сторінки, меню пісні) — діапазону більше немає, палітра
+ *    й меню позначки ховаються разом із виділенням. Тапи по самих кнопках
+ *    приміток (`ANNOTATION_UI`) і по їхніх випадних списках — не «повз».
  */
+/** Позначає інтерфейс приміток: тап по ньому не скидає діапазон. */
+export const ANNOTATION_UI = "data-annotation-ui";
+const KEEP_RANGE = `[${ANNOTATION_UI}], [role="menu"]`;
+
 export const useAnnotationRange = (editor: Editor) => {
   const [range, setRange] = useState<BaseRange | null>(null);
 
@@ -55,10 +61,24 @@ export const useAnnotationRange = (editor: Editor) => {
       }
     };
 
+    const onClickOutside = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      // Усередині редактора вирішує `onClick`; острівці (картка примітки)
+      // вибір не скидають.
+      if (!target || root.contains(target)) return;
+      if (target.closest?.(KEEP_RANGE)) return;
+      // Протягування мишею, що закінчилось поза піснею, лишає виділення.
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) return;
+      setRange(null);
+    };
+
     document.addEventListener("selectionchange", onSelectionChange);
+    document.addEventListener("click", onClickOutside);
     root.addEventListener("click", onClick);
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
+      document.removeEventListener("click", onClickOutside);
       root.removeEventListener("click", onClick);
     };
   }, [editor]);

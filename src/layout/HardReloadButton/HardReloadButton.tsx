@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 export default function HardReloadButton() {
   return (
     <Button
-      variant="secondary"
+      variant="ghost"
       size="icon"
       onClick={() => window.location.reload()}
       title="Hard reload"

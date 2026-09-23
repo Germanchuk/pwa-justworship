@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { MENU_GROUP_ITEM } from "../../SongControls/tile";
 
 import {
   useNotesViewers,
@@ -27,7 +28,7 @@ import { useBandMembers } from "./useBandMembers";
  * дописує. Знята остання галочка нормалізується назад у мене (`NOTE-19`), тож
  * порожнього екрана без пояснення не буває.
  *
- * Форма — кругла кнопка 36px, як решта кнопок меню. Один чужий — перша літера ніка, кілька — їхня кількість;
+ * Форма — кнопка в рядку меню (`MENU_GROUP_ITEM`), на його спільному фоні. Один чужий — перша літера ніка, кілька — їхня кількість;
  * повний перелік однаково за один тап у меню.
  *
  * TODO: коли зʼявляться ролі, тут же гейтити доступ до чужих приміток —
@@ -68,11 +69,12 @@ export const NotesAudienceSelect = () => {
         aria-label={label}
         title={label}
         className={cn(
-          "inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-dashed transition-colors cursor-pointer",
+          MENU_GROUP_ITEM,
+          "inline-flex items-center justify-center transition-colors cursor-pointer",
           viewingSelf
-            ? "border-input bg-background text-muted-foreground hover:bg-accent"
+            ? "text-muted-foreground hover:bg-accent"
             : // Чужі примітки — стан, у якому легко забутись: підсвічуємо.
-              "border-amber-400 bg-amber-100 text-amber-900 hover:bg-amber-200",
+              "border border-amber-400 bg-amber-100 text-amber-900 hover:bg-amber-200",
         )}
       >
         {viewingSelf ? (

@@ -3,6 +3,7 @@ import { BookOpen, Pencil, StickyNote } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { useSetSongMode, useSongMode, type SongMode } from "../../../mode";
+import { MENU_GROUP, MENU_GROUP_ITEM } from "../tile";
 
 export const MODES: { key: SongMode; label: string; Icon: typeof BookOpen }[] = [
   { key: "read", label: "Читання — програвання акордів", Icon: BookOpen },
@@ -16,8 +17,9 @@ export const MODES: { key: SongMode; label: string; Icon: typeof BookOpen }[] = 
  * можуть бути в інших режимах у тій самій пісні, документ у всіх однаково
  * живе через websocket.
  *
- * Стоїть стовпчиком угорі меню пісні (`MODE-2`, `APP-27`). Пунктирна пігулка
- * показує, що це ОДИН перемикач, а не три окремі кнопки.
+ * Стоїть стовпчиком угорі меню пісні (`MODE-2`, `APP-27`). Одна скляна плашка
+ * на три плитки показує, що це ОДИН перемикач, а не три окремі кнопки; за
+ * шириною плашка збігається з рештою кнопок меню (`MENU_TILE`, 44px).
  */
 export const ModeSwitch = () => {
   const mode = useSongMode();
@@ -27,7 +29,7 @@ export const ModeSwitch = () => {
     <div
       role="radiogroup"
       aria-label="Режим пісні"
-      className="flex flex-col items-center gap-0.5 rounded-full border border-dashed border-input bg-background"
+      className={cn(MENU_GROUP, "flex-col")}
     >
       {MODES.map(({ key, label, Icon }) => {
         const active = mode === key;
@@ -42,8 +44,9 @@ export const ModeSwitch = () => {
             onClick={() => setMode(key)}
             className={cn(
               // Режим перемикають пальцем на сцені, і дрібна ціль тут коштує
-              // найдорожче — 36px, як решта кнопок меню.
-              "inline-flex size-9 items-center justify-center rounded-full transition-colors cursor-pointer",
+              // найдорожче — 36px, у плашці разом 44px, як решта кнопок меню.
+              MENU_GROUP_ITEM,
+              "inline-flex items-center justify-center transition-colors cursor-pointer",
               active
                 ? "bg-primary text-primary-foreground shadow-xs"
                 : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",

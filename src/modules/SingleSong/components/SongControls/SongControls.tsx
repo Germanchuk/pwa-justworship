@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from "react";
 import {ArrowLeftIcon} from "@heroicons/react/24/outline";
-import {Loader2} from "lucide-react";
+import {Loader2, Sparkles, X} from "lucide-react";
 import {useSelector} from "react-redux";
 import {useNavigate} from "react-router-dom";
 
@@ -9,12 +9,14 @@ import {cn} from "@/lib/utils";
 import {bandPath} from "#constants/routes";
 import {useBandId} from "#modules/Band/BandLayout";
 import DronePlayer from "../../services/DronePlayer/DronePlayer";
-import {useCanAnnotate, useCanPlay, useSongMode} from "../../mode";
+import {useCanAnnotate, useCanPlay} from "../../mode";
 import {useConnectionIndicator} from "../ConnectionStatus/useConnectionIndicator";
 import {NotesAudienceSelect} from "../SlateLyricsPlayground/comments/NotesAudienceSelect";
-import {MODES, ModeSwitch} from "./ModeSwitch/ModeSwitch";
+import {ModeSwitch} from "./ModeSwitch/ModeSwitch";
 import {PlaybackControls} from "./PlaybackControls";
 import {SongActions} from "./SongActions";
+import {SongMenuSlot} from "./menuSlot";
+import {MENU_GROUP, MENU_GROUP_ITEM, MENU_TILE} from "./tile";
 
 /** Відкрите меню — налаштування пристрою (`APP-29`), за замовчуванням закрите. */
 const MENU_STORAGE_KEY = "songMenuOpen";
@@ -30,14 +32,19 @@ function readMenuOpen() {
 /**
  * Навігація сторінки пісні (`APP-24`–`APP-29`): «назад» і кнопка меню, що
  * висять у правому верхньому куті поверх пісні. Постійної панелі тут немає —
- * місце віддане пісні.
+ * місце віддане пісні. Окрема кнопка — скляна плитка (`MENU_TILE`); кнопки,
+ * що діють разом (рядок меню, перемикач режимів), — одна плашка зі спільним
+ * фоном (`MENU_GROUP`).
  *
- *   закрито:     [←][📖]
- *   відкрито: [←][▶][📖]   ← кнопки поточного режиму
- *                    [📖]
- *                    [✏️]   ← перемикач режимів
- *                    [🗒]
- *                    [⧉] … ← дії з піснею
+ *   закрито:      [←]  [✦]
+ *   відкрито: [←]  [⏻ ✕]    ← кнопки поточного режиму + меню, одна плашка
+ *                      [📖]
+ *                      [✏️]   ← перемикач режимів
+ *                      [🗒]
+ *
+ *                      [⋯]    ← дії з піснею (нативний список)
+ *                      ────
+ *                      [🖍]   ← слот: палітра / меню позначки (`SongMenuSlot`)
  *
  * Меню закривається ЛИШЕ своєю кнопкою (`APP-28`): вибір режиму, дія чи тап
  * повз нього панель не згортають — хто керує звуком, тримає її відкритою.
@@ -66,18 +73,24 @@ export const SongControls = () => {
       className="fixed right-2 z-40 flex flex-col items-end gap-1"
       style={{ top: "max(0.5rem, env(safe-area-inset-top))" }}
     >
-      <div className="glass flex items-center gap-1 rounded-2xl p-1">
-        <BackButton />
-        {open && <ModeActions />}
-        <MenuButton open={open} onToggle={() => setOpen((value) => !value)} />
+      <div className="flex items-center gap-1">
+        {/* Зайвий відступ відділяє «назад» від кнопок меню. */}
+        <div className="mr-2">
+          <BackButton />
+        </div>
+        <MenuBar open={open} onToggle={() => setOpen((value) => !value)} />
       </div>
 
       {open && (
-        <div className="glass flex flex-col items-center gap-1 rounded-2xl p-1">
+        <>
           <ModeSwitch />
-          <SongActions />
-        </div>
+          <div className="mt-1">
+            <SongActions />
+          </div>
+        </>
       )}
+
+      <SongMenuSlot />
     </div>
   );
 };
@@ -114,7 +127,7 @@ const BackButton = () => {
     <Button
       variant="ghost"
       size="icon"
-      className="rounded-full"
+      className={MENU_TILE}
       onClick={goBack}
       aria-label="Назад"
       title="Назад"
@@ -129,31 +142,45 @@ const BackButton = () => {
 };
 
 /**
- * Кнопка меню несе те, що треба бачити й при закритому меню (`APP-26`):
- * іконку поточного режиму і стан звʼязку кольором рамки (`COLLAB-5`).
+ * Рядок меню — одна плашка: кнопки поточного режиму й кнопка меню (`APP-27`).
+ * Колір рамки плашки — стан звʼязку (`COLLAB-5`); при закритому меню в ній
+ * лише кнопка меню, тож звʼязок видно завжди.
  */
-const MenuButton = ({ open, onToggle }: { open: boolean; onToggle: () => void }) => {
-  const mode = useSongMode();
+const MenuBar = ({ open, onToggle }: { open: boolean; onToggle: () => void }) => {
   const connection = useConnectionIndicator();
-  const Icon = MODES.find((item) => item.key === mode)!.Icon;
 
   return (
-    <>
-      <Button
-        variant="outline"
-        size="icon"
-        className={cn("rounded-full transition-colors", open && "bg-accent")}
-        style={connection.color ? { borderColor: connection.color } : undefined}
-        onClick={onToggle}
-        aria-expanded={open}
-        aria-label={open ? "Сховати меню пісні" : "Меню пісні"}
-        title={open ? "Сховати меню пісні" : "Меню пісні"}
-      >
-        <Icon className="size-5" />
-      </Button>
+    <div
+      className={MENU_GROUP}
+      style={connection.color ? { borderColor: connection.color } : undefined}
+    >
+      {open && <ModeActions />}
+      <MenuButton open={open} onToggle={onToggle} />
       <span className="sr-only" role="status">
         {connection.label}
       </span>
-    </>
+    </div>
+  );
+};
+
+/**
+ * Кнопка меню: ✦ — закрите, ✕ — відкрите (`APP-26`). Режиму вона не показує —
+ * його видно в самому перемикачі.
+ */
+const MenuButton = ({ open, onToggle }: { open: boolean; onToggle: () => void }) => {
+  const Icon = open ? X : Sparkles;
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={cn(MENU_GROUP_ITEM, open && "bg-accent")}
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-label={open ? "Сховати меню пісні" : "Меню пісні"}
+      title={open ? "Сховати меню пісні" : "Меню пісні"}
+    >
+      <Icon className="size-5" />
+    </Button>
   );
 };

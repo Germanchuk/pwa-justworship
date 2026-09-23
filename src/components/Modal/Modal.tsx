@@ -1,10 +1,15 @@
 import React, {useEffect} from "react";
 import { Button } from "@/components/ui/button";
 
-export function Modal({ trigger = null, content, title, hideCloseButton = false }: any) {
-  const ref = React.useRef(null);
+/**
+ * `trigger` — кнопка, що відкриває діалог. Без неї діалог відкривається одразу,
+ * якщо відкривання не забрав собі викликач через `dialogRef`.
+ */
+export function Modal({ trigger = null, content, title, hideCloseButton = false, dialogRef = null }: any) {
+  const ownRef = React.useRef(null);
+  const ref = dialogRef ?? ownRef;
   useEffect(() => {
-    if (ref?.current && !trigger) {
+    if (ref?.current && !trigger && !dialogRef) {
       ref.current?.showModal();
     }
   });

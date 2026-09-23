@@ -6,6 +6,7 @@ import { useSetSong } from "#modules/SingleSong/redux/selectors";
 import { parseSongMode } from "#modules/SingleSong/mode";
 import { bandPath } from "#constants/routes";
 import {SongControls} from "#modules/SingleSong/components/SongControls/SongControls";
+import {SongMenuSlotProvider} from "#modules/SingleSong/components/SongControls/menuSlot";
 import {setNotesAudience} from "#modules/SingleSong/redux/songSlice";
 import {useHidePageBar} from "#layout/PageBar/hooks";
 
@@ -40,9 +41,9 @@ export default function SingleSong() {
   }
 
   return (
-    <>
+    <SongMenuSlotProvider>
       <Song />
       <SongControls />
-    </>
+    </SongMenuSlotProvider>
   );
 }
