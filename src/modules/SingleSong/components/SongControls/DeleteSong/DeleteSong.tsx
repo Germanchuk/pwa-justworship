@@ -1,29 +1,13 @@
-import {TrashIcon} from "@heroicons/react/24/outline";
+import type {RefObject} from "react";
 import {Modal} from "#components";
 import {songApi} from "../../../api";
 import {bandPath} from "#constants/routes";
 import {useBandId} from "#modules/Band/BandLayout";
 import {addNotificationWithTimeout} from "#layout/slices/notificationsSlice";
 import {useDispatch} from "react-redux";
-import {useCanEditContent} from "../../../mode";
 import {useSong} from "../../../redux/selectors";
 import {useNavigate} from "react-router-dom";
 import { Button } from "@/components/ui/button";
-
-const Trigger = (props) => {
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="rounded-full text-destructive hover:text-destructive"
-      aria-label="Видалити пісню"
-      title="Видалити пісню"
-      {...props}
-    >
-      <TrashIcon className="size-6" />
-    </Button>
-  )
-}
 
 const Content = () => {
   const dispatch = useDispatch<any>();
@@ -52,12 +36,14 @@ const Content = () => {
   )
 }
 
-export default function DeleteSong() {
-  const canEditContent = useCanEditContent();
-  if (!canEditContent) return;
+/**
+ * Підтвердження «Видалити пісню?». Своєї кнопки не має: відкриває його пункт
+ * «Видалити» в меню дій (`SongActions`) через `dialogRef`.
+ */
+export default function DeleteSongDialog({ dialogRef }: { dialogRef: RefObject<HTMLDialogElement | null> }) {
   return (
     <Modal
-      trigger={<Trigger />}
+      dialogRef={dialogRef}
       title={"Дійсно видалити пісню?"}
       content={<Content />}
     />

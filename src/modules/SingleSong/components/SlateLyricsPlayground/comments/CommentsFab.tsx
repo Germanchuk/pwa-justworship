@@ -1,5 +1,6 @@
 import { Editor, Range, Transforms, type BaseRange } from "slate";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { ReactEditor, useSlate } from "slate-react";
 import {
   Highlighter,
@@ -22,6 +23,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  MENU_GROUP,
+  MENU_GROUP_ITEM,
+  MENU_TILE,
+} from "../../SongControls/tile";
+import { useSongMenuSlot } from "../../SongControls/menuSlot";
 
 import { useNotesViewers } from "../../../redux/selectors";
 import { useCurrentUsername } from "../elements/hooks";
@@ -36,7 +43,7 @@ import {
   STRIKE_COLOR,
 } from "./colors";
 import { setPendingFocus } from "./pendingFocus";
-import { useAnnotationRange } from "./useAnnotationRange";
+import { ANNOTATION_UI, useAnnotationRange } from "./useAnnotationRange";
 import { useBandMembers } from "./useBandMembers";
 import { AUDIENCE_ALL, isVisibleToAll, restCount } from "./visibility";
 import {
@@ -94,8 +101,14 @@ const selectedMarksCss = (marks: CommentMark[]): string =>
 
 const noLoseSelection = (e: React.MouseEvent) => e.preventDefault();
 
-const iconBtnBase =
-  "inline-flex size-14 items-center justify-center rounded-full shadow-md border border-black/10 transition-transform cursor-pointer hover:scale-105 active:scale-95";
+/**
+ * Кольорова кнопка палітри — квадрат на спільній плашці (`MENU_GROUP`), як
+ * у перемикачі режимів, лише фон — колір позначки.
+ */
+const iconBtnBase = cn(
+  MENU_GROUP_ITEM,
+  "inline-flex items-center justify-center transition-transform cursor-pointer active:scale-95",
+);
 
 const ColoredIconButton = ({
   color,
@@ -135,7 +148,7 @@ const ColorDot = ({ color }: { color: string }) =>
 
 const menuIconButton = cn(
   buttonVariants({ variant: "ghost", size: "icon" }),
-  "rounded-full",
+  MENU_GROUP_ITEM,
 );
 
 /**
@@ -166,7 +179,7 @@ const MarkColorMenu = ({ mark }: { mark: CommentMark }) => {
             title={o.key === "strike" ? "Закреслення" : o.key}
             onSelect={() => setCommentColor(editor, mark.commentId, o.color)}
             className={cn(
-              "justify-center rounded-full p-2",
+              "justify-center rounded-lg p-2",
               o.color === color && "bg-accent",
             )}
           >
@@ -255,6 +268,7 @@ export const CommentsFab = () => {
   // відмічених може бути кілька, і тоді позначка створюється ОДНА на всіх.
   const me = useCurrentUsername();
   const viewers = useNotesViewers();
+  const slot = useSongMenuSlot();
   // Не `editor.selection`: у режимі приміток редактор read-only, і Slate
   // тримає там виділення лише на мить застосування позначки.
   const { range, select } = useAnnotationRange(editor);
@@ -322,13 +336,15 @@ export const CommentsFab = () => {
     convertHighlightToNote(editor, commentId, "");
   };
 
-  return (
+  // Кнопки стоять одразу під меню пісні (`NOTE-9`) — порталом у його слот.
+  // Лінія над ними відділяє зону позначки від меню пісні.
+  if (!slot) return null;
+
+  return createPortal(
     <div
-      // Звичайний `fixed`: клавіатура в режимі приміток відкривається лише в
-      // картці, тож підлаштовуватись під visual viewport більше не треба.
-      className="fixed right-2 z-40 flex flex-col items-end gap-2 transition-opacity duration-200"
+      {...{ [ANNOTATION_UI]: "" }}
+      className="mt-3 flex flex-col items-end gap-2 border-t-2 border-black/20 pt-3 transition-opacity duration-200"
       style={{
-        bottom: "max(1rem, env(safe-area-inset-bottom))",
         opacity: visible ? 1 : 0,
         pointerEvents: visible ? "auto" : "none",
       }}
@@ -339,22 +355,20 @@ export const CommentsFab = () => {
       )}
 
       {resizing && (
-        <div className="glass flex flex-col items-center gap-1 rounded-2xl p-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full bg-accent"
-            onClick={finishResize}
-            aria-label="Застосувати область"
-            title="Застосувати область"
-          >
-            <TextSelect className="size-5" />
-          </Button>
-        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(MENU_TILE, "bg-accent")}
+          onClick={finishResize}
+          aria-label="Застосувати область"
+          title="Застосувати область"
+        >
+          <TextSelect className="size-5" />
+        </Button>
       )}
 
       {hasSel && (
-        <>
+        <div className={cn(MENU_GROUP, "flex-col")}>
           {COMMENT_PALETTE.map((c) => (
             <ColoredIconButton
               key={c.name}
@@ -374,12 +388,12 @@ export const CommentsFab = () => {
           >
             <Strikethrough className="size-5" />
           </ColoredIconButton>
-        </>
+        </div>
       )}
 
-      {/* Меню обраної позначки — у стилі меню пісні (`SongControls`): скляна
-          плашка з безбарвними кнопками. Яку позначку правимо, видно з її
-          підсвітки в тексті (`selectedMarksCss`). */}
+      {/* Меню обраної позначки — у стилі перемикача режимів (`SongControls`):
+          одна скляна плашка зі спільним фоном. Яку позначку правимо, видно з
+          її підсвітки в тексті (`selectedMarksCss`). */}
       {selectedMarks.map((m) => {
         const noted = hasNote(editor, m.commentId);
         // Скільки адресатів переживе видалення: коментар ширший за мій
@@ -393,15 +407,12 @@ export const CommentsFab = () => {
           ? "Прибрати нотатку, лишити виділення"
           : "Додати нотатку";
         return (
-          <div
-            key={m.commentId}
-            className="glass flex flex-col items-center gap-1 rounded-2xl p-1"
-          >
+          <div key={m.commentId} className={cn(MENU_GROUP, "flex-col")}>
             <MarkColorMenu mark={m} />
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full"
+              className={MENU_GROUP_ITEM}
               onClick={() => startResize(m.commentId)}
               aria-label="Змінити область"
               title="Змінити область"
@@ -412,7 +423,7 @@ export const CommentsFab = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full"
+              className={MENU_GROUP_ITEM}
               onClick={() =>
                 noted
                   ? removeNoteOnly(editor, m.commentId)
@@ -430,7 +441,7 @@ export const CommentsFab = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full"
+              className={MENU_GROUP_ITEM}
               onClick={() => removeComment(editor, m.commentId, viewers)}
               aria-label={deleteTitle}
               title={deleteTitle}
@@ -440,6 +451,7 @@ export const CommentsFab = () => {
           </div>
         );
       })}
-    </div>
+    </div>,
+    slot,
   );
 };

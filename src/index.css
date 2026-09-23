@@ -75,11 +75,15 @@
   --color-ring: var(--ring);
 }
 
-.glass {
-  @apply bg-white/60 backdrop-blur-sm border border-black/20;
-  /* Рамку може перефарбовувати стан звʼязку (кнопка меню пісні,
-     `COLLAB-5`) — перехід, щоб зміна стану не мигала. */
-  transition: border-color 0.35s ease;
+/* У шарі components, щоб утиліти могли його перекрити: увімкнений вимикач
+   (bg-primary), ховер плиток меню пісні (hover:bg-accent). */
+@layer components {
+  .glass {
+    @apply bg-white/60 backdrop-blur-sm border border-black/20;
+    /* Рамку може перефарбовувати стан звʼязку (кнопка меню пісні,
+       `COLLAB-5`) — перехід, щоб зміна стану не мигала. */
+    transition: border-color 0.35s ease;
+  }
 }
 
 .shadow-inner-left-top {

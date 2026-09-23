@@ -1,9 +1,8 @@
-import { PlayIcon, StopIcon } from "@heroicons/react/24/outline";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import DronePlayer from "../../services/DronePlayer/DronePlayer";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { useBand } from "#modules/Band/BandLayout";
+import { Loader2, Power } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { AudioDestination } from "#modules/Band/audio/AudioDestination";
 import BandAudioChannel from "#modules/Band/audio/bandAudioChannel";
 import { hostStateFor, routeFor } from "#modules/Band/audio/hostView";
@@ -11,16 +10,18 @@ import { songTarget } from "#modules/Band/audio/types";
 import { useAudioHostStatus } from "#modules/Band/audio/useBandAudio";
 import { useCurrentUsername } from "../SlateLyricsPlayground/elements/hooks";
 import { useSongId } from "../../redux/selectors";
+import { MENU_GROUP_ITEM } from "./tile";
 
 /**
  * «Увімкнути / вимкнути дрон» — одна кнопка в рядку меню пісні (`PLAY-2`).
- * Паузи немає: дрон вмикають і вимикають, позиції в пісні в нього немає.
+ * Паузи немає: дрон вмикають і вимикають, позиції в пісні в нього немає —
+ * тому й кнопка виглядає як вимикач живлення, а не як «грати / стоп»:
+ * увімкнена залита, вимкнена — прозора на фоні рядка меню.
  */
 export const PlaybackControls = () => {
   const player = useMemo(() => DronePlayer.getInstance(), []);
   const [localState, setLocalState] = useState(player.getState());
 
-  const band = useBand();
   const username = useCurrentUsername();
   const songId = useSongId();
   const hostStatus = useAudioHostStatus();
@@ -35,9 +36,6 @@ export const PlaybackControls = () => {
   // («останній перемагає»).
   const hostState = songId == null ? "idle" : hostStateFor(hostStatus, songTarget(songId));
   const state = remoteActive ? hostState : localState;
-
-  const hostDesignated =
-    (band as {audioHostUserId?: number | null}).audioHostUserId != null;
 
   useEffect(() => player.onStateChange(setLocalState), [player]);
 
@@ -73,28 +71,30 @@ export const PlaybackControls = () => {
   }, [remoteActive, isPlaying, player, sendCommand]);
 
   return (
-    <div className="flex gap-1 items-center">
-      {/* Куди йде звук: на хоста чи з цього пристрою (хост офлайн). */}
+    <div className="flex items-center gap-0.5">
+      {/* Звук піде на хоста — чий пристрій звучить на зал. */}
       <AudioDestination
         route={remoteActive ? "host" : "local"}
         status={hostStatus}
-        hostDesignated={hostDesignated}
       />
       <Button
-        variant="outline"
+        variant="ghost"
         size="icon"
-        className="rounded-full border-dashed"
+        className={cn(
+          MENU_GROUP_ITEM,
+          isPlaying &&
+            "bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:text-primary-foreground",
+        )}
         onClick={handleToggle}
         disabled={isLoading}
-        aria-label={isPlaying ? "Вимкнути дрон" : "Увімкнути дрон"}
+        aria-pressed={isPlaying}
+        aria-label="Дрон"
         title={isPlaying ? "Вимкнути дрон" : "Увімкнути дрон"}
       >
         {isLoading ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : isPlaying ? (
-          <StopIcon className="w-6 h-6" />
+          <Loader2 className="size-5 animate-spin" />
         ) : (
-          <PlayIcon className="w-6 h-6" />
+          <Power className="size-5" strokeWidth={2.25} />
         )}
       </Button>
     </div>
