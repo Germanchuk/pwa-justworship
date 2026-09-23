@@ -13,11 +13,40 @@ export interface Metronome {
  *
  * Усі кліки однакові — без сильної долі (рішення Германа 2026-08-13). Акценти
  * пробували двома способами, обидва звучали чужорідно: інша висота читається
- * як нота в тональності пісні (MembraneSynth виражено тональний), а сама ідея
- * сильної долі вимагає знати, де такт починається.
+ * як нота в тональності пісні, а сама ідея сильної долі вимагає знати, де такт
+ * починається.
+ *
+ * Звук — шум без висоти у два шари (обрано на слух 2026-09-23): дерев'яний
+ * «ток» у вузькій смузі й сухе клацання атаки трохи вище. Уся енергія лежить у
+ * 1–5 кГц, де вухо найчутливіше, а гурт найрідший, тож клік пробивається без
+ * надмірної гучності. Попередній клік — синт бочки на C4 — сидів нижче 500 Гц,
+ * у смузі гурту, і звучав глухо.
  */
-const TICK_PITCH = "C4";
-const TICK_VELOCITY = 0.7;
+interface Layer {
+  /** Стала згасання шуму, с. */
+  decay: number;
+  filter: Partial<Tone.FilterOptions>;
+  /** Рівень шару відносно іншого, дБ. */
+  db: number;
+}
+
+const WOOD: Layer = {decay: 0.008, filter: {type: "bandpass", frequency: 2200, Q: 2.5}, db: 0};
+const SNAP: Layer = {decay: 0.003, filter: {type: "bandpass", frequency: 3200, Q: 0.8}, db: -5};
+
+/**
+ * Шум — один сталий семпл із сідом, а не `Tone.Noise`: той щоразу стартує з
+ * випадкового місця свого буфера, і удари різнились би на ±3–5 дБ.
+ */
+function noiseBurst(decay: number): Tone.ToneAudioBuffer {
+  const rate = Tone.getContext().sampleRate;
+  const data = new Float32Array(Math.round(rate * decay * 8)); // хвіст до −70 дБ
+  let seed = 1;
+  for (let i = 0; i < data.length; i++) {
+    seed = (seed * 16807) % 2147483647; // Park–Miller
+    data[i] = ((seed / 2147483647) * 2 - 1) * Math.exp(-i / (rate * decay));
+  }
+  return Tone.ToneAudioBuffer.fromArray(data);
+}
 
 /** Запускає транспорт у темпі `bpm` і клацає, доки не зупинять. */
 export function startMetronome(bpm: number): Metronome {
@@ -27,18 +56,18 @@ export function startMetronome(bpm: number): Metronome {
   transport.position = 0;
   transport.bpm.value = bpm;
 
-  const tick = new Tone.MembraneSynth({
-    octaves: 2,
-    envelope: {attack: 0.001, decay: 0.05, sustain: 0, release: 0.05},
-    volume: getMetronomeVolumeDb(),
-  });
   const panner = new Tone.Panner(1).toDestination();
-  tick.connect(panner);
+  const volume = new Tone.Volume(getMetronomeVolumeDb()).connect(panner);
+  const layers = [WOOD, SNAP].map((layer) => {
+    const filter = new Tone.Filter(layer.filter).connect(volume);
+    const player = new Tone.Player({url: noiseBurst(layer.decay), volume: layer.db}).connect(filter);
+    return {player, filter};
+  });
   // Живий клік віддаємо ручці пульта: поки він існує, зміна трима чутна одразу.
-  bindMetronome(tick);
+  bindMetronome(volume);
 
   const loop = new Tone.Loop((time) => {
-    tick.triggerAttackRelease(TICK_PITCH, "16n", time, TICK_VELOCITY);
+    for (const {player} of layers) player.start(time);
   }, "4n").start(0);
   transport.start();
 
@@ -46,9 +75,13 @@ export function startMetronome(bpm: number): Metronome {
     stop() {
       transport.stop();
       transport.cancel();
-      unbindMetronome(tick);
+      unbindMetronome(volume);
       loop.dispose();
-      tick.dispose();
+      for (const {player, filter} of layers) {
+        player.dispose();
+        filter.dispose();
+      }
+      volume.dispose();
       panner.dispose();
     },
   };
