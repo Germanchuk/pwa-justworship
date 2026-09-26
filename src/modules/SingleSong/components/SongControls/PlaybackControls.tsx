@@ -35,7 +35,11 @@ export const PlaybackControls = () => {
   // Хост грає ІНШУ пісню → моя кнопка вимкнена; моє вмикання перехоплює
   // («останній перемагає»).
   const hostState = songId == null ? "idle" : hostStateFor(hostStatus, songTarget(songId));
-  const state = remoteActive ? hostState : localState;
+  // Мій дрон ще тримає ПОПЕРЕДНЮ пісню (`PLAY-49`) → тут він «не мій»:
+  // кнопка контурна, і натискання перемикає звук на цю пісню, а не вимикає.
+  const mine = songId != null && player.isSounding(songId);
+  const state = remoteActive ? hostState : mine ? localState : "idle";
+  const otherSounding = !remoteActive && localState !== "idle" && !mine;
 
   useEffect(() => player.onStateChange(setLocalState), [player]);
 
@@ -65,10 +69,11 @@ export const PlaybackControls = () => {
       player.stop();
       return;
     }
-    player.play().catch((error) => {
+    if (songId == null) return;
+    player.play(songId).catch((error) => {
       console.error("Failed to start the drone", error);
     });
-  }, [remoteActive, isPlaying, player, sendCommand]);
+  }, [remoteActive, isPlaying, player, sendCommand, songId]);
 
   return (
     <div className="flex items-center gap-2">
@@ -84,12 +89,19 @@ export const PlaybackControls = () => {
           MENU_TILE,
           isPlaying &&
             "border-primary bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:text-primary-foreground",
+          otherSounding && "border-primary text-primary",
         )}
         onClick={handleToggle}
         disabled={isLoading}
         aria-pressed={isPlaying}
         aria-label="Дрон"
-        title={isPlaying ? "Вимкнути дрон" : "Увімкнути дрон"}
+        title={
+          isPlaying
+            ? "Вимкнути дрон"
+            : otherSounding
+              ? "Перемкнути дрон на цю пісню"
+              : "Увімкнути дрон"
+        }
       >
         {isLoading ? (
           <Loader2 className="size-6 animate-spin" />
