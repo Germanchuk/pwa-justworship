@@ -26,6 +26,10 @@ const sanitizeBpm = (bpm: number): number =>
  * звучати, вирішує гурт, а не запис пісні (ADR-0003). Тому немає ні паузи, ні
  * кінця пісні, ні позиції в ній — лише «звучить» і «ні».
  *
+ * Звук **переживає вихід із пісні** (`PLAY-49`): між піснями дрон тримає
+ * тональність, доки його не ввімкнуть на наступній, — тоді старий згасає, а
+ * новий набирає гучність одночасно (`startDrone`).
+ *
  * Синглтон, бо кнопки й хост живуть у різних місцях дерева, а звук один.
  */
 class DronePlayer {
@@ -35,6 +39,8 @@ class DronePlayer {
   private listeners = new Set<StateListener>();
   private source: SongSource | null = null;
   private metronome: Metronome | null = null;
+  /** Чия пісня звучить — щоб кнопка іншої пісні не вдавала, що це її звук. */
+  private songId: string | null = null;
   /**
    * Покоління запуску. Між «увімкнути» і звуком стоїть `Tone.start()`, і за цей
    * час людина встигає вимкнути або піти зі сторінки: запуск, що доїхав після
@@ -51,6 +57,11 @@ class DronePlayer {
     return this.state;
   }
 
+  /** Чи звучить (або піднімається) саме ця пісня. */
+  isSounding(songId: string | number) {
+    return this.state !== "idle" && this.songId === String(songId);
+  }
+
   onStateChange(listener: StateListener) {
     this.listeners.add(listener);
     listener(this.state);
@@ -59,18 +70,20 @@ class DronePlayer {
     };
   }
 
-  /** Звідки брати пісню. Зняли джерело посеред звуку — звук іде разом із ним. */
+  /**
+   * Звідки брати пісню для НАСТУПНОГО вмикання. Зняти джерело — не вимкнути:
+   * те, що звучить, грає далі (`PLAY-49`).
+   */
   setSource(source: SongSource | null) {
-    if (this.source === source) return;
-    if (this.source && source == null) this.stop();
     this.source = source;
   }
 
-  play = async () => {
+  play = async (songId: string | number) => {
     const song = this.source?.();
     if (!song) return;
 
     const generation = ++this.generation;
+    this.songId = String(songId);
     this.setState("loading");
     try {
       await Tone.start();
@@ -92,6 +105,7 @@ class DronePlayer {
     if (this.state === "idle") return;
     this.metronome?.stop();
     this.metronome = null;
+    this.songId = null;
     stopDrone();
     this.setState("idle");
   };

@@ -155,7 +155,7 @@ class AudioHostEngine {
       }
 
       this.playingName = this.songHandle.getHeader().name;
-      await this.player.play();
+      await this.player.play(target.songId);
       started = this.player.getState() !== "idle";
     } catch (error) {
       console.error("[audio-host] failed to play", target, error);

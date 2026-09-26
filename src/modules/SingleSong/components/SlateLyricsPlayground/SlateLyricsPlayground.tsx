@@ -128,6 +128,7 @@ function CollabView({ songId }: { songId: string | number }) {
 
   // Дрон грає ЦЮ пісню: тональність і темп читаються з документа на кожне
   // «увімкнути», тож правка шапки діє з наступного вмикання (`PLAY-34`).
+  // Вихід із пісні лише знімає джерело — звук грає далі (`PLAY-49`).
   useEffect(() => {
     const player = DronePlayer.getInstance();
     const source = () => extractHeader(editor.children as Descendant[]);
