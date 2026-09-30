@@ -90,12 +90,6 @@
   box-shadow: -15px 0px 30px -30px rgba(0,0,0,0.75) inset;
 }
 
-.top {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-}
-
 /* Фолбек-барва під фоновим зображенням body (шум+градієнт) — щоб у PWA
    (standalone) краї/overscroll, safe-area та статус-бар збігалися з папером. */
 html {

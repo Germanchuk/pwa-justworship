@@ -33,8 +33,8 @@ function Router() {
   const location = useLocation();
 
   return (
-    // Колонка на всю висоту екрана: шапка займає свою висоту, решту (а коли
-    // шапку сховали — весь екран) забирає Container сторінки.
+    // Колонка на всю висоту екрана: місце під нижній бар займає свою висоту,
+    // решту (а на пісні — весь екран) забирає Container сторінки.
     <div className={"min-h-dvh flex flex-col"}>
       <RouterRoutes location={location}>
         <Route path="/" element={<ProtectedRoute />}>
@@ -67,6 +67,8 @@ function Router() {
             {/* Статичний сегмент ранжується вище за `:mode?` нижче, тож
                 окремий екран зібрання не перехоплює адрес самого списку. */}
             <Route path="lists/:listId/gathering" element={<Gathering />} />
+            {/* Та сама пісня, але в контексті списку (`APP-37`). */}
+            <Route path="lists/:listId/songs/:songId/:mode?" element={<SingleSong />} />
             {/* `:mode?` — один елемент на читання і правку, як у пісні: інакше
                 перемикання режиму розмонтувало б сторінку й перечитувало
                 список із сервера. Невідомий сегмент = читання. */}

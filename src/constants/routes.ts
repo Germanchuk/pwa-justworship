@@ -30,6 +30,9 @@ export enum Routes {
   // Читання лишається основною адресою списку — саме її дають музикантам.
   SingleList = "/bands/:bandId/lists/:listId",
   EditList = "/bands/:bandId/lists/:listId/edit",
+  // Пісня, відкрита зі списку, живе ВСЕРЕДИНІ списку (`APP-37`): посилання
+  // несе контекст, і «назад» без історії веде до списку, а не в бібліотеку.
+  ListSong = "/bands/:bandId/lists/:listId/songs/:songId",
   // Режим зібрання — окремий екран, а не режим списку: він показує не порядок,
   // а самі пісні поспіль. Статичний сегмент react-router ранжує вище за
   // `:mode?`, тож адреси списку він не перехоплює.
@@ -60,6 +63,10 @@ export const bandPath = {
   createList: (bandId: Id) => `/bands/${bandId}/lists/new`,
   list: (bandId: Id, listId: Id) => `/bands/${bandId}/lists/${listId}`,
   editList: (bandId: Id, listId: Id) => `/bands/${bandId}/lists/${listId}/edit`,
+  listSong: (bandId: Id, listId: Id, songId: Id, mode: SongMode = "read") =>
+    mode === "read"
+      ? `/bands/${bandId}/lists/${listId}/songs/${songId}`
+      : `/bands/${bandId}/lists/${listId}/songs/${songId}/${mode}`,
   gathering: (bandId: Id, listId: Id) =>
     `/bands/${bandId}/lists/${listId}/gathering`,
 };

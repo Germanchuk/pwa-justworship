@@ -1,3 +1,6 @@
+import { format, parseISO } from "date-fns";
+import { uk } from "date-fns/locale";
+
 export function formatDate(dateString) {
     if(!dateString) {
         return;
@@ -12,4 +15,9 @@ export function formatDate(dateString) {
     const formattedDay = parseInt(day, 10); // Видаляємо ведучий нуль з дня
 
     return `${formattedDay} ${months[monthIndex]} ${year}`;
+}
+
+/** «12 жовт.» — дата списку там, де місця мало (шлях нижнього бару). */
+export function shortDate(dateString?: string | null) {
+    return dateString ? format(parseISO(dateString), "d MMM", { locale: uk }) : null;
 }

@@ -1,11 +1,10 @@
-import {ReactNode} from "react";
-import {usePageBarContent} from "#layout/PageBar/hooks";
+import {usePageBarTitle} from "#layout/PageBar/hooks";
 
 /**
- * Поставити заголовок або керування сторінки у верхній бар. Окремий компонент,
+ * Поставити підпис поточного екрана в шлях нижнього бару. Окремий компонент,
  * а не голий хук, — щоб у розмітці сторінки було видно, що вона туди пише.
  */
-export function ToPageBar({ children }: { children: ReactNode | null }) {
-  usePageBarContent(children);
+export function ToPageBar({ children }: { children: string | null | undefined }) {
+  usePageBarTitle(children ?? null);
   return null;
 }
