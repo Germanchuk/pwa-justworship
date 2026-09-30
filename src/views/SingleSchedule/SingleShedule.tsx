@@ -35,7 +35,7 @@ import {
   toApi,
   type ListPoint,
 } from "#models/listPoint";
-import { formatDate } from "#utils/utils";
+import { formatDate, shortDate } from "#utils/utils";
 import DeleteSchedule from "./DeleteSchedule/DeleteSchedule";
 import {addNotificationWithTimeout} from "#layout/slices/notificationsSlice";
 import {useDispatch} from "react-redux";
@@ -303,7 +303,8 @@ export default function SingleShedule() {
 
   return (
     <>
-      <ToPageBar>{band.name}</ToPageBar>
+      {/* Підпис списку в шляху бару — коротка дата (`APP-33`). */}
+      <ToPageBar>{shortDate(shedule.date)}</ToPageBar>
 
       <div className={headerCardClass(dateMissing)} ref={dateRef}>
         {isEditing ? (
@@ -365,10 +366,10 @@ export default function SingleShedule() {
           deleteItem={deleteItem}
         />
       ) : (
-        <SongsOrder points={points} bandId={band.id} />
+        <SongsOrder points={points} bandId={band.id} listId={listId!} />
       )}
 
-      {/* Кнопка режиму — під списком, а не у верхньому барі: вона стосується
+      {/* Кнопка режиму — під списком, а не в барі: вона стосується
           саме списку, і на неї не можна натрапити пальцем, гортаючи пісні. */}
       <div className="flex justify-center gap-2">
         {isEditing ? (

@@ -11,7 +11,7 @@ import {setNotesAudience} from "#modules/SingleSong/redux/songSlice";
 import {useHidePageBar} from "#layout/PageBar/hooks";
 
 export default function SingleSong() {
-  const { bandId, songId, mode } = useParams();
+  const { bandId, listId, songId, mode } = useParams();
   const dispatch = useDispatch();
   const setSong = useSetSong();
   // Верхнього бару на пісні немає: місце віддане пісні, а навігацію сторінка
@@ -37,7 +37,12 @@ export default function SingleSong() {
   // Сегмент режиму з чужих рук може бути будь-яким. Це не 404: пісня існує,
   // просто режим не розпізнали — зводимо на канонічний шлях читання.
   if (bandId && songId && parseSongMode(mode) === null) {
-    return <Navigate to={bandPath.song(bandId, songId)} replace />;
+    return (
+      <Navigate
+        to={listId ? bandPath.listSong(bandId, listId, songId) : bandPath.song(bandId, songId)}
+        replace
+      />
+    );
   }
 
   return (

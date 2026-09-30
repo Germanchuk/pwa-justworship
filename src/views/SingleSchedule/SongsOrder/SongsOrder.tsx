@@ -19,9 +19,11 @@ import { numberSongs, type ListPoint } from "#models/listPoint";
 export default function SongsOrder({
   points,
   bandId,
+  listId,
 }: {
   points: ListPoint[];
   bandId: number | string;
+  listId: number | string;
 }) {
   const numbers = numberSongs(points);
   const songCount = numbers.filter((n) => n != null).length;
@@ -43,7 +45,7 @@ export default function SongsOrder({
             <li key={point.key}>
               {point.kind === "song" && (
                 <Link
-                  to={bandPath.song(bandId, point.songId)}
+                  to={bandPath.listSong(bandId, listId, point.songId)}
                   className="flex w-full items-center gap-3 p-3 text-start transition-colors hover:bg-accent/60"
                 >
                   <span className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-base font-semibold text-foreground/70">

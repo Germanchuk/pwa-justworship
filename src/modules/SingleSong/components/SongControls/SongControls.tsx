@@ -1,13 +1,12 @@
 import React, {useEffect, useState} from "react";
-import {ArrowLeftIcon} from "@heroicons/react/24/outline";
-import {Loader2, Sparkles, X} from "lucide-react";
-import {useSelector} from "react-redux";
-import {useNavigate} from "react-router-dom";
+import {Sparkles, X} from "lucide-react";
+import {useParams} from "react-router-dom";
 
 import {Button} from "@/components/ui/button";
 import {cn} from "@/lib/utils";
 import {bandPath} from "#constants/routes";
 import {useBandId} from "#modules/Band/BandLayout";
+import {BackButton} from "./BackButton";
 import DronePlayer from "../../services/DronePlayer/DronePlayer";
 import {useCanAnnotate, useCanPlay} from "../../mode";
 import {useConnectionIndicator} from "../ConnectionStatus/useConnectionIndicator";
@@ -55,6 +54,8 @@ function readMenuOpen() {
  */
 export const SongControls = () => {
   const [open, setOpen] = useState(readMenuOpen);
+  const bandId = useBandId();
+  const { listId } = useParams();
   const canPlay = useCanPlay();
 
   useEffect(() => {
@@ -79,7 +80,11 @@ export const SongControls = () => {
       style={{ top: "max(0.5rem, env(safe-area-inset-top))" }}
     >
       <div className="flex items-center gap-2">
-        <BackButton />
+        {/* Без історії — на рівень вище: у список, з якого пісню відкрили
+            (`APP-37`), інакше в бібліотеку гурту. */}
+        <BackButton
+          fallback={listId ? bandPath.list(bandId, listId) : bandPath.songs(bandId)}
+        />
         <MenuButton open={open} onToggle={() => setOpen((value) => !value)} />
       </div>
 
@@ -102,43 +107,6 @@ const ModeActions = () => {
   if (canPlay) return <PlaybackControls />;
   if (canAnnotate) return <NotesAudienceSelect />;
   return null;
-};
-
-/**
- * «Назад» туди, звідки прийшли (`APP-25`). `idx` — лічильник записів історії,
- * який веде сам роутер: 0 означає, що пісня — перший екран сесії (посилання,
- * старт застосунку), і крок назад вивів би із застосунку. Режими історії не
- * додають (`MODE-26`), тож і `idx` вони не зсувають.
- */
-const BackButton = () => {
-  const navigate = useNavigate();
-  const bandId = useBandId();
-  const isLoading = useSelector((state: any) => state.viewConfig.globalLoader);
-
-  const goBack = () => {
-    if ((window.history.state?.idx ?? 0) > 0) {
-      navigate(-1);
-    } else {
-      navigate(bandPath.songs(bandId));
-    }
-  };
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className={MENU_TILE}
-      onClick={goBack}
-      aria-label="Назад"
-      title="Назад"
-    >
-      {isLoading ? (
-        <Loader2 className="size-7 animate-spin" />
-      ) : (
-        <ArrowLeftIcon className="size-7" />
-      )}
-    </Button>
-  );
 };
 
 /**

@@ -67,7 +67,7 @@ export function SongsList({ list, bandId }: SongsListProps) {
           <Link
             key={point.key}
             className="block bg-background p-2 rounded"
-            to={bandPath.song(bandId, point.songId)}
+            to={bandPath.listSong(bandId, list.id, point.songId)}
           >
             <li className="flex justify-between">
               <span>{point.name}</span>

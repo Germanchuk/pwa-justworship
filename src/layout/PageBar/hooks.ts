@@ -1,4 +1,5 @@
-import {ReactNode, useContext, useEffect, useLayoutEffect} from "react";
+import {useContext, useEffect, useLayoutEffect} from "react";
+import {useLocation} from "react-router-dom";
 import {PageBarContext} from "#layout/PageBar/context";
 
 export const usePageBar = () => {
@@ -8,20 +9,22 @@ export const usePageBar = () => {
 }
 
 /**
- * Поставити вміст сторінки у верхній бар. Знімається при виході зі сторінки,
- * тож чужий заголовок ніде не лишається.
+ * Поставити підпис поточного екрана в бар. Підпис прив'язаний до адреси: бар
+ * малює нову сторінку раніше, ніж стара встигає прибрати свій, і без цього
+ * на кадр показав би чужу дату.
  */
-export const usePageBarContent = (content: ReactNode | null) => {
-  const { setContent } = usePageBar();
+export const usePageBarTitle = (title: string | null) => {
+  const { setTitle } = usePageBar();
+  const { pathname } = useLocation();
 
   useEffect(() => {
-    setContent(content);
-    return () => setContent(null);
-  }, [content, setContent]);
+    setTitle(title ? { path: pathname, title } : null);
+    return () => setTitle(null);
+  }, [title, pathname, setTitle]);
 }
 
 /**
- * Прибрати верхній бар, поки сторінка відкрита. Layout-ефект, а не звичайний:
+ * Прибрати бар, поки сторінка відкрита. Layout-ефект, а не звичайний:
  * бар ховається до першого малювання, тож не блимає при відкритті сторінки.
  */
 export const useHidePageBar = () => {

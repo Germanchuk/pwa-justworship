@@ -77,11 +77,16 @@ export const useSongMode = (): SongMode => {
  */
 export const useSetSongMode = () => {
   const navigate = useNavigate();
-  const { bandId, songId } = useParams();
+  const { bandId, listId, songId } = useParams();
 
   return (mode: SongMode) => {
     if (!bandId || !songId) return;
-    navigate(bandPath.song(bandId, songId, mode), { replace: true });
+    navigate(
+      listId
+        ? bandPath.listSong(bandId, listId, songId, mode)
+        : bandPath.song(bandId, songId, mode),
+      { replace: true }
+    );
   };
 };
 

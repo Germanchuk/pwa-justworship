@@ -4,7 +4,6 @@ import { MusicalNoteIcon, PlusIcon } from "@heroicons/react/24/outline";
 
 import { fetchAPI } from "#utils/fetch-api";
 import { SongFilterInput } from "#components";
-import { ToPageBar } from "#layout/PageBar/ToPageBar";
 import { bandPath } from "#constants/routes";
 import { useBand } from "#modules/Band/BandLayout";
 import { Button } from "@/components/ui/button";
@@ -108,8 +107,6 @@ export default function BandSongs() {
 
   return (
     <>
-      <ToPageBar>{band.name}</ToPageBar>
-
       {/* Фільтр над карткою, як пошук над секціями на головній. Ховаємо його,
           поки список порожній: фільтрувати нічого. */}
       {songs !== null && songs.length > 0 && (

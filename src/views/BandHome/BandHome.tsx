@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { PlusIcon, UserGroupIcon } from "@heroicons/react/24/outline";
 
 import { fetchAPI } from "#utils/fetch-api";
-import { ToPageBar } from "#layout/PageBar/ToPageBar";
 import { bandPath } from "#constants/routes";
 import { formatDate } from "#utils/utils";
 import { useBand } from "#modules/Band/BandLayout";
@@ -64,8 +63,6 @@ export default function BandHome() {
 
   return (
     <>
-      <ToPageBar>{band.name}</ToPageBar>
-
       <MembersRow bandId={band.id} members={members} />
 
       <Section

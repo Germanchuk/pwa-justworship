@@ -4,7 +4,6 @@ import { PlusCircleIcon } from "@heroicons/react/24/outline";
 
 import { fetchAPI } from "#utils/fetch-api";
 import { SongsList } from "#components";
-import { ToPageBar } from "#layout/PageBar/ToPageBar";
 import { bandPath } from "#constants/routes";
 import { useBand } from "#modules/Band/BandLayout";
 import { Button } from "@/components/ui/button";
@@ -34,8 +33,6 @@ export default function BandLists() {
 
   return (
     <>
-      <ToPageBar>{band.name}</ToPageBar>
-
       <div className="flex justify-between items-center pb-4">
         <h1 className="text-3xl font-bold tracking-tight">Списки пісень</h1>
         <Button
