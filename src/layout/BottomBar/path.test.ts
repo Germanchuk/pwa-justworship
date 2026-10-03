@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { barSpot } from "./path";
 
 describe("barSpot — місце екрана в шляху нижнього бару", () => {
-  it("головна — лише 🏠, підсвічений", () => {
+  it("головна — без шляху", () => {
     expect(barSpot("/")).toEqual({ bandId: null, screen: null, active: "home" });
   });
 
-  it("пошук і налаштування підсвічують свою кнопку, шлях — лише 🏠", () => {
-    expect(barSpot("/search").active).toBe("search");
-    expect(barSpot("/preferences").active).toBe("profile");
+  it("пошук і налаштування — екрани поза гуртом, одразу після 🏠", () => {
+    expect(barSpot("/search")).toEqual({ bandId: null, screen: "Пошук", active: "screen" });
+    expect(barSpot("/preferences")).toEqual({ bandId: null, screen: "Налаштування", active: "screen" });
   });
 
   it("сторінка гурту — гурт поточний", () => {
