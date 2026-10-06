@@ -383,10 +383,13 @@ function BarItem({
   if (layer !== "buttons") {
     // Невидимий пункт тримає місцю ширину; розмиття й крапля — на всю
     // поточну ширину місця (`left-2` — його відступ), а не лише на видиму
-    // частину кнопки.
+    // частину кнопки. Кругла кнопка має сталу ширину, тож вмісту не
+    // потребує — і не повинна його мати: індикатор завантаження крутиться
+    // завжди, Safari виносить таку анімацію в окремий шар, а разом з нею й
+    // краплю над нею — і та вже не проходить через фільтр злипання.
     return (
       <>
-        <span className={cn(className, "invisible")}>{children}</span>
+        <span className={cn(className, "invisible")}>{label ? null : children}</span>
         <span
           className={cn(
             "absolute left-2 right-0 rounded-full",
