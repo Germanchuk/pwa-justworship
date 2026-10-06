@@ -1,12 +1,13 @@
 import { ReactNode, RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { HomeIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import { Loader2 } from "lucide-react";
+import { ArrowLeftIcon, HomeIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { Loader2, Sparkles, X } from "lucide-react";
 
 import { Routes, bandPath } from "#constants/routes";
 import { usePageBar } from "#layout/PageBar/hooks";
 import { useBandOrNull, type Band } from "#modules/Band/BandLayout";
+import { useSongMenuOpen } from "#modules/SingleSong/components/SongControls/menuOpen";
 import { cn } from "@/lib/utils";
 import { barSpot } from "./path";
 
@@ -15,6 +16,12 @@ const BAND_NAME_MAX = 10;
 /** Висота бару (52px) + відступ від низу. Під нього сторінка лишає місце. */
 const BAR_SPACE = "calc(52px + 1rem + env(safe-area-inset-bottom))";
 const GOO_FILTER = "bar-goo";
+/**
+ * Наскільки крапля нижча за кнопку — зверху й знизу. Кнопка лишається
+ * 52px заввишки (палець, текст), а крапля — сплюснутий овал по центру:
+ * бар виглядає легшим і не липне до низу екрана.
+ */
+const PILL_INSET_PX = 6;
 /** Скільки триває рух одного пункту — поява чи зникнення. */
 const ITEM_MS = 400;
 
@@ -27,20 +34,32 @@ const shorten = (name: string) =>
  */
 type Layer = "frost" | "goo" | "buttons";
 
+/**
+ * Перший кружечок — спільний для всіх видів бару: пошук на головній, 🏠 у
+ * шляху, «назад» на пісні й у зібранні.
+ */
+type Lead = "search" | "home" | "back";
+
 /** Що показує бар — однаково для всіх шарів. */
 type BarContent = {
   spot: ReturnType<typeof barSpot>;
+  lead: Lead;
+  /** «Назад» з пісні чи зібрання (`useBack`). */
+  onBack: () => void;
+  /** Меню пісні (`APP-26`): відкрите чи ні й перемикач. */
+  songMenu: { open: boolean; toggle: () => void };
   band: Band | null;
   screen: string | null;
   initials: string;
   isLoading: boolean;
-  /** Місця ряду по порядку — 🏠, гурт, екран, пошук, профіль (`useQueue`). */
-  slots: { open: boolean; delay: number }[];
+  /** Черга переходу (`useQueue`): коли перший кружечок міняє іконку і коли рушає кожне місце. */
+  queue: Queue;
 };
 
 /**
- * Нижній бар (`APP-5`, `APP-8`, `APP-30`–`APP-36`). На головній — пошук і
- * профіль; деінде — шлях `🏠 · Гурт · Екран`. Кожен пункт — окрема кнопка, а
+ * Нижній бар (`APP-5`, `APP-8`, `APP-25`, `APP-30`–`APP-38`). На головній —
+ * пошук і профіль; на пісні й у зібранні — лише «назад»; деінде — шлях
+ * `🏠 · Гурт · Екран`. Кожен пункт — окрема кнопка, а
  * сусідні кнопки злипаються, як краплі. Живе ВИЩЕ роутів: гурт бере з адреси
  * (`useBandOrNull`), підпис списку — від сторінки (`ToPageBar`).
  *
@@ -55,28 +74,31 @@ type BarContent = {
  * своїм старим підписом.
  */
 export default function BottomBar() {
-  const { hidden, title } = usePageBar();
+  const { title } = usePageBar();
   const { pathname } = useLocation();
   const band = useBandOrNull();
   const user = useSelector((state: any) => state.user);
   const isLoading = useSelector((state: any) => state.viewConfig.globalLoader);
   const typing = useTyping();
+  const [menuOpen, toggleMenu] = useSongMenuOpen();
 
   const spot = barSpot(pathname);
   // Підпис від сторінки — лише якщо його поставила саме ця адреса.
   const screenLabel =
     spot.screen && title?.path === pathname ? title.title : spot.screen;
   const atHome = spot.active === "home";
+  const lead: Lead = atHome ? "search" : spot.back ? "back" : "home";
   const content: BarContent = {
     spot,
+    lead,
+    onBack: useBack(spot.back),
+    songMenu: { open: menuOpen, toggle: toggleMenu },
     band: useLastValue(spot.bandId && band ? band : null),
     screen: useLastValue(screenLabel),
     initials: (user?.username ?? "").slice(0, 2).toUpperCase(),
     isLoading,
-    slots: useQueue([!atHome, !!spot.bandId, !!spot.screen, atHome, atHome]),
+    queue: useQueue(lead, [!!spot.bandId, !!spot.screen, spot.songMenu, atHome]),
   };
-
-  if (hidden) return null;
 
   return (
     <>
@@ -124,12 +146,12 @@ function GooFilter() {
         <feGaussianBlur in="SourceGraphic" stdDeviation="8" />
         <feColorMatrix
           mode="matrix"
-          values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -6"
+          values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -4"
           result="goo"
         />
 
         <feComponentTransfer in="goo" result="body">
-          <feFuncA type="linear" slope="0.55" />
+          <feFuncA type="linear" slope="0.1" />
         </feComponentTransfer>
 
         <feGaussianBlur in="goo" stdDeviation="3" result="bump" />
@@ -165,13 +187,14 @@ function GooFilter() {
  * Ряд бару — один і той самий для всіх шарів (`Layer`), тож розмиття й
  * крапля завжди точно під кнопкою.
  *
- * На головній — лише пошук і профіль, без 🏠; деінде — лише шлях
- * (`APP-8`). Кожен пункт сидить у своєму місці (`Slot`), тож набір кнопок
- * змінюється тією самою анімацією, що й шлях.
+ * На головній — пошук і профіль; на пісні й у зібранні — «назад»; деінде —
+ * шлях від 🏠 (`APP-8`). Перший кружечок спільний (`Lead`) і при переході
+ * лишається на місці, лише міняє іконку (`LeadIcon`). Решта пунктів сидить
+ * у своїх місцях (`Slot`) і зʼявляється та зникає однією анімацією.
  */
 function BarRow({ content, layer }: { content: BarContent; layer: Layer }) {
-  const { spot, band, screen, initials, isLoading, slots } = content;
-  const [homeSlot, bandSlot, screenSlot, searchSlot, profileSlot] = slots;
+  const { spot, lead, onBack, songMenu, band, screen, initials, isLoading, queue } = content;
+  const [bandSlot, screenSlot, menuSlot, profileSlot] = queue.slots;
   const buttons = layer === "buttons";
   const decor = !buttons;
   const item = { layer };
@@ -188,9 +211,16 @@ function BarRow({ content, layer }: { content: BarContent; layer: Layer }) {
       )}
       style={layer === "goo" ? { filter: `url(#${GOO_FILTER})` } : undefined}
     >
-      <Slot decor={decor} {...homeSlot}>
-        <BarItem {...item} to={Routes.Root} active={false} label="Додому">
-          {isLoading ? <Loader2 className="size-6 animate-spin" /> : <HomeIcon className="size-6" />}
+      <Slot decor={decor} open delay={0}>
+        <BarItem
+          {...item}
+          {...(lead === "back"
+            ? { onClick: onBack }
+            : { to: lead === "search" ? Routes.SearchSongs : Routes.Root })}
+          active={false}
+          label={LEAD_LABEL[lead]}
+        >
+          <LeadIcon lead={lead} delay={queue.lead} loading={isLoading} />
         </BarItem>
       </Slot>
 
@@ -209,9 +239,17 @@ function BarRow({ content, layer }: { content: BarContent; layer: Layer }) {
         </BarItem>
       </Slot>
 
-      <Slot decor={decor} {...searchSlot}>
-        <BarItem {...item} to={Routes.SearchSongs} active={false} label="Пошук">
-          <MagnifyingGlassIcon className="size-6" />
+      <Slot decor={decor} {...menuSlot}>
+        {/* Кнопка меню пісні (`APP-26`): ✦ — закрите, ✕ — відкрите; саме меню —
+            угорі над піснею. */}
+        <BarItem
+          {...item}
+          onClick={songMenu.toggle}
+          expanded={songMenu.open}
+          active={false}
+          label={songMenu.open ? "Сховати меню пісні" : "Меню пісні"}
+        >
+          {songMenu.open ? <X className="size-6" /> : <Sparkles className="size-6" />}
         </BarItem>
       </Slot>
 
@@ -221,6 +259,40 @@ function BarRow({ content, layer }: { content: BarContent; layer: Layer }) {
         </BarItem>
       </Slot>
     </div>
+  );
+}
+
+const LEAD_LABEL: Record<Lead, string> = { search: "Пошук", home: "Додому", back: "Назад" };
+const LEAD_ICON = { search: MagnifyingGlassIcon, home: HomeIcon, back: ArrowLeftIcon };
+
+/**
+ * Іконка першого кружечка: пошук, 🏠 чи «назад». Усі лежать одна на одній і
+ * перетікають прозорістю у свою чергу переходу (`delay`), тож кружечок не
+ * зникає, а лише міняє зміст. Поки застосунок вантажить (`APP-33`), поверх
+ * крутиться індикатор — окремим шаром, бо підміна іконки зірвала б перехід:
+ * після тапу завантаження йде майже завжди.
+ */
+function LeadIcon({ lead, delay, loading }: { lead: Lead; delay: number; loading: boolean }) {
+  const swap = (visible: boolean) => ({
+    opacity: visible ? 1 : 0,
+    transition: `opacity ${ITEM_MS}ms ease-in-out ${delay}ms`,
+  });
+  // Індикатор домінує: зʼявляється миттєво, разом з ним миттєво ховаються
+  // іконки; коли завантаження скінчилось, він гасне, і лише потім іконки
+  // повертаються — без миті, де видно обидва.
+  const icons = { opacity: loading ? 0 : 1, transition: loading ? "none" : "opacity 150ms 150ms" };
+  const loader = { opacity: loading ? 1 : 0, transition: loading ? "none" : "opacity 150ms" };
+
+  return (
+    <span className="relative size-6">
+      <span className="absolute inset-0" style={icons}>
+        {(Object.keys(LEAD_ICON) as Lead[]).map((kind) => {
+          const Icon = LEAD_ICON[kind];
+          return <Icon key={kind} className="absolute inset-0 size-6" style={swap(kind === lead)} />;
+        })}
+      </span>
+      <Loader2 className="absolute inset-0 size-6 animate-spin" style={loader} />
+    </span>
   );
 }
 
@@ -266,7 +338,7 @@ function Slot({
         transition: `${motion("width")}, ${fade}`,
         // Крапля й розмиття (`BarItem`) стискаються ще й по висоті — до
         // точки посередині — в тому самому темпі, що й ширина місця.
-        ["--pill-inset" as string]: open ? "0px" : "50%",
+        ["--pill-inset" as string]: open ? `${PILL_INSET_PX}px` : "50%",
         ["--pill-motion" as string]: `${motion("top")}, ${motion("bottom")}`,
       }}
     >
@@ -287,12 +359,18 @@ function Slot({
 function BarItem({
   layer,
   to,
+  onClick,
+  expanded,
   active,
   label,
   children,
 }: {
   layer: Layer;
   to?: string;
+  /** Пункт-дія замість посилання: «назад», меню пісні. */
+  onClick?: () => void;
+  /** Перемикач, що щось відкриває (меню пісні): відкрите — крапля підсвічена. */
+  expanded?: boolean;
   active: boolean;
   label?: string;
   children: ReactNode;
@@ -316,7 +394,7 @@ function BarItem({
               ? "backdrop-blur-md"
               : // Крапля напівпрозора, тож поточна темніша за `--accent`:
                 // інакше крізь скло підсвітки не видно.
-                active ? "bg-[#dccb9a]" : "bg-background"
+                active || expanded ? "bg-[#dccb9a]" : "bg-background"
           )}
           style={{
             top: "var(--pill-inset)",
@@ -328,6 +406,20 @@ function BarItem({
           }}
         />
       </>
+    );
+  }
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-expanded={expanded}
+        aria-label={label}
+        title={label}
+        className={className}
+      >
+        {children}
+      </button>
     );
   }
   if (active || !to) {
@@ -344,27 +436,54 @@ function BarItem({
   );
 }
 
+type Queue = {
+  /** Коли перший кружечок міняє іконку. */
+  lead: number;
+  /** Місця після нього по порядку — гурт, екран, профіль. */
+  slots: { open: boolean; delay: number }[];
+};
+
 /**
- * Черга переходу: місця, що закриваються, ідуть справа наліво, а за ними
- * ті, що відкриваються, — зліва направо. Строго по одному: наступне рушає,
- * коли попереднє вже доїхало. Зі списку пісень додому: «Пісні», гурт, 🏠,
- * пошук, профіль. Черга тримається, доки набір відкритих місць не
- * зміниться знову.
+ * Черга переходу, строго по одному — наступне рушає, коли попереднє вже
+ * доїхало: місця, що закриваються, справа наліво; потім перший кружечок
+ * міняє іконку (`lead`), якщо змінився тип меню; потім місця, що
+ * відкриваються, зліва направо. Зі списку пісень додому: «Пісні», гурт,
+ * 🏠 → пошук, профіль; зі списку в пісню: дата, гурт, 🏠 → «назад».
+ * Черга тримається, доки меню не зміниться знову.
  */
-function useQueue(opens: boolean[]): { open: boolean; delay: number }[] {
-  const key = opens.map(Number).join("");
-  const last = useRef({ key, delays: opens.map(() => 0) });
+function useQueue(lead: Lead, opens: boolean[]): Queue {
+  const key = `${lead}:${opens.map(Number).join("")}`;
+  const last = useRef({ key, lead: 0, delays: opens.map(() => 0) });
   if (last.current.key !== key) {
-    const was = last.current.key;
+    const [wasLead, was] = last.current.key.split(":");
     const closing = opens.map((_, i) => i).filter((i) => was[i] === "1" && !opens[i]).reverse();
     const opening = opens.map((_, i) => i).filter((i) => was[i] === "0" && opens[i]);
     const delays = opens.map(() => 0);
-    closing.forEach((slot, turn) => (delays[slot] = turn * ITEM_MS));
-    const openFrom = closing.length * ITEM_MS;
-    opening.forEach((slot, turn) => (delays[slot] = openFrom + turn * ITEM_MS));
-    last.current = { key, delays };
+    let turn = 0;
+    closing.forEach((slot) => (delays[slot] = turn++ * ITEM_MS));
+    const leadDelay = wasLead !== lead ? turn++ * ITEM_MS : 0;
+    opening.forEach((slot) => (delays[slot] = turn++ * ITEM_MS));
+    last.current = { key, lead: leadDelay, delays };
   }
-  return opens.map((open, i) => ({ open, delay: last.current.delays[i] }));
+  return {
+    lead: last.current.lead,
+    slots: opens.map((open, i) => ({ open, delay: last.current.delays[i] })),
+  };
+}
+
+/**
+ * «Назад» з пісні чи зібрання (`APP-25`, `APP-38`): туди, звідки прийшли.
+ * `idx` — лічильник записів історії, який веде сам роутер: 0 означає, що
+ * екран — перший у сесії (посилання, старт застосунку), і крок назад вивів
+ * би із застосунку. Тоді — `fallback`, рівень вище за ієрархією. Режими
+ * пісні історії не додають (`MODE-26`), тож і `idx` вони не зсувають.
+ */
+function useBack(fallback: string | null) {
+  const navigate = useNavigate();
+  return () => {
+    if ((window.history.state?.idx ?? 0) > 0) navigate(-1);
+    else if (fallback) navigate(fallback);
+  };
 }
 
 /** Природна ширина елемента; стежить за зміною підпису. */

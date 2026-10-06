@@ -8,15 +8,11 @@ import { bandPath } from "#constants/routes";
 import {SongControls} from "#modules/SingleSong/components/SongControls/SongControls";
 import {SongMenuSlotProvider} from "#modules/SingleSong/components/SongControls/menuSlot";
 import {setNotesAudience} from "#modules/SingleSong/redux/songSlice";
-import {useHidePageBar} from "#layout/PageBar/hooks";
 
 export default function SingleSong() {
   const { bandId, listId, songId, mode } = useParams();
   const dispatch = useDispatch();
   const setSong = useSetSong();
-  // Верхнього бару на пісні немає: місце віддане пісні, а навігацію сторінка
-  // ставить сама (`APP-24`).
-  useHidePageBar();
 
   React.useEffect(() => {
     return () => {

@@ -3,10 +3,7 @@ import { useParams } from "react-router-dom";
 
 import { formatDate } from "#utils/utils";
 import { DEFAULT_LIST_TITLE } from "#constants/app";
-import { bandPath } from "#constants/routes";
 import { useBand } from "#modules/Band/BandLayout";
-import { useHidePageBar } from "#layout/PageBar/hooks";
-import { BackButton } from "#modules/SingleSong/components/SongControls/BackButton";
 import { SongModeProvider, StaticSongProvider } from "#modules/SingleSong/mode";
 import { buildGathering } from "#modules/Gathering/buildGathering";
 import { fetchGathering, type GatheringList } from "#modules/Gathering/gatheringSource";
@@ -41,8 +38,6 @@ export default function Gathering() {
   const band = useBand();
   const [list, setList] = useState<GatheringList | null>(null);
   const [failed, setFailed] = useState(false);
-  // Сценічний екран, як і пісня: бару немає, лише плаваюче «назад» (`APP-38`).
-  useHidePageBar();
 
   useEffect(() => {
     let cancelled = false;
@@ -63,27 +58,16 @@ export default function Gathering() {
   // документи служіння: без пам'яті це рахувалось би на кожен ререндер екрана.
   const gathering = useMemo(() => buildGathering(list?.points ?? []), [list]);
 
-  const back = (
-    <div
-      className="fixed right-2 z-40"
-      style={{ top: "max(0.5rem, env(safe-area-inset-top))" }}
-    >
-      <BackButton fallback={bandPath.list(band.id, listId!)} />
-    </div>
-  );
-
+  // «Назад» — у нижньому барі (`APP-38`).
   if (failed) {
     return (
-      <>
-        {back}
-        <div className="p-4 text-sm text-destructive">
-          Не вдалося завантажити служіння. Спробуй ще раз.
-        </div>
-      </>
+      <div className="p-4 text-sm text-destructive">
+        Не вдалося завантажити служіння. Спробуй ще раз.
+      </div>
     );
   }
 
-  if (!list) return back;
+  if (!list) return null;
 
   return (
     // Режим форсуємо: у зібранні пісні в адресі немає, а від режиму залежить,
@@ -92,8 +76,6 @@ export default function Gathering() {
       {/* Знімок, а не живий документ: налаштування показані й діють, але не
           редагуються, а шапка пісні закріплена (див. `mode.tsx`). */}
       <StaticSongProvider>
-        {back}
-
         <div className="mb-3 rounded-xl border border-border bg-background/60 px-3 py-2 shadow-xs">
           <div className="text-base font-semibold leading-tight">{formatDate(list.date)}</div>
           <div className="text-sm text-muted-foreground">
