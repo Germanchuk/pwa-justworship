@@ -59,7 +59,11 @@ export async function fetchAPI(
   } catch (error) {
     throw new Error(error);
   } finally {
-    const store = await getStore();
-    store.dispatch(disableGlobalLoader());
+    // Гасить лише той запит, що індикатор вмикав: фоновий не має знімати
+    // чужий індикатор.
+    if (!avoidGlobalLoader) {
+      const store = await getStore();
+      store.dispatch(disableGlobalLoader());
+    }
   }
 }

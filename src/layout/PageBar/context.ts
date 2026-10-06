@@ -10,12 +10,6 @@ type PageBarContextType = {
    */
   setTitle: (title: PageTitle | null) => void;
   title: PageTitle | null;
-  /**
-   * Сторінка, якій бар не потрібен зовсім (пісня, зібрання, `APP-5`): тоді
-   * оболонка не малює його, а сторінка ставить своє керування сама.
-   */
-  setHidden: (hidden: boolean) => void;
-  hidden: boolean;
 };
 
 export const PageBarContext = createContext<PageBarContextType | null>(null);

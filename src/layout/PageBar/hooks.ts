@@ -1,4 +1,4 @@
-import {useContext, useEffect, useLayoutEffect} from "react";
+import {useContext, useEffect} from "react";
 import {useLocation} from "react-router-dom";
 import {PageBarContext} from "#layout/PageBar/context";
 
@@ -21,17 +21,4 @@ export const usePageBarTitle = (title: string | null) => {
     setTitle(title ? { path: pathname, title } : null);
     return () => setTitle(null);
   }, [title, pathname, setTitle]);
-}
-
-/**
- * Прибрати бар, поки сторінка відкрита. Layout-ефект, а не звичайний:
- * бар ховається до першого малювання, тож не блимає при відкритті сторінки.
- */
-export const useHidePageBar = () => {
-  const { setHidden } = usePageBar();
-
-  useLayoutEffect(() => {
-    setHidden(true);
-    return () => setHidden(false);
-  }, [setHidden]);
 }
