@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import { ChevronsDown, LocateFixed } from "lucide-react";
+import { ChevronsDown, createLucideIcon, LocateFixed } from "lucide-react";
 import type { Descendant } from "slate";
 
 import { Button } from "@/components/ui/button";
@@ -23,9 +23,9 @@ import { MENU_TILE } from "./tile";
 
 /**
  * «Старт / стоп автоскролу» — плитка під кнопкою дрона (`SCROLL-4`), лише в
- * читанні (`SCROLL-5`). З дроном не повʼязана. Поки автоскрол не йде, поруч —
- * плитка «2×»: старт удвічі швидше (`SCROLL-33`); її місце потім займає імʼя
- * ініціатора, а стоп — одна кнопка.
+ * читанні (`SCROLL-5`). З дроном не повʼязана. Поки автоскрол не йде, під
+ * нею — плитка з трьома шевронами: старт удвічі швидше (`SCROLL-33`); стоп —
+ * одна кнопка.
  *
  * Хто натиснув «старт», стає ініціатором: його фокусний рядок після такту
  * відліку йде по пісні сам. В інших на цій пісні кнопка неактивна, а поруч —
@@ -76,20 +76,48 @@ export const AutoscrollControls = () => {
       : null;
 
   return (
-    <div className="flex items-center gap-2">
-      {leader && (
-        <span
-          className="glass flex h-13 items-center rounded-[19px] px-2 text-xs font-semibold text-blue-900 max-w-32"
-          title={`Автоскрол веде: ${leader}`}
+    <>
+      <div className="flex items-center gap-2">
+        {leader && (
+          <span
+            className="glass flex h-13 items-center rounded-[19px] px-2 text-xs font-semibold text-blue-900 max-w-32"
+            title={`Автоскрол веде: ${leader}`}
+          >
+            <span className="truncate">{leader}</span>
+          </span>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            MENU_TILE,
+            mayStop &&
+              "border-primary bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:text-primary-foreground",
+          )}
+          onClick={() => handleClick(1)}
+          disabled={!online || songId == null || (running && !mayStop)}
+          aria-pressed={mayStop}
+          aria-label="Автоскрол"
+          title={
+            !online
+              ? "Автоскрол — немає звʼязку з сервером"
+              : mayStop
+                ? leader
+                  ? `Зупинити автоскрол (вів: ${leader})`
+                  : "Зупинити автоскрол"
+                : leader
+                  ? `Автоскрол веде: ${leader}`
+                  : "Запустити автоскрол звідси"
+          }
         >
-          <span className="truncate">{leader}</span>
-        </span>
-      )}
+          <ChevronsDown className="size-6" strokeWidth={2.25} />
+        </Button>
+      </div>
       {!running && (
         <Button
           variant="ghost"
           size="icon"
-          className={cn(MENU_TILE, "text-base font-bold")}
+          className={MENU_TILE}
           onClick={() => handleClick(2)}
           disabled={!online || songId == null}
           aria-label="Автоскрол удвічі швидше"
@@ -99,38 +127,19 @@ export const AutoscrollControls = () => {
               : "Автоскрол — немає звʼязку з сервером"
           }
         >
-          2×
+          <ChevronsDownTriple className="size-6" strokeWidth={2.25} />
         </Button>
       )}
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(
-          MENU_TILE,
-          mayStop &&
-            "border-primary bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:text-primary-foreground",
-        )}
-        onClick={() => handleClick(1)}
-        disabled={!online || songId == null || (running && !mayStop)}
-        aria-pressed={mayStop}
-        aria-label="Автоскрол"
-        title={
-          !online
-            ? "Автоскрол — немає звʼязку з сервером"
-            : mayStop
-              ? leader
-                ? `Зупинити автоскрол (вів: ${leader})`
-                : "Зупинити автоскрол"
-              : leader
-                ? `Автоскрол веде: ${leader}`
-                : "Запустити автоскрол звідси"
-        }
-      >
-        <ChevronsDown className="size-6" strokeWidth={2.25} />
-      </Button>
-    </div>
+    </>
   );
 };
+
+/** Три шеврони — «удвічі швидше»: `ChevronsDown` з ще одним. */
+const ChevronsDownTriple = createLucideIcon("chevrons-down-triple", [
+  ["path", { d: "m7 3 5 5 5-5", key: "top" }],
+  ["path", { d: "m7 9 5 5 5-5", key: "middle" }],
+  ["path", { d: "m7 15 5 5 5-5", key: "bottom" }],
+]);
 
 const EDGE_SHADOW = {
   initiator:
