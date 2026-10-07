@@ -17,6 +17,7 @@ const run = (patch: Partial<AutoscrollRun> = {}): AutoscrollRun => ({
   initiator: { device: "a", name: "Аня" },
   movedAt: null,
   held: false,
+  speed: 1,
   ...patch,
 });
 

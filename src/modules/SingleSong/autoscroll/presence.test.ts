@@ -11,6 +11,7 @@ const run: AutoscrollRun = {
   initiator: { device: "a", name: "Аня" },
   movedAt: null,
   held: false,
+  speed: 1,
 };
 
 describe("initiatorPresent — чи ініціатор на пісні в читанні (`SCROLL-8`)", () => {

@@ -36,6 +36,11 @@ export type AutoscrollRun = {
   movedAt: number | null;
   /** Палець ініціатора на екрані: позиція стоїть на `row` (`SCROLL-26`). */
   held: boolean;
+  /**
+   * Швидкість з моменту старту (`SCROLL-33`): 1 — рядок за два такти, 2 —
+   * за один. Відлік від неї не залежить.
+   */
+  speed: number;
 };
 
 export const startRun = ({
@@ -43,11 +48,13 @@ export const startRun = ({
   now,
   header,
   initiator,
+  speed,
 }: {
   row: number;
   now: number;
   header: { bpm: number; timeSignature: [number, number] };
   initiator: AutoscrollRun["initiator"];
+  speed: number;
 }): AutoscrollRun => ({
   row,
   startedAt: now,
@@ -56,6 +63,7 @@ export const startRun = ({
   initiator,
   movedAt: null,
   held: false,
+  speed,
 });
 
 export type RunPhase =
@@ -66,6 +74,10 @@ export type RunPhase =
   | { kind: "ended" };
 
 export const beatMs = (run: AutoscrollRun): number => 60_000 / run.bpm;
+
+/** Скільки триває рядок: два такти (`SCROLL-13`), на 2× — один (`SCROLL-33`). */
+export const rowMs = (run: AutoscrollRun): number =>
+  (2 * run.beatsPerBar * beatMs(run)) / run.speed;
 
 /** Де автоскрол у момент `now` для пісні з `rowCount` рядків. */
 export const phaseAt = (
@@ -87,8 +99,7 @@ export const phaseAt = (
     return { kind: "count-in", row: run.row, beat: Math.floor(elapsed / beat) };
   }
 
-  // Рядок — два такти (`SCROLL-13`).
-  const row = run.row + Math.floor((elapsed - countIn) / (2 * bar));
+  const row = run.row + Math.floor((elapsed - countIn) / rowMs(run));
   return row < rowCount ? { kind: "moving", row } : { kind: "ended" };
 };
 
@@ -178,7 +189,8 @@ export const sameRun = (a: AutoscrollRun, b: AutoscrollRun): boolean =>
   a.initiator.device === b.initiator.device &&
   a.initiator.name === b.initiator.name &&
   a.movedAt === b.movedAt &&
-  a.held === b.held;
+  a.held === b.held &&
+  a.speed === b.speed;
 
 const isNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
@@ -199,7 +211,8 @@ export const parseRun = (value: unknown): AutoscrollRun | null => {
     !isNumber(v.beatsPerBar) ||
     v.beatsPerBar <= 0 ||
     !initiator ||
-    typeof initiator.device !== "string"
+    typeof initiator.device !== "string" ||
+    (v.speed !== undefined && !(isNumber(v.speed) && v.speed > 0))
   ) {
     return null;
   }
@@ -214,5 +227,6 @@ export const parseRun = (value: unknown): AutoscrollRun | null => {
     },
     movedAt: isNumber(v.movedAt) ? v.movedAt : null,
     held: v.held === true,
+    speed: isNumber(v.speed) ? v.speed : 1,
   };
 };

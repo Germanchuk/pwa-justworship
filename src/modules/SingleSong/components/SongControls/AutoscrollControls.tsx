@@ -23,7 +23,9 @@ import { MENU_TILE } from "./tile";
 
 /**
  * «Старт / стоп автоскролу» — плитка під кнопкою дрона (`SCROLL-4`), лише в
- * читанні (`SCROLL-5`). З дроном не повʼязана.
+ * читанні (`SCROLL-5`). З дроном не повʼязана. Поки автоскрол не йде, поруч —
+ * плитка «2×»: старт удвічі швидше (`SCROLL-33`); її місце потім займає імʼя
+ * ініціатора, а стоп — одна кнопка.
  *
  * Хто натиснув «старт», стає ініціатором: його фокусний рядок після такту
  * відліку йде по пісні сам. В інших на цій пісні кнопка неактивна, а поруч —
@@ -41,31 +43,37 @@ export const AutoscrollControls = () => {
   const running = run != null;
   const mayStop = run != null && canStop(run, DEVICE_ID, present);
 
-  const handleClick = useCallback(() => {
-    if (songId == null) return;
-    const channel = AutoscrollChannel.getInstance();
-    if (run) {
-      if (mayStop) channel.stop(songId);
-      return;
-    }
-    const editor = getActiveSongEditor();
-    const row = getFocusRow();
-    if (!editor || row == null) return;
-    channel.start(
-      songId,
-      startRun({
-        row,
-        now: Date.now(),
-        header: extractHeader(editor.children as Descendant[]),
-        initiator: { device: DEVICE_ID, name: username ?? null },
-      }),
-    );
-  }, [songId, run, mayStop, username]);
+  const handleClick = useCallback(
+    (speed: number) => {
+      if (songId == null) return;
+      const channel = AutoscrollChannel.getInstance();
+      if (run) {
+        if (mayStop) channel.stop(songId);
+        return;
+      }
+      const editor = getActiveSongEditor();
+      const row = getFocusRow();
+      if (!editor || row == null) return;
+      channel.start(
+        songId,
+        startRun({
+          row,
+          now: Date.now(),
+          header: extractHeader(editor.children as Descendant[]),
+          initiator: { device: DEVICE_ID, name: username ?? null },
+          speed,
+        }),
+      );
+    },
+    [songId, run, mayStop, username],
+  );
 
   // Імʼя ініціатора бачать усі, крім нього самого, — і тоді, коли його вже
   // немає, а зупинити може будь-хто (`SCROLL-6`).
   const leader =
-    running && !isInitiator(run, DEVICE_ID) ? (run.initiator.name ?? "хтось") : null;
+    running && !isInitiator(run, DEVICE_ID)
+      ? (run.initiator.name ?? "хтось")
+      : null;
 
   return (
     <div className="flex items-center gap-2">
@@ -77,6 +85,23 @@ export const AutoscrollControls = () => {
           <span className="truncate">{leader}</span>
         </span>
       )}
+      {!running && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(MENU_TILE, "text-base font-bold")}
+          onClick={() => handleClick(2)}
+          disabled={!online || songId == null}
+          aria-label="Автоскрол удвічі швидше"
+          title={
+            online
+              ? "Запустити автоскрол звідси, удвічі швидше"
+              : "Автоскрол — немає звʼязку з сервером"
+          }
+        >
+          2×
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="icon"
@@ -85,7 +110,7 @@ export const AutoscrollControls = () => {
           mayStop &&
             "border-primary bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:text-primary-foreground",
         )}
-        onClick={handleClick}
+        onClick={() => handleClick(1)}
         disabled={!online || songId == null || (running && !mayStop)}
         aria-pressed={mayStop}
         aria-label="Автоскрол"

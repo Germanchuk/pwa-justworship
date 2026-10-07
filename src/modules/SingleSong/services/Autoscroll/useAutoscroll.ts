@@ -1,6 +1,6 @@
 import {useEffect, useState, useSyncExternalStore} from "react";
 
-import {beatMs, isInitiator, phaseAt, type AutoscrollRun} from "../../autoscroll/run";
+import {beatMs, isInitiator, phaseAt, rowMs, type AutoscrollRun} from "../../autoscroll/run";
 import AutoscrollChannel, {DEVICE_ID} from "./autoscrollChannel";
 
 /** Автоскрол, що йде на цій пісні, або null. */
@@ -73,13 +73,13 @@ export const useAutoscrollDrive = (
     }
 
     const mine = isInitiator(run, DEVICE_ID);
-    const rowMs = 2 * run.beatsPerBar * beatMs(run);
+    const margin = rowMs(run);
 
     const tick = () => {
       const now = Date.now();
       const next = phaseAt(run, now, rowCount);
       if (next.kind === "ended") {
-        if (!mine && phaseAt(run, now - rowMs, rowCount).kind !== "ended") return;
+        if (!mine && phaseAt(run, now - margin, rowCount).kind !== "ended") return;
         AutoscrollChannel.getInstance().stop(songId);
         setPhase(null);
         return;

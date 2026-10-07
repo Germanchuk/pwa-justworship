@@ -9,6 +9,7 @@ import {
   parseRun,
   phaseAt,
   releaseAbandoned,
+  rowMs,
   sameRun,
   sameStart,
   startRun,
@@ -23,6 +24,7 @@ const run = (patch: Partial<AutoscrollRun> = {}): AutoscrollRun => ({
   initiator: { device: "a", name: "Аня" },
   movedAt: null,
   held: false,
+  speed: 1,
   ...patch,
 });
 
@@ -34,6 +36,7 @@ describe("startRun — що фіксує старт (`SCROLL-14`)", () => {
         now: 5000,
         header: { bpm: 96, timeSignature: [6, 8] },
         initiator: { device: "a", name: "Аня" },
+        speed: 2,
       }),
     ).toEqual({
       row: 12,
@@ -43,7 +46,32 @@ describe("startRun — що фіксує старт (`SCROLL-14`)", () => {
       initiator: { device: "a", name: "Аня" },
       movedAt: null,
       held: false,
+      speed: 2,
     });
+  });
+});
+
+describe("швидкість 2× (`SCROLL-33`)", () => {
+  // 60 BPM, 4/4: доля — секунда, такт — 4 с.
+  it.each([
+    { name: "відлік — той самий такт у темпі пісні", now: 3999, phase: { kind: "count-in", row: 0, beat: 3 } },
+    { name: "після відліку — рядок старту", now: 4000, phase: { kind: "moving", row: 0 } },
+    { name: "рядок триває один такт", now: 7999, phase: { kind: "moving", row: 0 } },
+    { name: "наступний рядок", now: 8000, phase: { kind: "moving", row: 1 } },
+  ])("$name", ({ now, phase }) => {
+    expect(phaseAt(run({ speed: 2 }), now, 20)).toEqual(phase);
+  });
+
+  it("перенос лишає швидкість старту", () => {
+    const moved = moveRun(run({ speed: 2 }), { row: 5, now: 30_000 });
+    expect(phaseAt(moved, 34_000, 20)).toEqual({ kind: "moving", row: 6 });
+  });
+
+  it.each([
+    { name: "1× — два такти", speed: 1, ms: 8000 },
+    { name: "2× — один такт", speed: 2, ms: 4000 },
+  ])("rowMs: $name", ({ speed, ms }) => {
+    expect(rowMs(run({ speed }))).toBe(ms);
   });
 });
 
@@ -178,6 +206,7 @@ describe("sameRun — той самий запис", () => {
     { name: "інший ініціатор", patch: { initiator: { device: "b", name: "Аня" } } },
     { name: "перенесений", patch: { movedAt: 5000 } },
     { name: "палець на екрані", patch: { held: true } },
+    { name: "інша швидкість", patch: { speed: 2 } },
   ])("$name — інший", ({ patch }) => {
     expect(sameRun(run(), run(patch))).toBe(false);
   });
@@ -230,6 +259,12 @@ describe("parseRun — запис із мережі", () => {
     expect(parseRun(value)).toEqual(value);
   });
 
+  it("без швидкості — 1×", () => {
+    const old: Record<string, unknown> = run();
+    delete old.speed;
+    expect(parseRun(old)).toEqual(run());
+  });
+
   it("без полів переносу — ще не переносили", () => {
     const old = {
       row: 0,
@@ -247,6 +282,7 @@ describe("parseRun — запис із мережі", () => {
     { name: "без темпу", value: { ...run(), bpm: 0 } },
     { name: "без ініціатора", value: { ...run(), initiator: null } },
     { name: "рядок не число", value: { ...run(), row: "3" } },
+    { name: "нульова швидкість", value: { ...run(), speed: 0 } },
   ])("$name — нічого не йде", ({ value }) => {
     expect(parseRun(value)).toBeNull();
   });
