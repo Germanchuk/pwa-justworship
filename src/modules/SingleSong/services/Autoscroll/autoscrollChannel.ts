@@ -3,7 +3,7 @@ import type * as Y from "yjs";
 import type {Room} from "#modules/Band/room/bandRoom";
 import BandRoom from "#modules/Band/room/bandRoom";
 
-import {parseRun, sameRun, type AutoscrollRun} from "../../autoscroll/run";
+import {parseRun, sameRun, sameStart, type AutoscrollRun} from "../../autoscroll/run";
 
 /**
  * Цей пристрій як ініціатор (`SCROLL-27`): ініціатор — пристрій, а не
@@ -21,7 +21,8 @@ const MAP = "autoscroll";
  * кімнати гурту (`BandRoom`). Не в awareness: запис мусить пережити відхід
  * ініціатора.
  *
- * Запис пишуть двічі — старт і стоп; позицію кожен рахує сам (`run.ts`).
+ * Запис пишуть старт, стоп і ініціатор, коли рухає гурт (дотик і
+ * відпускання); позицію кожен рахує сам (`run.ts`).
  */
 class AutoscrollChannel {
   static instance: AutoscrollChannel;
@@ -48,6 +49,18 @@ class AutoscrollChannel {
 
   start(songId: string | number, run: AutoscrollRun) {
     this.map?.set(String(songId), run);
+  }
+
+  /**
+   * Ініціатор переписує запис, коли рухає гурт (`SCROLL-26`), — поверх
+   * того, що є в цю мить. Автоскролу вже немає (зупинили) — нічого: запис не
+   * воскресне.
+   */
+  update(songId: string | number, change: (run: AutoscrollRun) => AutoscrollRun) {
+    const current = this.get(songId);
+    if (!current) return;
+    const next = change(current);
+    if (sameStart(current, next)) this.map?.set(String(songId), next);
   }
 
   stop(songId: string | number) {

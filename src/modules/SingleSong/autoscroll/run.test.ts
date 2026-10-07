@@ -4,9 +4,12 @@ import {
   canStop,
   columnPitch,
   displayRow,
+  holdRun,
+  moveRun,
   parseRun,
   phaseAt,
   sameRun,
+  sameStart,
   startRun,
   type AutoscrollRun,
 } from "./run";
@@ -17,6 +20,8 @@ const run = (patch: Partial<AutoscrollRun> = {}): AutoscrollRun => ({
   bpm: 60,
   beatsPerBar: 4,
   initiator: { device: "a", name: "Аня" },
+  movedAt: null,
+  held: false,
   ...patch,
 });
 
@@ -35,6 +40,8 @@ describe("startRun — що фіксує старт (`SCROLL-14`)", () => {
       bpm: 96,
       beatsPerBar: 6,
       initiator: { device: "a", name: "Аня" },
+      movedAt: null,
+      held: false,
     });
   });
 });
@@ -71,6 +78,66 @@ describe("phaseAt — де позиція в момент часу", () => {
   });
 });
 
+describe("ініціатор рухає гурт (`SCROLL-25`, `SCROLL-26`)", () => {
+  // 60 BPM, 4/4: відлік 4 с, рядок 8 с. Стартували з рядка 0 у момент 0.
+  it("відпустив — рахунок іде від його рядка й моменту, без відліку", () => {
+    const moved = moveRun(run(), { row: 5, now: 30_000 });
+    expect(phaseAt(moved, 30_000, 20)).toEqual({ kind: "moving", row: 5 });
+    expect(phaseAt(moved, 37_999, 20)).toEqual({ kind: "moving", row: 5 });
+    expect(phaseAt(moved, 38_000, 20)).toEqual({ kind: "moving", row: 6 });
+  });
+
+  it("відпустив — темп, розмір, момент старту й ініціатор лишаються з моменту старту", () => {
+    const started = run({ bpm: 96, beatsPerBar: 6, startedAt: 1000 });
+    const moved = moveRun(started, { row: 5, now: 30_000 });
+    expect(moved).toMatchObject({
+      bpm: 96,
+      beatsPerBar: 6,
+      startedAt: 1000,
+      initiator: started.initiator,
+    });
+  });
+
+  it("переніс назад на початок секції — повтор: позиція вертається й іде знову", () => {
+    // На момент 60 000 позиція — рядок 7; приспів почався з рядка 2.
+    expect(phaseAt(run(), 60_000, 20)).toEqual({ kind: "moving", row: 7 });
+    const repeat = moveRun(run(), { row: 2, now: 60_000 });
+    expect(phaseAt(repeat, 60_000, 20)).toEqual({ kind: "moving", row: 2 });
+    expect(phaseAt(repeat, 68_000, 20)).toEqual({ kind: "moving", row: 3 });
+  });
+
+  it("переніс посеред відліку — відлік скасовано, рух одразу", () => {
+    const moved = moveRun(run(), { row: 3, now: 2000 });
+    expect(phaseAt(moved, 2000, 20)).toEqual({ kind: "moving", row: 3 });
+  });
+
+  it("переніс за останній рядок — кінець", () => {
+    expect(phaseAt(moveRun(run(), { row: 20, now: 30_000 }), 30_000, 20)).toEqual({
+      kind: "ended",
+    });
+  });
+
+  it("палець на екрані — позиція стоїть на рядку моменту дотику", () => {
+    // На момент 30 000 позиція — рядок 3.
+    const held = holdRun(run(), 30_000);
+    expect(phaseAt(held, 30_000, 20)).toEqual({ kind: "moving", row: 3 });
+    expect(phaseAt(held, 300_000, 20)).toEqual({ kind: "moving", row: 3 });
+  });
+
+  it("палець на екрані посеред відліку — стоїть на рядку старту, не блимає", () => {
+    expect(phaseAt(holdRun(run({ row: 4 }), 2000), 2000, 20)).toEqual({
+      kind: "moving",
+      row: 4,
+    });
+  });
+
+  it("тримав, потім відпустив — рахунок від рядка й моменту відпускання", () => {
+    const moved = moveRun(holdRun(run(), 30_000), { row: 9, now: 45_000 });
+    expect(phaseAt(moved, 45_000, 20)).toEqual({ kind: "moving", row: 9 });
+    expect(phaseAt(moved, 53_000, 20)).toEqual({ kind: "moving", row: 10 });
+  });
+});
+
 describe("canStop — хто може зупинити (`SCROLL-8`)", () => {
   it.each([
     { name: "ініціатор", device: "a", can: true },
@@ -89,8 +156,23 @@ describe("sameRun — той самий запис", () => {
     { name: "інший рядок", patch: { row: 1 } },
     { name: "інший момент старту", patch: { startedAt: 1 } },
     { name: "інший ініціатор", patch: { initiator: { device: "b", name: "Аня" } } },
+    { name: "перенесений", patch: { movedAt: 5000 } },
+    { name: "палець на екрані", patch: { held: true } },
   ])("$name — інший", ({ patch }) => {
     expect(sameRun(run(), run(patch))).toBe(false);
+  });
+});
+
+describe("sameStart — той самий автоскрол", () => {
+  it("перенесений — той самий", () => {
+    expect(sameStart(run(), moveRun(holdRun(run(), 30_000), { row: 9, now: 45_000 }))).toBe(true);
+  });
+
+  it.each([
+    { name: "новий старт", patch: { startedAt: 1 } },
+    { name: "інший ініціатор", patch: { initiator: { device: "b", name: "Аня" } } },
+  ])("$name — інший", ({ patch }) => {
+    expect(sameStart(run(), run(patch))).toBe(false);
   });
 });
 
@@ -121,6 +203,22 @@ describe("columnPitch — на скільки гортати одну колон
 describe("parseRun — запис із мережі", () => {
   it("цілий запис — як є", () => {
     expect(parseRun(run())).toEqual(run());
+  });
+
+  it("перенесений і притриманий — як є", () => {
+    const value = run({ movedAt: 5000, held: true });
+    expect(parseRun(value)).toEqual(value);
+  });
+
+  it("без полів переносу — ще не переносили", () => {
+    const old = {
+      row: 0,
+      startedAt: 0,
+      bpm: 60,
+      beatsPerBar: 4,
+      initiator: { device: "a", name: "Аня" },
+    };
+    expect(parseRun(old)).toEqual(run());
   });
 
   it.each([

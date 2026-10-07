@@ -1,17 +1,24 @@
 /**
- * Автоскрол, що йде (`SCROLL-4`…`SCROLL-14`): спільний запис про старт і
- * правила, які з нього випливають.
+ * Автоскрол, що йде (`SCROLL-4`…`SCROLL-14`, `SCROLL-25`, `SCROLL-26`):
+ * спільний запис і правила, які з нього випливають.
  *
- * Запис незмінний від старту до стопу. Позицію ніхто не пише й не
- * пересилає — кожен пристрій сам рахує її зі свого годинника: рядок триває
- * два такти в темпі на момент старту (ADR-0004). Годинники пристроїв
+ * Позицію ніхто не пересилає щомиті — кожен пристрій сам рахує її зі свого
+ * годинника: рядок триває два такти в темпі на момент старту (ADR-0004).
+ * Запис пише старт, стоп і ініціатор, коли рухає гурт: дотик (позиція
+ * стоїть) і відпускання (рахунок далі з його рядка). Годинники пристроїв
  * розходяться на десятки мілісекунд — для позиції в рядках це ніщо.
  */
 
 export type AutoscrollRun = {
-  /** Фокусний рядок ініціатора в момент старту (`SCROLL-3`). */
+  /**
+   * Рядок, від якого йде рахунок: фокусний рядок ініціатора в момент старту
+   * (`SCROLL-3`) чи в момент, коли він востаннє відпустив екран (`SCROLL-26`).
+   */
   row: number;
-  /** Момент натиску «старт», мс епохи. Відлік іде від нього. */
+  /**
+   * Момент натиску «старт», мс епохи. Відлік іде від нього; переноси його не
+   * міняють — це той самий автоскрол (`follow.ts`, `SCROLL-20`).
+   */
   startedAt: number;
   /** BPM пісні на момент старту — правка темпу діє з наступного старту. */
   bpm: number;
@@ -22,6 +29,13 @@ export type AutoscrollRun = {
    * підпису біля кнопки в інших.
    */
   initiator: { device: string; name: string | null };
+  /**
+   * Коли ініціатор востаннє відпустив екран — рахунок іде від цього моменту,
+   * без відліку. `null` — ще не переносили: рахунок від старту, з відліком.
+   */
+  movedAt: number | null;
+  /** Палець ініціатора на екрані: позиція стоїть на `row` (`SCROLL-26`). */
+  held: boolean;
 };
 
 export const startRun = ({
@@ -40,6 +54,8 @@ export const startRun = ({
   bpm: header.bpm,
   beatsPerBar: header.timeSignature[0],
   initiator,
+  movedAt: null,
+  held: false,
 });
 
 export type RunPhase =
@@ -58,20 +74,43 @@ export const phaseAt = (
   rowCount: number,
 ): RunPhase => {
   if (run.row >= rowCount) return { kind: "ended" };
+  if (run.held) return { kind: "moving", row: run.row };
 
   const beat = beatMs(run);
-  const countIn = run.beatsPerBar * beat;
+  const bar = run.beatsPerBar * beat;
+  // Після переносу відліку немає (`SCROLL-26`).
+  const countIn = run.movedAt == null ? bar : 0;
   // Годинник ініціатора буває трохи попереду мого — тоді в мене ще нуль.
-  const elapsed = Math.max(0, now - run.startedAt);
+  const elapsed = Math.max(0, now - (run.movedAt ?? run.startedAt));
 
   if (elapsed < countIn) {
     return { kind: "count-in", row: run.row, beat: Math.floor(elapsed / beat) };
   }
 
   // Рядок — два такти (`SCROLL-13`).
-  const row = run.row + Math.floor((elapsed - countIn) / (2 * countIn));
+  const row = run.row + Math.floor((elapsed - countIn) / (2 * bar));
   return row < rowCount ? { kind: "moving", row } : { kind: "ended" };
 };
+
+/**
+ * Ініціатор торкнувся екрана, щоб рухати гурт (`SCROLL-26`): позиція стоїть
+ * у всіх на рядку, де була в цю мить. Кінець пісні тут не важить — його
+ * скаже `phaseAt`.
+ */
+export const holdRun = (run: AutoscrollRun, now: number): AutoscrollRun => {
+  const phase = phaseAt(run, now, Infinity);
+  return { ...run, row: phase.kind === "ended" ? run.row : phase.row, held: true };
+};
+
+/**
+ * Ініціатор відпустив екран (`SCROLL-26`): позицією стає його фокусний
+ * рядок, і рахунок іде звідти — без відліку, у темпі й розмірі з моменту
+ * старту. Назад на початок секції — це повтор.
+ */
+export const moveRun = (
+  run: AutoscrollRun,
+  { row, now }: { row: number; now: number },
+): AutoscrollRun => ({ ...run, row, movedAt: now, held: false });
 
 /** Чи цей пристрій — ініціатор (`SCROLL-27`). */
 export const isInitiator = (run: AutoscrollRun | null, device: string): boolean =>
@@ -108,6 +147,13 @@ export const columnPitch = (width: number, desired: number, gap: number): number
   return (width - (count - 1) * gap) / count + gap;
 };
 
+/**
+ * Той самий автоскрол — той самий старт, хоч позицію відтоді й переносили.
+ * Інший — це вже стоп і новий старт.
+ */
+export const sameStart = (a: AutoscrollRun, b: AutoscrollRun): boolean =>
+  a.startedAt === b.startedAt && a.initiator.device === b.initiator.device;
+
 /** Той самий запис — щоб не віддавати новий обʼєкт на кожну зміну мапи. */
 export const sameRun = (a: AutoscrollRun, b: AutoscrollRun): boolean =>
   a.row === b.row &&
@@ -115,7 +161,9 @@ export const sameRun = (a: AutoscrollRun, b: AutoscrollRun): boolean =>
   a.bpm === b.bpm &&
   a.beatsPerBar === b.beatsPerBar &&
   a.initiator.device === b.initiator.device &&
-  a.initiator.name === b.initiator.name;
+  a.initiator.name === b.initiator.name &&
+  a.movedAt === b.movedAt &&
+  a.held === b.held;
 
 const isNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
@@ -149,5 +197,7 @@ export const parseRun = (value: unknown): AutoscrollRun | null => {
       device: initiator.device,
       name: typeof initiator.name === "string" ? initiator.name : null,
     },
+    movedAt: isNumber(v.movedAt) ? v.movedAt : null,
+    held: v.held === true,
   };
 };

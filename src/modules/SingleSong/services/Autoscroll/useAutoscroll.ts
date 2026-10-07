@@ -42,7 +42,14 @@ export const useAutoscrollDrive = (
   attached: boolean,
 ): Drive | null => {
   const run = useAutoscrollRun(songId);
-  const [phase, setPhase] = useState<{row: number; counting: boolean} | null>(null);
+  // Фаза помічена записом, з якого її пораховано: на новий запис (ініціатор
+  // відпустив екран) стара фаза ще один рендер лежить у стані, і кружечок
+  // смикнувся б на старий рядок — разом зі сторінкою.
+  const [phase, setPhase] = useState<{
+    run: AutoscrollRun;
+    row: number;
+    counting: boolean;
+  } | null>(null);
 
   useEffect(() => {
     // Нуль рядків — документ ще не підʼєднаний до редактора (`YjsEditor.connect`
@@ -67,9 +74,9 @@ export const useAutoscrollDrive = (
       }
       const counting = next.kind === "count-in";
       setPhase((current) =>
-        current?.row === next.row && current.counting === counting
+        current?.run === run && current.row === next.row && current.counting === counting
           ? current
-          : {row: next.row, counting},
+          : {run, row: next.row, counting},
       );
     };
 
@@ -78,6 +85,6 @@ export const useAutoscrollDrive = (
     return () => window.clearInterval(timer);
   }, [run, rowCount, songId]);
 
-  if (!run || !phase || !attached) return null;
-  return {...phase, beatMs: beatMs(run), startedAt: run.startedAt};
+  if (!run || !phase || phase.run !== run || !attached) return null;
+  return {row: phase.row, counting: phase.counting, beatMs: beatMs(run), startedAt: run.startedAt};
 };

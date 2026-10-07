@@ -15,6 +15,8 @@ const run = (patch: Partial<AutoscrollRun> = {}): AutoscrollRun => ({
   bpm: 60,
   beatsPerBar: 4,
   initiator: { device: "a", name: "Аня" },
+  movedAt: null,
+  held: false,
   ...patch,
 });
 
@@ -162,6 +164,22 @@ describe("followView — що показати цьому пристрою", () 
       view: { attached: false, edge: null, returnButton: true },
     },
   ])("$name", ({ run, following, reading, view }) => {
-    expect(followView({ run, device: "me", following, reading })).toEqual(view);
+    expect(followView({ run, device: "me", following, reading, steering: false })).toEqual(view);
+  });
+});
+
+describe("followView — ініціатор рухає гурт (`SCROLL-25`)", () => {
+  const mine = run({ initiator: { device: "me", name: "Я" } });
+
+  it("гортає — фокусний рядок за його скролом, тінь лишається, кнопки немає", () => {
+    expect(
+      followView({ run: mine, device: "me", following: false, reading: true, steering: true }),
+    ).toEqual({ attached: false, edge: "initiator", returnButton: false });
+  });
+
+  it("у того, хто слідує, скрол ініціатора нічого не міняє", () => {
+    expect(
+      followView({ run: run(), device: "me", following: true, reading: true, steering: false }),
+    ).toEqual({ attached: true, edge: "follower", returnButton: false });
   });
 });

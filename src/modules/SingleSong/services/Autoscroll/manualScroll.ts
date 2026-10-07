@@ -94,3 +94,96 @@ export const onManualScroll = (handler: () => void): (() => void) => {
     window.removeEventListener("mousedown", onMouse, options);
   };
 };
+
+/**
+ * Скільки скрол має стояти після відпускання, щоб гортання скінчилось.
+ * Інерція (палець уже знято, а сторінка ще їде) і тачпад шлють події й
+ * після «відпустив» — кінцем вважаємо, коли стихли.
+ */
+const SETTLE_MS = 250;
+
+/**
+ * Гортання від початку до кінця (`SCROLL-26`): `start` — перший ручний
+ * скрол (`onManualScroll`), `end` — палець знято, а скрол стих. У колеса
+ * й клавіш пальця немає — лише тиша. Повертає відписку; гортання, що ще
+ * йде, на відписці закінчується (`end`).
+ */
+export const onScrollGesture = ({
+  start,
+  end,
+}: {
+  start: () => void;
+  end: () => void;
+}): (() => void) => {
+  let active = false;
+  let pressed = false;
+  let timer = 0;
+
+  const finish = () => {
+    timer = 0;
+    if (!active || pressed) return;
+    active = false;
+    end();
+  };
+  const settle = () => {
+    if (!active) return;
+    window.clearTimeout(timer);
+    timer = window.setTimeout(finish, SETTLE_MS);
+  };
+
+  const stopManual = onManualScroll(() => {
+    if (!active) {
+      active = true;
+      start();
+    }
+    settle();
+  });
+  const onTouch = (event: TouchEvent) => {
+    pressed = event.touches.length > 0;
+    settle();
+  };
+  const onDown = () => {
+    pressed = true;
+  };
+  const onUp = () => {
+    pressed = false;
+    settle();
+  };
+  // Кнопку миші відпустили поза вікном чи застосунок пішов у фон — `mouseup`
+  // чи `touchend` може й не прийти, а гурт не мусить стояти до повернення.
+  const onAway = () => {
+    pressed = false;
+    if (active) finish();
+  };
+  const onVisibility = () => {
+    if (document.visibilityState === "hidden") onAway();
+  };
+
+  const options = { capture: true, passive: true } as const;
+  window.addEventListener("touchstart", onTouch, options);
+  window.addEventListener("touchend", onTouch, options);
+  window.addEventListener("touchcancel", onTouch, options);
+  window.addEventListener("mousedown", onDown, options);
+  window.addEventListener("mouseup", onUp, options);
+  // Подія `scroll` елементів не спливає, але у фазі захоплення доходить до
+  // `window` — так чуємо й гортання колонок.
+  window.addEventListener("scroll", settle, options);
+  window.addEventListener("blur", onAway);
+  document.addEventListener("visibilitychange", onVisibility);
+  return () => {
+    stopManual();
+    window.removeEventListener("touchstart", onTouch, options);
+    window.removeEventListener("touchend", onTouch, options);
+    window.removeEventListener("touchcancel", onTouch, options);
+    window.removeEventListener("mousedown", onDown, options);
+    window.removeEventListener("mouseup", onUp, options);
+    window.removeEventListener("scroll", settle, options);
+    window.removeEventListener("blur", onAway);
+    document.removeEventListener("visibilitychange", onVisibility);
+    window.clearTimeout(timer);
+    if (active) {
+      active = false;
+      end();
+    }
+  };
+};

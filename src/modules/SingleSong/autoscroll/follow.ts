@@ -4,7 +4,7 @@
  * запис не йде, кожен слідує або ні сам.
  *
  * Ініціатор у цьому автоматі не бере участі: поки він у читанні, позицію
- * веде він сам (`followView`).
+ * веде він сам, а його скрол рухає гурт (`followView`).
  */
 
 import { isInitiator, type AutoscrollRun } from "./run";
@@ -76,20 +76,29 @@ export const IDLE_VIEW: FollowView = { attached: false, edge: null, returnButton
 /**
  * Що показати цьому пристрою. Ініціатор прикріплений, поки він у читанні;
  * вийшов — та сама кнопка повертає його туди.
+ *
+ * Поки ініціатор гортає (`steering`, `SCROLL-25`), його фокусний рядок веде
+ * скрол, а не позиція: так він і обирає, куди перенести гурт. Зі
+ * слідування це не виводить — тінь лишається, кнопки повернення немає.
  */
 export const followView = ({
   run,
   device,
   following,
   reading,
+  steering,
 }: {
   run: AutoscrollRun | null;
   device: string;
   following: boolean;
   reading: boolean;
+  steering: boolean;
 }): FollowView => {
   if (!run) return IDLE_VIEW;
   const initiator = isInitiator(run, device);
+  if (reading && initiator && steering) {
+    return { attached: false, edge: "initiator", returnButton: false };
+  }
   const attached = reading && (initiator || following);
   return {
     attached,

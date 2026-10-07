@@ -16,9 +16,11 @@ import {
   NOT_FOLLOWING,
   type FollowView,
 } from "../../autoscroll/follow";
+import { holdRun, isInitiator, moveRun } from "../../autoscroll/run";
+import { getFocusRow } from "../../components/SlateLyricsPlayground/focusRow/FocusRow";
 import { useHasFocusRow, useSetSongMode } from "../../mode";
-import { DEVICE_ID } from "./autoscrollChannel";
-import { onManualScroll } from "./manualScroll";
+import AutoscrollChannel, { DEVICE_ID } from "./autoscrollChannel";
+import { onManualScroll, onScrollGesture } from "./manualScroll";
 import { useAutoscrollRun } from "./useAutoscroll";
 
 type Follow = FollowView & {
@@ -29,8 +31,10 @@ type Follow = FollowView & {
 const FollowCtx = createContext<Follow>({ ...IDLE_VIEW, returnToRun: () => {} });
 
 /**
- * Слідування на відкритій пісні (`SCROLL-19`…`SCROLL-24`). Правила — у
- * `autoscroll/follow.ts`; тут лише події: запис автоскролу, режим, жести.
+ * Слідування на відкритій пісні (`SCROLL-19`…`SCROLL-24`) і скрол
+ * ініціатора, що рухає гурт (`SCROLL-25`, `SCROLL-26`). Правила — у
+ * `autoscroll/follow.ts` і `autoscroll/run.ts`; тут лише події (запис
+ * автоскролу, режим, жести) і запис дотику й відпускання в кімнату гурту.
  *
  * Стан живе, поки відкрита пісня: інша пісня — новий провайдер (`key`), бо
  * «відкрив пісню» — це момент, від якого рахується, чи я був на ній на
@@ -64,6 +68,28 @@ export const AutoscrollFollowProvider = ({
     return onManualScroll(() => dispatch({ type: "gesture" }));
   }, [state.following]);
 
+  // Ініціатор рухає гурт (`SCROLL-25`, `SCROLL-26`): гортання — позиція в
+  // усіх стоїть, а його фокусний рядок іде за скролом; відпустив — позицією
+  // стає його фокусний рядок.
+  const [steering, setSteering] = useState(false);
+  const initiatorReading = reading && isInitiator(run, DEVICE_ID);
+  useEffect(() => {
+    if (!initiatorReading || songId == null) return;
+    const channel = AutoscrollChannel.getInstance();
+    return onScrollGesture({
+      start: () => {
+        channel.update(songId, (current) => holdRun(current, Date.now()));
+        setSteering(true);
+      },
+      end: () => {
+        channel.update(songId, (current) =>
+          moveRun(current, { row: getFocusRow() ?? current.row, now: Date.now() }),
+        );
+        setSteering(false);
+      },
+    });
+  }, [initiatorReading, songId]);
+
   const returnToRun = useCallback(() => {
     if (!reading) setMode("read");
     dispatch({ type: "return" });
@@ -71,10 +97,16 @@ export const AutoscrollFollowProvider = ({
 
   const value = useMemo(
     () => ({
-      ...followView({ run, device: DEVICE_ID, following: state.following, reading }),
+      ...followView({
+        run,
+        device: DEVICE_ID,
+        following: state.following,
+        reading,
+        steering,
+      }),
       returnToRun,
     }),
-    [run, state.following, reading, returnToRun],
+    [run, state.following, reading, steering, returnToRun],
   );
 
   return <FollowCtx.Provider value={value}>{children}</FollowCtx.Provider>;
