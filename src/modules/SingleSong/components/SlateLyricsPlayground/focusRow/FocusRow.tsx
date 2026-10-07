@@ -17,6 +17,7 @@ import {
 } from "../../../autoscroll/focus";
 import { songRows, type SongRow } from "../../../autoscroll/rows";
 import { columnPitch, displayRow } from "../../../autoscroll/run";
+import { useAutoscrollFollow } from "../../../services/Autoscroll/AutoscrollFollow";
 import {
   useAutoscrollDrive,
   type Drive,
@@ -28,9 +29,10 @@ import "./FocusRow.css";
  * Фокусний рядок (`SCROLL-1`…`SCROLL-3`): кружечок перед рядком, що зараз
  * «по центру». Звідси стартує автоскрол.
  *
- * Поки автоскрол іде, а цей пристрій — ініціатор, фокусний рядок веде не
- * скрол, а позиція автоскролу: кружечок перескакує з рядка на рядок, а
- * сторінка підтягує його до центру (`SCROLL-18`).
+ * Поки автоскрол іде, а екран прикріплений до нього (ініціатор або той, хто
+ * слідує), фокусний рядок веде не скрол, а позиція автоскролу: кружечок
+ * перескакує з рядка на рядок, а сторінка підтягує його до центру
+ * (`SCROLL-18`, `SCROLL-21`).
  *
  * Правила — у чистому модулі `autoscroll/` (номери рядків — `rows.ts`, вибір
  * за прокруткою — `focus.ts`). Тут лише вимір DOM і доставка результату
@@ -236,10 +238,12 @@ export const FocusRowProvider = ({
     [editor, editor.children],
   );
 
-  const drive = useAutoscrollDrive(songId, rows.length);
+  const { attached } = useAutoscrollFollow();
+  const drive = useAutoscrollDrive(songId, rows.length, attached);
   const drivenRow = drive?.row ?? null;
   const counting = drive?.counting ?? false;
   const beat = drive?.beatMs ?? null;
+  const startedAt = drive?.startedAt ?? null;
 
   useEffect(() => {
     activeStore = store;
@@ -274,10 +278,19 @@ export const FocusRowProvider = ({
         return;
       }
       const { rect, ...focus } = placed;
+      const previous = store.get();
       // Сторінку рухаємо, лише коли кружечок перейшов на інший вузол, — а
       // не на кожну зміну розкладки й не на старті: рядок старту вже там, де
-      // його лишила людина.
-      const moved = store.get()?.node !== focus.node;
+      // його лишила людина. Хто почав слідувати, переїжджає звідси ж: його
+      // кружечок стояв там, куди він доскролив.
+      const moved = previous?.node !== focus.node;
+      // Анімація відліку стартує разом із класом, а доля — від моменту
+      // старту: хто приєднався посеред такту, блимає в долю, а не від свого
+      // входу. Лише коли клас лягає на вузол — посеред анімації нова затримка
+      // зсунула б її ще раз.
+      if (focus.counting && startedAt != null && (moved || !previous?.counting)) {
+        editable.style.setProperty("--autoscroll-delay", `${startedAt - Date.now()}ms`);
+      }
       store.set(focus);
       if (moved) keepInView(rect, editable);
     };
@@ -307,7 +320,7 @@ export const FocusRowProvider = ({
       window.removeEventListener("resize", schedule);
       observer.disconnect();
     };
-  }, [enabled, editor, rows, store, editableRef, drivenRow, counting, beat]);
+  }, [enabled, editor, rows, store, editableRef, drivenRow, counting, beat, startedAt]);
 
   return <FocusCtx.Provider value={store}>{children}</FocusCtx.Provider>;
 };

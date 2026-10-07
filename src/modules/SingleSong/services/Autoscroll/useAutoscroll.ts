@@ -19,14 +19,16 @@ export type Drive = {
   counting: boolean;
   /** Тривалість долі, мс — темп блимання. */
   beatMs: number;
+  /** Момент старту — щоб блимання на відліку йшло в долю й у того, хто приєднався посеред такту. */
+  startedAt: number;
 };
 
 /** Як часто перераховувати позицію. Рядок триває секунди — сота частка нічого не зсуне. */
 const TICK_MS = 100;
 
 /**
- * Позиція автоскролу для фокусного рядка — лише в ініціатора: слідування
- * інших — окремий тікет.
+ * Позиція автоскролу для фокусного рядка — коли екран прикріплений до неї
+ * (`attached`: ініціатор у читанні або той, хто слідує, — `followView`).
  *
  * Тут же автоскрол зупиняється сам, коли позиція пройшла останній рядок
  * (`SCROLL-10`): стоп пише кожен, хто відкрив пісню, — стерти запис двічі
@@ -34,7 +36,11 @@ const TICK_MS = 100;
  * рядок понад кінець: годинник, що спішить на секунди, не мусить зупиняти
  * гурт раніше за ініціатора.
  */
-export const useAutoscrollDrive = (songId: string | number, rowCount: number): Drive | null => {
+export const useAutoscrollDrive = (
+  songId: string | number,
+  rowCount: number,
+  attached: boolean,
+): Drive | null => {
   const run = useAutoscrollRun(songId);
   const [phase, setPhase] = useState<{row: number; counting: boolean} | null>(null);
 
@@ -72,6 +78,6 @@ export const useAutoscrollDrive = (songId: string | number, rowCount: number): D
     return () => window.clearInterval(timer);
   }, [run, rowCount, songId]);
 
-  if (!run || !phase || !isInitiator(run, DEVICE_ID)) return null;
-  return {...phase, beatMs: beatMs(run)};
+  if (!run || !phase || !attached) return null;
+  return {...phase, beatMs: beatMs(run), startedAt: run.startedAt};
 };

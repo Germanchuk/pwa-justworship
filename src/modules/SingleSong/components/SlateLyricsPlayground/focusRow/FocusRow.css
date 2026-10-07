@@ -30,10 +30,12 @@
 }
 
 /* Відлік автоскролу (`SCROLL-7`): кружечок спалахує на кожну долю. Темп —
-   `--autoscroll-beat` на редакторі (`FocusRowProvider`); анімація стартує
-   разом із класом, тобто з першою долею. */
+   `--autoscroll-beat` на редакторі (`FocusRowProvider`). Анімація стартує
+   разом із класом; відʼємна затримка `--autoscroll-delay` (скільки минуло
+   від старту) зсуває її в долю тим, хто приєднався посеред відліку. */
 .song-row--counting::before {
-  animation: focus-row-beat var(--autoscroll-beat, 857ms) ease-out infinite;
+  animation: focus-row-beat var(--autoscroll-beat, 857ms) ease-out
+    var(--autoscroll-delay, 0ms) infinite;
 }
 
 @keyframes focus-row-beat {

@@ -1,16 +1,16 @@
 import React, { useCallback } from "react";
-import { ChevronsDown } from "lucide-react";
+import { ChevronsDown, LocateFixed } from "lucide-react";
 import type { Descendant } from "slate";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { canStop, isInitiator, startRun } from "../../autoscroll/run";
+import { canStop, startRun } from "../../autoscroll/run";
 import { useBandOnline } from "#modules/Band/room/useBandRoom";
-import { useHasFocusRow } from "../../mode";
 import { useSongId } from "../../redux/selectors";
 import AutoscrollChannel, {
   DEVICE_ID,
 } from "../../services/Autoscroll/autoscrollChannel";
+import { useAutoscrollFollow } from "../../services/Autoscroll/AutoscrollFollow";
 import { useAutoscrollRun } from "../../services/Autoscroll/useAutoscroll";
 import { extractHeader } from "../../services/songChords/extractHeader";
 import { getFocusRow } from "../SlateLyricsPlayground/focusRow/FocusRow";
@@ -97,24 +97,48 @@ export const AutoscrollControls = () => {
   );
 };
 
+const EDGE_SHADOW = {
+  initiator:
+    "inset 0 0 0 3px rgb(245 158 11 / 0.55), inset 0 0 28px rgb(245 158 11 / 0.45)",
+  follower:
+    "inset 0 0 0 1px rgb(59 130 246 / 0.35), inset 0 0 16px rgb(59 130 246 / 0.25)",
+};
+
 /**
- * Тінь по краю екрана в ініціатора (`SCROLL-29`): попереджає, що автоскрол
- * іде з цього пристрою. Колір — свій, не той, що в тих, хто слідує. Лише в
- * читанні: поза ним ініціатор позицією не керує (`SCROLL-31`).
+ * Тінь по краю екрана, поки екран прикріплений до автоскролу. В ініціатора —
+ * бурштинова (`SCROLL-29`): попереджає, що автоскрол іде з цього пристрою. У
+ * того, хто слідує, — тонка синя (`SCROLL-21`). Лише в читанні: поза ним
+ * ніхто не прикріплений (`SCROLL-22`, `SCROLL-31`).
  */
 export const AutoscrollEdge = () => {
-  const songId = useSongId();
-  const run = useAutoscrollRun(songId ?? null);
-  const hasFocusRow = useHasFocusRow();
-  if (!hasFocusRow || !isInitiator(run, DEVICE_ID)) return null;
+  const { edge } = useAutoscrollFollow();
+  if (!edge) return null;
   return (
     <div
       aria-hidden
       className="pointer-events-none fixed inset-0 z-30"
-      style={{
-        boxShadow:
-          "inset 0 0 0 3px rgb(245 158 11 / 0.55), inset 0 0 28px rgb(245 158 11 / 0.45)",
-      }}
+      style={{ boxShadow: EDGE_SHADOW[edge] }}
     />
+  );
+};
+
+/**
+ * Бокова кнопка повернення (`SCROLL-23`): автоскрол іде, а мій екран — ні.
+ * Натиск везе в читання (якщо я в іншому режимі), до позиції автоскролу й
+ * повертає слідування; кнопка зникає. Після стопу зникає й так (`SCROLL-30`).
+ */
+export const AutoscrollReturn = () => {
+  const { returnButton, returnToRun } = useAutoscrollFollow();
+  if (!returnButton) return null;
+  return (
+    <Button
+      variant="ghost"
+      className="glass fixed right-0 top-1/2 z-40 h-11 -translate-y-1/2 gap-1.5 rounded-l-[19px] rounded-r-none px-3 text-sm font-semibold text-blue-900 animate-in fade-in-0 slide-in-from-right-4"
+      onClick={returnToRun}
+      title="Повернутись до автоскролу"
+    >
+      <LocateFixed className="size-5" strokeWidth={2.25} />
+      До автоскролу
+    </Button>
   );
 };

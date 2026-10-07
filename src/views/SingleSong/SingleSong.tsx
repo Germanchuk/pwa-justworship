@@ -8,6 +8,7 @@ import { bandPath } from "#constants/routes";
 import {SongControls} from "#modules/SingleSong/components/SongControls/SongControls";
 import {SongMenuSlotProvider} from "#modules/SingleSong/components/SongControls/menuSlot";
 import {setNotesAudience} from "#modules/SingleSong/redux/songSlice";
+import {AutoscrollFollowProvider} from "#modules/SingleSong/services/Autoscroll/AutoscrollFollow";
 
 export default function SingleSong() {
   const { bandId, listId, songId, mode } = useParams();
@@ -43,8 +44,11 @@ export default function SingleSong() {
 
   return (
     <SongMenuSlotProvider>
-      <Song />
-      <SongControls />
+      {/* `key`: інша пісня — інше слідування, «відкрив пісню» рахується заново. */}
+      <AutoscrollFollowProvider key={songId} songId={songId ?? null}>
+        <Song />
+        <SongControls />
+      </AutoscrollFollowProvider>
     </SongMenuSlotProvider>
   );
 }
