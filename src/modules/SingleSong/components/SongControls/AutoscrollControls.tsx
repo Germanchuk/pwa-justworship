@@ -4,14 +4,17 @@ import type { Descendant } from "slate";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { canStop, startRun } from "../../autoscroll/run";
+import { canStop, isInitiator, startRun } from "../../autoscroll/run";
 import { useBandOnline } from "#modules/Band/room/useBandRoom";
 import { useSongId } from "../../redux/selectors";
 import AutoscrollChannel, {
   DEVICE_ID,
 } from "../../services/Autoscroll/autoscrollChannel";
 import { useAutoscrollFollow } from "../../services/Autoscroll/AutoscrollFollow";
-import { useAutoscrollRun } from "../../services/Autoscroll/useAutoscroll";
+import {
+  useAutoscrollRun,
+  useInitiatorPresent,
+} from "../../services/Autoscroll/useAutoscroll";
 import { extractHeader } from "../../services/songChords/extractHeader";
 import { getFocusRow } from "../SlateLyricsPlayground/focusRow/FocusRow";
 import { getActiveSongEditor } from "../SlateLyricsPlayground/songEditorRegistry";
@@ -24,17 +27,19 @@ import { MENU_TILE } from "./tile";
  *
  * Хто натиснув «старт», стає ініціатором: його фокусний рядок після такту
  * відліку йде по пісні сам. В інших на цій пісні кнопка неактивна, а поруч —
- * імʼя ініціатора (`SCROLL-6`, `SCROLL-8`). Без звʼязку з кімнатою гурту
+ * імʼя ініціатора (`SCROLL-6`, `SCROLL-8`); ініціатора немає на пісні в
+ * читанні — зупинити може будь-хто. Без звʼязку з кімнатою гурту
  * кнопка неактивна: автоскрол буває лише спільним (`SCROLL-11`).
  */
 export const AutoscrollControls = () => {
   const songId = useSongId();
   const run = useAutoscrollRun(songId ?? null);
+  const present = useInitiatorPresent(songId ?? null);
   const online = useBandOnline();
   const username = useCurrentUsername();
 
   const running = run != null;
-  const mayStop = run != null && canStop(run, DEVICE_ID);
+  const mayStop = run != null && canStop(run, DEVICE_ID, present);
 
   const handleClick = useCallback(() => {
     if (songId == null) return;
@@ -57,7 +62,10 @@ export const AutoscrollControls = () => {
     );
   }, [songId, run, mayStop, username]);
 
-  const leader = running && !mayStop ? (run.initiator.name ?? "хтось") : null;
+  // Імʼя ініціатора бачать усі, крім нього самого, — і тоді, коли його вже
+  // немає, а зупинити може будь-хто (`SCROLL-6`).
+  const leader =
+    running && !isInitiator(run, DEVICE_ID) ? (run.initiator.name ?? "хтось") : null;
 
   return (
     <div className="flex items-center gap-2">
@@ -85,7 +93,9 @@ export const AutoscrollControls = () => {
           !online
             ? "Автоскрол — немає звʼязку з сервером"
             : mayStop
-              ? "Зупинити автоскрол"
+              ? leader
+                ? `Зупинити автоскрол (вів: ${leader})`
+                : "Зупинити автоскрол"
               : leader
                 ? `Автоскрол веде: ${leader}`
                 : "Запустити автоскрол звідси"

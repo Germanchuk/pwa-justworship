@@ -116,9 +116,24 @@ export const moveRun = (
 export const isInitiator = (run: AutoscrollRun | null, device: string): boolean =>
   run?.initiator.device === device;
 
-/** Хто може зупинити (`SCROLL-8`). */
-export const canStop = (run: AutoscrollRun, device: string): boolean =>
-  isInitiator(run, device);
+/**
+ * Хто може зупинити (`SCROLL-8`): ініціатор — завжди; решта — коли
+ * ініціатора немає на пісні в читанні.
+ */
+export const canStop = (run: AutoscrollRun, device: string, present: boolean): boolean =>
+  isInitiator(run, device) || !present;
+
+/**
+ * Ініціатор зник, лишивши палець «на екрані» (`SCROLL-26`): закрив
+ * застосунок чи втратив звʼязок посеред гортання. Позиція не мусить стояти
+ * до стопу — відпускаємо її на тому рядку, де стоїть, і рахунок іде звідти
+ * за формулою (`SCROLL-8`). Відпускати нічого — той самий запис.
+ */
+export const releaseAbandoned = (
+  run: AutoscrollRun,
+  present: boolean,
+  now: number,
+): AutoscrollRun => (run.held && !present ? moveRun(run, { row: run.row, now }) : run);
 
 /**
  * Де показати позицію в МОЄМУ показі. Рядок, схований фільтром чи

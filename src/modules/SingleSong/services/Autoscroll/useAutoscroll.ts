@@ -11,6 +11,18 @@ export const useAutoscrollRun = (songId: string | number | null): AutoscrollRun 
   );
 };
 
+/**
+ * Чи ініціатор автоскролу на цій пісні в режимі читання (`SCROLL-8`).
+ * Автоскролу немає — `false`.
+ */
+export const useInitiatorPresent = (songId: string | number | null): boolean => {
+  const channel = AutoscrollChannel.getInstance();
+  return useSyncExternalStore(
+    channel.subscribe,
+    () => songId != null && channel.isInitiatorPresent(songId),
+  );
+};
+
 /** Що автоскрол каже фокусному рядку цього пристрою. */
 export type Drive = {
   /** Позиція — номер рядка пісні. */

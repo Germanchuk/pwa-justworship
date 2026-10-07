@@ -16,12 +16,13 @@ import {
   NOT_FOLLOWING,
   type FollowView,
 } from "../../autoscroll/follow";
-import { holdRun, isInitiator, moveRun } from "../../autoscroll/run";
+import { useBandOnline } from "#modules/Band/room/useBandRoom";
+import { holdRun, isInitiator, moveRun, releaseAbandoned } from "../../autoscroll/run";
 import { getFocusRow } from "../../components/SlateLyricsPlayground/focusRow/FocusRow";
-import { useHasFocusRow, useSetSongMode } from "../../mode";
+import { useHasFocusRow, useSetSongMode, useSongMode } from "../../mode";
 import AutoscrollChannel, { DEVICE_ID } from "./autoscrollChannel";
 import { onManualScroll, onScrollGesture } from "./manualScroll";
-import { useAutoscrollRun } from "./useAutoscroll";
+import { useAutoscrollRun, useInitiatorPresent } from "./useAutoscroll";
 
 type Follow = FollowView & {
   /** Кнопка повернення: у читання, до позиції, знову слідую (`SCROLL-23`). */
@@ -31,10 +32,11 @@ type Follow = FollowView & {
 const FollowCtx = createContext<Follow>({ ...IDLE_VIEW, returnToRun: () => {} });
 
 /**
- * Слідування на відкритій пісні (`SCROLL-19`…`SCROLL-24`) і скрол
- * ініціатора, що рухає гурт (`SCROLL-25`, `SCROLL-26`). Правила — у
+ * Слідування на відкритій пісні (`SCROLL-19`…`SCROLL-24`), скрол
+ * ініціатора, що рухає гурт (`SCROLL-25`, `SCROLL-26`), і присутність на
+ * пісні — для «ініціатора немає» (`SCROLL-8`, `SCROLL-31`). Правила — у
  * `autoscroll/follow.ts` і `autoscroll/run.ts`; тут лише події (запис
- * автоскролу, режим, жести) і запис дотику й відпускання в кімнату гурту.
+ * автоскролу, режим, жести) і записи в кімнату гурту.
  *
  * Стан живе, поки відкрита пісня: інша пісня — новий провайдер (`key`), бо
  * «відкрив пісню» — це момент, від якого рахується, чи я був на ній на
@@ -48,6 +50,7 @@ export const AutoscrollFollowProvider = ({
   children: ReactNode;
 }) => {
   const run = useAutoscrollRun(songId);
+  const mode = useSongMode();
   const reading = useHasFocusRow();
   const setMode = useSetSongMode();
   const [openedAt] = useState(Date.now);
@@ -89,6 +92,30 @@ export const AutoscrollFollowProvider = ({
       },
     });
   }, [initiatorReading, songId]);
+
+  // Присутність: на якій я пісні й у якому режимі. Зміна режиму переписує
+  // поле, а не знімає його й ставить знову, — інакше в інших на мить
+  // «ініціатора немає».
+  useEffect(() => {
+    if (songId == null) return;
+    const channel = AutoscrollChannel.getInstance();
+    return () => channel.setPresence(null);
+  }, [songId]);
+  useEffect(() => {
+    if (songId != null) AutoscrollChannel.getInstance().setPresence({ songId, mode });
+  }, [songId, mode]);
+
+  // Ініціатор зник із пальцем «на екрані» — позиція не стоїть до стопу:
+  // відпускає будь-хто на пісні. Без звʼязку — ні: я не бачу, чи він є, а
+  // запис поїде, щойно підʼєднаюсь.
+  const present = useInitiatorPresent(songId);
+  const online = useBandOnline();
+  useEffect(() => {
+    if (!online || songId == null) return;
+    AutoscrollChannel.getInstance().update(songId, (current) =>
+      releaseAbandoned(current, present, Date.now()),
+    );
+  }, [run, present, online, songId]);
 
   const returnToRun = useCallback(() => {
     if (!reading) setMode("read");

@@ -8,6 +8,7 @@ import {
   moveRun,
   parseRun,
   phaseAt,
+  releaseAbandoned,
   sameRun,
   sameStart,
   startRun,
@@ -140,10 +141,29 @@ describe("ініціатор рухає гурт (`SCROLL-25`, `SCROLL-26`)", ()
 
 describe("canStop — хто може зупинити (`SCROLL-8`)", () => {
   it.each([
-    { name: "ініціатор", device: "a", can: true },
-    { name: "інший пристрій", device: "b", can: false },
-  ])("$name", ({ device, can }) => {
-    expect(canStop(run(), device)).toBe(can);
+    { name: "ініціатор, він на пісні", device: "a", present: true, can: true },
+    { name: "ініціатор, що вийшов, — теж", device: "a", present: false, can: true },
+    { name: "інший пристрій, ініціатор на пісні", device: "b", present: true, can: false },
+    { name: "інший пристрій, ініціатора немає — може", device: "b", present: false, can: true },
+  ])("$name", ({ device, present, can }) => {
+    expect(canStop(run(), device, present)).toBe(can);
+  });
+});
+
+describe("releaseAbandoned — притриманий запис, чий ініціатор зник", () => {
+  it("ініціатора немає, а палець «на екрані» — відпускаємо на тому ж рядку, рахунок звідти", () => {
+    const held = holdRun(run(), 30_000);
+    const released = releaseAbandoned(held, false, 50_000);
+    expect(released).toEqual({ ...held, held: false, movedAt: 50_000 });
+    expect(phaseAt(released, 50_000, 20)).toEqual({ kind: "moving", row: 3 });
+    expect(phaseAt(released, 58_000, 20)).toEqual({ kind: "moving", row: 4 });
+  });
+
+  it.each([
+    { name: "ініціатор на пісні — тримає далі", value: holdRun(run(), 30_000), present: true },
+    { name: "не притриманий — нічого", value: run(), present: false },
+  ])("$name — той самий запис", ({ value, present }) => {
+    expect(releaseAbandoned(value, present, 50_000)).toBe(value);
   });
 });
 
