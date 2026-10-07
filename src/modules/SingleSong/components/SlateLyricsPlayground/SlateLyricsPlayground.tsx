@@ -193,7 +193,11 @@ function CollabView({ songId }: { songId: string | number }) {
         {/* Читання й примітки — без contentEditable: тап не ставить
             каретку й не відкриває клавіатуру (`MODE-6`, `MODE-19`).
             Виділення під позначку в примітках — `useAnnotationRange`. */}
-        <FocusRowProvider enabled={hasFocusRow} editableRef={editableRef}>
+        <FocusRowProvider
+          songId={songId}
+          enabled={hasFocusRow}
+          editableRef={editableRef}
+        >
           <DecoratedEditable
             editableRef={editableRef}
             readOnly={!canEditContent}

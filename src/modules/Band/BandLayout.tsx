@@ -3,7 +3,7 @@ import { Navigate, Outlet, useMatch } from "react-router-dom";
 import { useSelector } from "react-redux";
 
 import { Routes } from "#constants/routes";
-import { BandAudioBridge } from "./audio/BandAudioBridge";
+import { BandRoomBridge } from "./room/BandRoomBridge";
 
 export type Band = {
   id: number | string;
@@ -79,7 +79,7 @@ export default function BandLayout() {
 
   return (
     <>
-      <BandAudioBridge bandId={band.id} />
+      <BandRoomBridge bandId={band.id} />
       <Outlet />
     </>
   );

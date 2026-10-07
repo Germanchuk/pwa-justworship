@@ -16,12 +16,21 @@ import {
   rowAtFraction,
 } from "../../../autoscroll/focus";
 import { songRows, type SongRow } from "../../../autoscroll/rows";
+import { columnPitch, displayRow } from "../../../autoscroll/run";
+import {
+  useAutoscrollDrive,
+  type Drive,
+} from "../../../services/Autoscroll/useAutoscroll";
 import { COLUMNS_QUERY } from "../useColumnsRelayout";
 import "./FocusRow.css";
 
 /**
  * Фокусний рядок (`SCROLL-1`…`SCROLL-3`): кружечок перед рядком, що зараз
- * «по центру». Звідси стартуватиме автоскрол.
+ * «по центру». Звідси стартує автоскрол.
+ *
+ * Поки автоскрол іде, а цей пристрій — ініціатор, фокусний рядок веде не
+ * скрол, а позиція автоскролу: кружечок перескакує з рядка на рядок, а
+ * сторінка підтягує його до центру (`SCROLL-18`).
  *
  * Правила — у чистому модулі `autoscroll/` (номери рядків — `rows.ts`, вибір
  * за прокруткою — `focus.ts`). Тут лише вимір DOM і доставка результату
@@ -38,6 +47,8 @@ export type Focus = {
   row: number;
   /** Вузол, перед яким малюємо кружечок: перший ВИДИМИЙ вузол рядка. */
   node: Element;
+  /** Іде відлік автоскролу — кружечок блимає на кожну долю (`SCROLL-7`). */
+  counting?: boolean;
 };
 
 type FocusStore = {
@@ -52,7 +63,13 @@ const createFocusStore = (): FocusStore => {
   return {
     get: () => current,
     set: (next) => {
-      if (current?.row === next?.row && current?.node === next?.node) return;
+      if (
+        current?.row === next?.row &&
+        current?.node === next?.node &&
+        current?.counting === next?.counting
+      ) {
+        return;
+      }
       current = next;
       listeners.forEach((l) => l());
     },
@@ -64,6 +81,15 @@ const createFocusStore = (): FocusStore => {
 };
 
 const FocusCtx = createContext<FocusStore | null>(null);
+
+/**
+ * Стор відкритої пісні — для кнопки автоскролу, що живе в меню пісні, поза
+ * деревом `<Slate>` (той самий патерн, що `songEditorRegistry`).
+ */
+let activeStore: FocusStore | null = null;
+
+/** Номер фокусного рядка відкритої пісні — звідси стартує автоскрол. */
+export const getFocusRow = (): number | null => activeStore?.get()?.row ?? null;
 
 type Measured = { row: number; node: Element; rect: DOMRect };
 
@@ -135,11 +161,64 @@ const pickFocus = (
   return hit ? { row: hit.row, node: hit.node } : null;
 };
 
+/**
+ * Тримає кружечок у полі зору, поки його веде автоскрол (`SCROLL-18`).
+ * Один стовпець — сторінка плавно підтягує рядок до центру екрана. Колонки —
+ * сторінка стоїть, доки кружечок не перейде середину видимої області, тоді
+ * гортається на одну колонку.
+ */
+const keepInView = (rect: DOMRect, editable: HTMLElement) => {
+  if (!window.matchMedia(COLUMNS_QUERY).matches) {
+    window.scrollTo({
+      top: window.scrollY + (rect.top + rect.bottom) / 2 - window.innerHeight / 2,
+      behavior: "smooth",
+    });
+    return;
+  }
+
+  const box = editable.getBoundingClientRect();
+  const style = getComputedStyle(editable);
+  const pitch = columnPitch(
+    editable.clientWidth,
+    parseFloat(style.columnWidth) || box.width,
+    parseFloat(style.columnGap) || 0,
+  );
+  const delta = rect.left - box.left;
+  // Рядок зовсім поза видимою областю (змінили розмір вікна, рядок далеко) —
+  // гортаємо одразу до його колонки.
+  const steps =
+    rect.right < box.left || rect.left > box.right
+      ? Math.floor(delta / pitch)
+      : rect.left > box.left + box.width / 2
+        ? 1
+        : 0;
+  if (steps !== 0) {
+    editable.scrollBy({ left: steps * pitch, behavior: "smooth" });
+  }
+};
+
+/** Автоскрол веде фокус: позиція, показана на МОЄМУ видимому рядку. */
+const placeDriven = (
+  measured: Measured[],
+  drive: Pick<Drive, "row" | "counting">,
+): (Focus & { rect: DOMRect }) | null => {
+  const shown = displayRow(
+    measured.map((m) => m.row),
+    drive.row,
+  );
+  const hit = measured.find((m) => m.row === shown);
+  return hit
+    ? { row: drive.row, node: hit.node, counting: drive.counting, rect: hit.rect }
+    : null;
+};
+
 export const FocusRowProvider = ({
+  songId,
   enabled,
   editableRef,
   children,
 }: {
+  songId: string | number;
   /** Фокусний рядок є лише в режимі читання (`SCROLL-1`). */
   enabled: boolean;
   editableRef: RefObject<HTMLElement | null>;
@@ -157,6 +236,18 @@ export const FocusRowProvider = ({
     [editor, editor.children],
   );
 
+  const drive = useAutoscrollDrive(songId, rows.length);
+  const drivenRow = drive?.row ?? null;
+  const counting = drive?.counting ?? false;
+  const beat = drive?.beatMs ?? null;
+
+  useEffect(() => {
+    activeStore = store;
+    return () => {
+      if (activeStore === store) activeStore = null;
+    };
+  }, [store]);
+
   useEffect(() => {
     const editable = editableRef.current;
     if (!enabled || !editable) {
@@ -164,19 +255,44 @@ export const FocusRowProvider = ({
       return;
     }
 
+    // Темп блимання на відліку — CSS-анімація кружечка (`FocusRow.css`).
+    if (beat != null) {
+      editable.style.setProperty("--autoscroll-beat", `${beat}ms`);
+    }
+
     let raf = 0;
     const measure = () => {
       raf = 0;
-      store.set(pickFocus(measureRows(editor, rows), editable));
+      const measured = measureRows(editor, rows);
+      if (drivenRow == null) {
+        store.set(pickFocus(measured, editable));
+        return;
+      }
+      const placed = placeDriven(measured, { row: drivenRow, counting });
+      if (!placed) {
+        store.set(null);
+        return;
+      }
+      const { rect, ...focus } = placed;
+      // Сторінку рухаємо, лише коли кружечок перейшов на інший вузол, — а
+      // не на кожну зміну розкладки й не на старті: рядок старту вже там, де
+      // його лишила людина.
+      const moved = store.get()?.node !== focus.node;
+      store.set(focus);
+      if (moved) keepInView(rect, editable);
     };
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(measure);
     };
 
     schedule();
-    window.addEventListener("scroll", schedule, { passive: true });
+    // Поки фокус веде автоскрол, скрол його не рухає.
+    const onScroll = drivenRow == null ? schedule : null;
+    if (onScroll) {
+      window.addEventListener("scroll", onScroll, { passive: true });
+      editable.addEventListener("scroll", onScroll, { passive: true });
+    }
     window.addEventListener("resize", schedule);
-    editable.addEventListener("scroll", schedule, { passive: true });
     // Розкладка міняється й без скролу: шрифти доїхали, змінилась висота
     // колонок, згорнули секцію.
     const observer = new ResizeObserver(schedule);
@@ -184,12 +300,14 @@ export const FocusRowProvider = ({
 
     return () => {
       if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener("scroll", schedule);
+      if (onScroll) {
+        window.removeEventListener("scroll", onScroll);
+        editable.removeEventListener("scroll", onScroll);
+      }
       window.removeEventListener("resize", schedule);
-      editable.removeEventListener("scroll", schedule);
       observer.disconnect();
     };
-  }, [enabled, editor, rows, store, editableRef]);
+  }, [enabled, editor, rows, store, editableRef, drivenRow, counting, beat]);
 
   return <FocusCtx.Provider value={store}>{children}</FocusCtx.Provider>;
 };
@@ -197,13 +315,15 @@ export const FocusRowProvider = ({
 const noSubscribe = () => () => {};
 
 /**
- * Чи малювати кружечок перед цим вузлом. Поза провайдером (статичний показ
- * у зібранні) — ніколи.
+ * Клас кружечка для цього вузла: `song-row--focus`, на відліку ще й
+ * `song-row--counting`, або нічого. Поза провайдером (статичний показ у
+ * зібранні) — нічого.
  */
-export const useIsFocusNode = (element: Element): boolean => {
+export const useFocusClass = (element: Element): string => {
   const store = useContext(FocusCtx);
-  return useSyncExternalStore(
-    store?.subscribe ?? noSubscribe,
-    () => store?.get()?.node === element,
-  );
+  return useSyncExternalStore(store?.subscribe ?? noSubscribe, () => {
+    const focus = store?.get();
+    if (focus?.node !== element) return "";
+    return focus.counting ? "song-row--focus song-row--counting" : "song-row--focus";
+  });
 };

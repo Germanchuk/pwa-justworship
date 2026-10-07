@@ -2,6 +2,7 @@ import React, {useEffect} from "react";
 
 import DronePlayer from "../../services/DronePlayer/DronePlayer";
 import {useCanAnnotate, useCanPlay} from "../../mode";
+import {AutoscrollControls, AutoscrollEdge} from "./AutoscrollControls";
 import {NotesAudienceSelect} from "../SlateLyricsPlayground/comments/NotesAudienceSelect";
 import {ModeSwitch} from "./ModeSwitch/ModeSwitch";
 import {PlaybackControls} from "./PlaybackControls";
@@ -23,8 +24,8 @@ import {useSongMenuOpen} from "./menuOpen";
  *             [🗒]
  *
  *             [⋯]    ← дії з піснею (нативний список)
- *             [⏻]    ← кнопка режиму: дрон у читанні, адресат
- *                      у примітках, у редагуванні нічого
+ *             [⏻]    ← кнопки режиму: дрон і автоскрол у читанні,
+ *             [⇊]      адресат у примітках, у редагуванні нічого
  *
  *             [🖍]   ← слот: палітра / меню позначки (`SongMenuSlot`)
  *
@@ -43,28 +44,39 @@ export const SongControls = () => {
   }, [canPlay]);
 
   return (
-    <div
-      // Один проміжок між усіма групами кнопок — і в рядку, і в стовпчику.
-      className="fixed right-2 z-40 flex flex-col items-end gap-2"
-      style={{ top: "max(0.5rem, env(safe-area-inset-top))" }}
-    >
-      <ModeSwitch expanded={open} />
-      {open && <SongActions />}
-      {open && <ModeActions />}
+    <>
+      <AutoscrollEdge />
+      <div
+        // Один проміжок між усіма групами кнопок — і в рядку, і в стовпчику.
+        className="fixed right-2 z-40 flex flex-col items-end gap-2"
+        style={{ top: "max(0.5rem, env(safe-area-inset-top))" }}
+      >
+        <ModeSwitch expanded={open} />
+        {open && <SongActions />}
+        {open && <ModeActions />}
 
-      <SongMenuSlot />
-    </div>
+        <SongMenuSlot />
+      </div>
+    </>
   );
 };
 
 /**
- * Кнопка поточного режиму — окрема плитка під «⋯»: дрон у читанні
- * (`PLAY-2`), адресат приміток у примітках, у редагуванні нічого.
+ * Кнопки поточного режиму — плитки під «⋯»: дрон (`PLAY-2`) і під ним
+ * автоскрол (`SCROLL-4`) у читанні, адресат приміток у примітках, у
+ * редагуванні нічого.
  */
 const ModeActions = () => {
   const canPlay = useCanPlay();
   const canAnnotate = useCanAnnotate();
-  if (canPlay) return <PlaybackControls />;
+  if (canPlay) {
+    return (
+      <>
+        <PlaybackControls />
+        <AutoscrollControls />
+      </>
+    );
+  }
   if (canAnnotate) return <NotesAudienceSelect />;
   return null;
 };

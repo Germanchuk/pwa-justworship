@@ -28,3 +28,21 @@
   margin-top: 0;
   margin-bottom: -3px;
 }
+
+/* Відлік автоскролу (`SCROLL-7`): кружечок спалахує на кожну долю. Темп —
+   `--autoscroll-beat` на редакторі (`FocusRowProvider`); анімація стартує
+   разом із класом, тобто з першою долею. */
+.song-row--counting::before {
+  animation: focus-row-beat var(--autoscroll-beat, 857ms) ease-out infinite;
+}
+
+@keyframes focus-row-beat {
+  from {
+    opacity: 1;
+    transform: scale(1.8);
+  }
+  to {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+}

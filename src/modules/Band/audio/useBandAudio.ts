@@ -6,7 +6,7 @@ import type {AudioHostStatus} from "./types";
 /**
  * Живий статус хоста звуку гурту (null — хост не онлайн / не в кімнаті).
  * Працює будь-де, включно з порталом нижньої панелі: канал — синглтон,
- * підключення тримає BandAudioBridge у BandLayout.
+ * підключення тримає BandRoomBridge у BandLayout.
  */
 export const useAudioHostStatus = (): AudioHostStatus | null => {
   const channel = BandAudioChannel.getInstance();
