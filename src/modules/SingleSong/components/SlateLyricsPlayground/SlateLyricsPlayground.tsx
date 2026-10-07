@@ -12,6 +12,7 @@ import { withComments } from "./comments/withComments";
 import { withModeGuard } from "./mode/withModeGuard";
 import { RenderLeaf } from "./comments/renderLeaf";
 import { NoteHeadsProvider } from "./comments/NoteHeadsContext";
+import { FocusRowProvider } from "./focusRow/FocusRow";
 import { CommentsFab } from "./comments/CommentsFab";
 import { LostCommentsBlock } from "./comments/LostCommentsBlock";
 import { pushLostComment } from "./comments/lostComments";
@@ -20,7 +21,7 @@ import { useCollabProvider } from "./useCollabProvider";
 import { useFillViewportHeight } from "./useFillViewportHeight";
 import { useColumnsRelayout } from "./useColumnsRelayout";
 import { setActiveSongEditor } from "./songEditorRegistry";
-import { useCanAnnotate, useCanEditContent } from "../../mode";
+import { useCanAnnotate, useCanEditContent, useHasFocusRow } from "../../mode";
 import { useConnectionStatus } from "../../redux/selectors";
 import { useCurrentUsername } from "./elements/hooks";
 import { useChordDecorate } from "./useChordDecorate";
@@ -77,6 +78,7 @@ function CollabView({ songId }: { songId: string | number }) {
   // актуальне значення через ref.
   const canEditContent = useCanEditContent();
   const canAnnotate = useCanAnnotate();
+  const hasFocusRow = useHasFocusRow();
   const canEditRef = useRef(canEditContent);
   useEffect(() => {
     canEditRef.current = canEditContent;
@@ -191,11 +193,13 @@ function CollabView({ songId }: { songId: string | number }) {
         {/* Читання й примітки — без contentEditable: тап не ставить
             каретку й не відкриває клавіатуру (`MODE-6`, `MODE-19`).
             Виділення під позначку в примітках — `useAnnotationRange`. */}
-        <DecoratedEditable
-          editableRef={editableRef}
-          readOnly={!canEditContent}
-          placeholder={canEditContent ? "Почніть друкувати..." : undefined}
-        />
+        <FocusRowProvider enabled={hasFocusRow} editableRef={editableRef}>
+          <DecoratedEditable
+            editableRef={editableRef}
+            readOnly={!canEditContent}
+            placeholder={canEditContent ? "Почніть друкувати..." : undefined}
+          />
+        </FocusRowProvider>
       </NoteHeadsProvider>
       {canAnnotate && <CommentsFab />}
     </Slate>

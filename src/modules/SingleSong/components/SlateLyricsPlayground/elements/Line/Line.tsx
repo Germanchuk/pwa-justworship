@@ -3,6 +3,7 @@ import type { RenderElementProps } from "slate-react";
 import { NoteCards } from "../../comments/NoteCards";
 import { useNoteHeadsFor } from "../../comments/NoteHeadsContext";
 import { useRowHidden } from "../../display/useRowHidden";
+import { useIsFocusNode } from "../../focusRow/FocusRow";
 import { useFirstInSectionInfo } from "../hooks";
 import { SectionControls } from "../SectionControls/SectionControls";
 import "./Line.css";
@@ -10,6 +11,7 @@ import "./Line.css";
 export const Line = ({ attributes, children, element }: RenderElementProps) => {
   const { isFirst } = useFirstInSectionInfo(element);
   const hidden = useRowHidden(element);
+  const focus = useIsFocusNode(element);
   // Картки приміток, чия «голова» — цей рядок. Живуть усередині вузла рядка,
   // тож не можуть від нього відірватись — див. `comments/noteHeads.ts`.
   const notes = useNoteHeadsFor(element);
@@ -17,7 +19,7 @@ export const Line = ({ attributes, children, element }: RenderElementProps) => {
     <div
       className={`song-line ${isFirst ? "song-line--first" : ""} ${
         notes.length > 0 ? "song-line--noted" : ""
-      } ${hidden ? "song-row--hidden" : ""}`}
+      } ${hidden ? "song-row--hidden" : ""} ${focus ? "song-row--focus" : ""}`}
       {...attributes}
     >
       <NoteCards notes={notes} />

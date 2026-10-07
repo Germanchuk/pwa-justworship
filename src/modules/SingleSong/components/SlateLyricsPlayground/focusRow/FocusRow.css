@@ -1,0 +1,30 @@
+/* Фокусний рядок (`SCROLL-1`): ненавʼязливий кружечок у лівому полі рядка.
+   Поле (padding-left: 16px) у рядків уже є, тож кружечок нічого не зсуває.
+   Стоїть на першому текстовому рядку вузла: 0.8em — пів висоти рядка. */
+.song-row--focus::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 0.8em;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Заголовок секції вищий — line-height 2.2. */
+.song-line--first.song-row--focus::before {
+  top: 1.1em;
+}
+
+/* Над рядком картка примітки — тримаємось тексту внизу, як `.section-controls`. */
+.song-line--noted.song-row--focus::before,
+.chord-line--noted.song-row--focus::before {
+  top: auto;
+  bottom: 0.8em;
+  margin-top: 0;
+  margin-bottom: -3px;
+}
