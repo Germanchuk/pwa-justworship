@@ -51,6 +51,26 @@ export function textMark(p: Peer, range: Range): TextMark | null {
   };
 }
 
+/**
+ * Наскрізне виділення → по шматку на кожну видиму доріжку кожного рядка,
+ * який воно зачіпає. Сховані доріжки в позначку не потрапляють.
+ */
+export function textMarks(p: Peer, range: Range, visible: Record<LaneType, boolean>): TextMark[] {
+  const [start, end] = Range.edges(range);
+  const out: TextMark[] = [];
+  for (let ln = start.path[0]; ln <= end.path[0]; ln++) {
+    const line = p.editor.children[ln] as unknown as { children: { type: LaneType }[] };
+    line.children.forEach((laneNode, l) => {
+      if (!visible[laneNode.type]) return;
+      const piece = Range.intersection(range, Editor.range(p.editor, [ln, l]));
+      if (!piece || Range.isCollapsed(piece) || !Editor.string(p.editor, piece).trim()) return;
+      const m = textMark(p, piece);
+      if (m) out.push(m);
+    });
+  }
+  return out;
+}
+
 export type ResolvedTextMark = { mark: TextMark; seg: number | null; range?: Range; lost: boolean };
 export type LaneNoteView = {
   note: LaneNote;

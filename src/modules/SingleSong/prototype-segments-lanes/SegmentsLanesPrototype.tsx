@@ -13,7 +13,7 @@ import { createEditor, Editor, Element, Node, NodeEntry, Range, Text, Transforms
 import { Editable, ReactEditor, RenderElementProps, RenderLeafProps, Slate, withReact } from "slate-react";
 import { flush, Pair, Peer, removeSegment, setSegmentProps } from "./harness";
 import { CAJON_STEPS, cajonKey, cajonOf, inherited } from "./model";
-import { LaneNoteView, laneNotes, makeLanesPair, resolveLaneNotes, TextMark, textMark, transposeLine } from "./lanesModel";
+import { LaneNoteView, laneNotes, makeLanesPair, resolveLaneNotes, TextMark, textMark, textMarks, transposeLine } from "./lanesModel";
 import { LaneType, lanePath, laneText, lineKind } from "./textLanes";
 
 type Who = "A" | "B";
@@ -184,9 +184,9 @@ function PeerPane(props: {
 
   const markSelection = () => {
     const sel = peer.editor.selection;
-    const m = sel && textMark(peer, sel);
-    if (!m) return void ask("Виділи шматок тексту в одному рядку — акордів або слів.", null);
-    setPending((p) => [...p, m]);
+    const ms = sel ? textMarks(peer, sel, display) : [];
+    if (!ms.length) return void ask("Виділи текст — можна через кілька рядків.", null);
+    setPending((p) => [...p, ...ms]);
   };
   const createNote = async () => {
     if (!pending.length) return void ask("Спершу позначи виділений текст (можна кілька разів, у різних доріжках).", null);
