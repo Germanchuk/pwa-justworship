@@ -335,7 +335,9 @@ function TextLane({ attributes, children, element, lane }: RenderElementProps & 
   const visible =
     kind === "note"
       ? lane === "words" // структурна примітка — завжди, незалежно від галочок
-      : pane.display[lane] && (lane === "words" || kind === "segment" || (kind === "empty" && focused));
+      : kind === "empty"
+        ? lane === "words" || (pane.display.chords && focused) // порожній рядок — завжди; акорди лише під курсором
+        : pane.display[lane];
   const transposed = lane === "chords" && pane.display.semis !== 0;
 
   // Сховане лишаємо в DOM для Slate, але не показуємо.
