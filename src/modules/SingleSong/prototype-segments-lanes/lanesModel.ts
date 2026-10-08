@@ -59,6 +59,28 @@ export function laneShown(editor: Editor, ln: number, lane: LaneType, visible: R
   return visible[lane] || (lane === "words" && lineKind(editor, ln) === "note");
 }
 
+export type LaneDisplay = Record<LaneType, boolean>;
+
+/**
+ * Що учасник бачить і може правити в доріжці рядка (його особисті галочки).
+ * Схована доріжка не існує для курсору й правок — «що бачу, те й пишу».
+ *  - структурна примітка: слова видно й можна правити завжди, акордів немає;
+ *  - порожній рядок: видно завжди; друкуєш у видиму доріжку — у слова, якщо
+ *    вони показуються, інакше в акорди; рядок акордів над словами — лише під
+ *    курсором; якщо сховано все — рядок видно, але писати в нього не можна;
+ *  - відрізок: доріжку видно й можна правити, якщо вона показується.
+ */
+export function laneAccess(editor: Editor, ln: number, lane: LaneType, display: LaneDisplay, caretLine: number | null) {
+  const kind = lineKind(editor, ln);
+  if (kind === "note") return { shown: lane === "words", editable: lane === "words" };
+  if (kind === "empty") {
+    if (lane === "words") return { shown: display.words || !display.chords, editable: display.words };
+    const shown = display.chords && (caretLine === ln || !display.words);
+    return { shown, editable: shown };
+  }
+  return { shown: display[lane], editable: display[lane] };
+}
+
 /**
  * Наскрізне виділення → по шматку на кожну видиму доріжку кожного рядка,
  * який воно зачіпає. Сховані доріжки в позначку не потрапляють.

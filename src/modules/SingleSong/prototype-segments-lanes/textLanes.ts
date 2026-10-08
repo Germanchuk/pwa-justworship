@@ -88,6 +88,7 @@ export function mergeLine(editor: Editor, ln: number) {
 /** Стерти шматок однієї доріжки (точки в одному текстовому вузлі). */
 function eraseInLane(editor: Editor, from: Point, to: Point) {
   if (!Point.equals(from, to)) Transforms.delete(editor, { at: { anchor: from, focus: to } });
+  return true;
 }
 
 /**
@@ -96,27 +97,45 @@ function eraseInLane(editor: Editor, from: Point, to: Point) {
  * обидва кінці в словах — останній рядок вливається в перший.
  * У межах одного рядка (акорди → слова) — лише стираємо обидва шматки.
  */
+/** Чи може цей учасник правити доріжку (особиста видимість). Ставить сторінка. */
+export type LaneEditable = (ln: number, lane: LaneType) => boolean;
+const editableOf = (editor: Editor): LaneEditable =>
+  (editor as unknown as { laneEditable?: LaneEditable }).laneEditable ?? (() => true);
+
 function deleteAcross(editor: Editor, range: Range) {
   const [start, end] = Range.edges(range);
   const a = start.path[0];
   const b = end.path[0];
   const startLane = laneAt(editor, start).lane;
   const endLane = laneAt(editor, end).lane;
-  // Доріжки, що цілком потрапили між кінцями виділення (у порядку документа).
-  const eraseLane = (ln: number, l: number) => eraseInLane(editor, Editor.start(editor, [ln, l]), Editor.end(editor, [ln, l]));
+  const can = editableOf(editor);
+  const laneOfPath = (ln: number, l: number) => typeOf(Node.get(editor, [ln, l])) as LaneType;
+  const ok = (ln: number, l: number) => can(ln, laneOfPath(ln, l));
+  // Сховане не стираємо: «що бачу, те й правлю».
+  const erase = (ln: number, l: number, from: Point, to: Point) => ok(ln, l) && eraseInLane(editor, from, to);
+  const eraseLane = (ln: number, l: number) => erase(ln, l, Editor.start(editor, [ln, l]), Editor.end(editor, [ln, l]));
+  let merge = a !== b && startLane === "words" && endLane === "words" && can(a, "words") && can(b, "words");
   Editor.withoutNormalizing(editor, () => {
-    eraseInLane(editor, Editor.start(editor, end.path.slice(0, 2)), end);
+    erase(b, end.path[1], Editor.start(editor, end.path.slice(0, 2)), end);
     for (let l = 0; l < end.path[1]; l++) if (a !== b || l > start.path[1]) eraseLane(b, l);
     if (a === b) {
-      eraseInLane(editor, start, Editor.end(editor, start.path.slice(0, 2)));
+      erase(a, start.path[1], start, Editor.end(editor, start.path.slice(0, 2)));
       return;
     }
-    for (let i = b - 1; i > a; i--) Transforms.removeNodes(editor, { at: [i] });
+    for (let i = b - 1; i > a; i--) {
+      const lanes = (editor.children[i] as Element).children;
+      // Рядок зникає, лише якщо в ньому немає схованого вмісту.
+      if (lanes.every((c, l) => ok(i, l) || !Node.string(c))) Transforms.removeNodes(editor, { at: [i] });
+      else {
+        lanes.forEach((_, l) => eraseLane(i, l));
+        merge = false;
+      }
+    }
     const lanes = (editor.children[a] as Element).children.length;
     for (let l = start.path[1] + 1; l < lanes; l++) eraseLane(a, l);
-    eraseInLane(editor, start, Editor.end(editor, start.path.slice(0, 2)));
+    erase(a, start.path[1], start, Editor.end(editor, start.path.slice(0, 2)));
   });
-  if (a !== b && startLane === "words" && endLane === "words") {
+  if (merge) {
     Transforms.select(editor, Editor.start(editor, lanePath(editor, a + 1, "words")));
     mergeLine(editor, a + 1);
   } else {

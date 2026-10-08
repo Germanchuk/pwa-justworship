@@ -8,13 +8,13 @@
  * Ітерація 2: акорди — текстова доріжка, не на буквах слів.
  * Ітерація 1 (акорди на буквах) — у `splitMerge.prototype.test.ts` і git.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createEditor, Editor, Element, Node, NodeEntry, Range, Text, Transforms } from "slate";
 import { Editable, ReactEditor, RenderElementProps, RenderLeafProps, Slate, withReact } from "slate-react";
 import { flush, Pair, Peer, removeSegment, setSegmentProps } from "./harness";
 import { CAJON_STEPS, cajonKey, cajonOf, inherited } from "./model";
-import { LaneNoteView, laneNotes, makeLanesPair, laneShown, resolveLaneNotes, TextMark, textMark, textMarks, transposeLine } from "./lanesModel";
-import { LaneType, lanePath, laneText, lineKind } from "./textLanes";
+import { LaneNoteView, laneNotes, makeLanesPair, laneAccess, laneShown, resolveLaneNotes, TextMark, textMark, textMarks, transposeLine } from "./lanesModel";
+import { LaneEditable, LaneType, lanePath, laneText, lineKind } from "./textLanes";
 
 type Who = "A" | "B";
 const NAMES: Record<Who, string> = { A: "Оля", B: "Герман" };
@@ -164,6 +164,10 @@ function PeerPane(props: {
   const peer = pair[who];
   const notes = resolveLaneNotes(peer, display);
   const [pending, setPending] = useState<TextMark[]>([]);
+  const dirRef = useRef<1 | -1>(1);
+  // Правила видалення в плагіні питають, чи бачу я доріжку (особиста видимість).
+  (peer.editor as unknown as { laneEditable: LaneEditable }).laneEditable = (ln, lane) =>
+    laneAccess(peer.editor, ln, lane, display, peer.editor.selection?.anchor.path[0] ?? null).editable;
 
   const ranges = notes.flatMap((n) =>
     n.marks.filter((m) => m.range && laneShown(peer.editor, m.seg!, m.mark.lane, display)).map((m) => m.range!),
@@ -244,12 +248,16 @@ function PeerPane(props: {
             editor={peer.editor as unknown as ReactEditor}
             initialValue={peer.editor.children}
             onChange={() => {
+              skipHidden(peer, display, dirRef.current);
               const sel = peer.editor.selection;
               props.onPresence(sel ? sel.anchor.path[0] : null);
               props.bump();
             }}
           >
             <Editable
+              onKeyDown={(e) => {
+                dirRef.current = e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "Backspace" ? -1 : 1;
+              }}
               renderElement={(p) => <LanesElement {...p} />}
               renderLeaf={Leaf}
               decorate={decorate}
@@ -262,6 +270,26 @@ function PeerPane(props: {
       </div>
     </Ctx.Provider>
   );
+}
+
+/**
+ * Курсор опинився в схованій доріжці (Slate сам рухає його стрілками по
+ * всіх вузлах) — переносимо далі в тому ж напрямку до першої видимої.
+ */
+function skipHidden(peer: Peer, display: Display, dir: 1 | -1) {
+  const e = peer.editor;
+  const ok = () => {
+    const sel = e.selection;
+    if (!sel || !Range.isCollapsed(sel)) return true;
+    const [ln, l] = sel.anchor.path;
+    const lane = (Node.get(e, [ln, l]) as unknown as { type: LaneType }).type;
+    return laneAccess(e, ln, lane, display, ln).editable;
+  };
+  for (let i = 0; i < 200 && !ok(); i++) {
+    const before = e.selection;
+    Transforms.move(e, { unit: "offset", reverse: dir < 0 });
+    if (JSON.stringify(before) === JSON.stringify(e.selection)) dir = dir < 0 ? 1 : -1; // уперлись у край
+  }
 }
 
 function Leaf({ attributes, children, leaf }: RenderLeafProps) {
@@ -327,21 +355,13 @@ function TextLane({ attributes, children, element, lane }: RenderElementProps & 
     /* */
   }
   const kind = ln < 0 ? "empty" : lineKind(pane.peer.editor, ln);
-  const focused = pane.myLine === ln;
   // Рядок акордів у відрізка видно завжди (Герман: відрізок «прагне акордів»).
-  // Порожній рядок — не відрізок: його рядок акордів зʼявляється лише під
-  // курсором, щоб можна було записати рядок самих акордів. У структурної
-  // примітки акордів немає.
-  const visible =
-    kind === "note"
-      ? lane === "words" // структурна примітка — завжди, незалежно від галочок
-      : kind === "empty"
-        ? lane === "words" || (pane.display.chords && focused) // порожній рядок — завжди; акорди лише під курсором
-        : pane.display[lane];
+  // Сховане не існує для курсору й правок — див. `laneAccess`.
+  const access = ln < 0 ? { shown: false, editable: false } : laneAccess(pane.peer.editor, ln, lane, pane.display, pane.myLine);
+  const visible = access.shown;
   const transposed = lane === "chords" && pane.display.semis !== 0;
+  const editable = access.editable && !transposed;
 
-  // Сховане лишаємо в DOM для Slate, але не показуємо.
-  const hiddenStyle = { position: "absolute", opacity: 0, height: 0, overflow: "hidden", pointerEvents: "none" } as const;
   const note = lane === "words" && kind === "note";
   return (
     <div
@@ -359,7 +379,7 @@ function TextLane({ attributes, children, element, lane }: RenderElementProps & 
               fontWeight: lane === "chords" || note ? 700 : 500,
               letterSpacing: note ? "0.01em" : undefined,
             }
-          : hiddenStyle
+          : { display: "none" }
       }
     >
       {visible && transposed && (
@@ -367,8 +387,10 @@ function TextLane({ attributes, children, element, lane }: RenderElementProps & 
           {transposeLine(text, pane.display.semis) || " "}
         </div>
       )}
-      <div style={transposed ? hiddenStyle : undefined}>{children}</div>
-      {visible && !transposed && lane === "chords" && text === "" && (
+      <div contentEditable={editable ? undefined : false} style={transposed ? { display: "none" } : undefined}>
+        {children}
+      </div>
+      {visible && !transposed && lane === "chords" && text === "" && (kind !== "empty" || pane.myLine === ln) && (
         <span
           contentEditable={false}
           className="absolute left-4 top-0 italic text-sm font-normal select-none pointer-events-none"

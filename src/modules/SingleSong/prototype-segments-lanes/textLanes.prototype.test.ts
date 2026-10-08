@@ -115,6 +115,40 @@ describe("порожній рядок, /примітка, видалення к�
   });
 });
 
+describe("сховане не стирається («що бачу, те й правлю»)", () => {
+  const only = (p: Peer, lane: "chords" | "words") => {
+    (p.editor as unknown as { laneEditable: (ln: number, l: string) => boolean }).laneEditable = (_ln, l) => l === lane;
+  };
+
+  it("бачу лише слова: виділив від слів #0 до слів #1 і стер — акорди #1 цілі й переїхали в склеєний рядок", () => {
+    const { A, B } = pair();
+    only(A, "words");
+    Transforms.select(A.editor, { anchor: { path: [0, 1, 0], offset: 3 }, focus: { path: [1, 1, 0], offset: 5 } });
+    Editor.deleteFragment(A.editor);
+    flush(A);
+    expect(view(B)).toEqual([
+      {
+        "cajon:1.1": "B",
+        chords: "Am F       C   G F    C      G     Am",
+        words: "Ти світло серед ночі",
+        lanes: "chords+words",
+      },
+    ]);
+  });
+
+  it("бачу лише акорди: виділив від акордів #0 до акордів #1 і стер — слова цілі, рядки не склеюються", () => {
+    const { A, B } = pair();
+    only(A, "chords");
+    Transforms.select(A.editor, { anchor: { path: [0, 0, 0], offset: 3 }, focus: { path: [1, 0, 0], offset: 5 } });
+    Editor.deleteFragment(A.editor);
+    flush(A);
+    expect(view(B).map((s) => [s.chords, s.words])).toEqual([
+      ["Am ", "Ти святий, Господь"],
+      ["C      G     Am", "Твоє світло серед ночі"],
+    ]);
+  });
+});
+
 describe("конкурентно (A і B без мережі, потім зустрічаються)", () => {
   it("A ділить слова, B пише в хвіст слів — набране B опиняється в кінці першої частини", () => {
     const net = pair();
