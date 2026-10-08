@@ -6,7 +6,7 @@ import * as Y from "yjs";
 import { Editor, Node, Range } from "slate";
 import { relativeRangeToSlateRange, slateRangeToRelativeRange } from "@slate-yjs/core";
 import { makePair, Peer, Segment } from "./harness";
-import { LaneType, line, withTextLanes } from "./textLanes";
+import { LaneType, line, lineKind, withTextLanes } from "./textLanes";
 import { transposeName } from "./model";
 
 export const MOCK_SONG = [
@@ -52,6 +52,14 @@ export function textMark(p: Peer, range: Range): TextMark | null {
 }
 
 /**
+ * Чи видно доріжку рядка цьому учасникові. Структурна примітка (`/…`) видна
+ * завжди, незалежно від галочок показу (Герман, 2026-10-09).
+ */
+export function laneShown(editor: Editor, ln: number, lane: LaneType, visible: Record<LaneType, boolean>) {
+  return visible[lane] || (lane === "words" && lineKind(editor, ln) === "note");
+}
+
+/**
  * Наскрізне виділення → по шматку на кожну видиму доріжку кожного рядка,
  * який воно зачіпає. Сховані доріжки в позначку не потрапляють.
  */
@@ -61,7 +69,7 @@ export function textMarks(p: Peer, range: Range, visible: Record<LaneType, boole
   for (let ln = start.path[0]; ln <= end.path[0]; ln++) {
     const line = p.editor.children[ln] as unknown as { children: { type: LaneType }[] };
     line.children.forEach((laneNode, l) => {
-      if (!visible[laneNode.type]) return;
+      if (!laneShown(p.editor, ln, laneNode.type, visible)) return;
       const piece = Range.intersection(range, Editor.range(p.editor, [ln, l]));
       if (!piece || Range.isCollapsed(piece) || !Editor.string(p.editor, piece).trim()) return;
       const m = textMark(p, piece);
@@ -91,7 +99,7 @@ export function resolveLaneNotes(p: Peer, visible: Record<LaneType, boolean>): L
       return { mark: m, seg: Range.start(r).path[0], range: r, lost: false };
     });
     const alive = marks.filter((m) => !m.lost);
-    const shown = alive.filter((m) => visible[m.mark.lane]);
+    const shown = alive.filter((m) => laneShown(p.editor, m.seg!, m.mark.lane, visible));
     const cardAt = shown.length ? Math.min(...shown.map((m) => m.seg!)) : null;
     out.push({ note, marks, cardAt, status: !alive.length ? "lost" : cardAt == null ? "hidden" : "visible" });
   });

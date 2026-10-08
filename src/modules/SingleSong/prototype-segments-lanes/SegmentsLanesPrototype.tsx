@@ -13,7 +13,7 @@ import { createEditor, Editor, Element, Node, NodeEntry, Range, Text, Transforms
 import { Editable, ReactEditor, RenderElementProps, RenderLeafProps, Slate, withReact } from "slate-react";
 import { flush, Pair, Peer, removeSegment, setSegmentProps } from "./harness";
 import { CAJON_STEPS, cajonKey, cajonOf, inherited } from "./model";
-import { LaneNoteView, laneNotes, makeLanesPair, resolveLaneNotes, TextMark, textMark, textMarks, transposeLine } from "./lanesModel";
+import { LaneNoteView, laneNotes, makeLanesPair, laneShown, resolveLaneNotes, TextMark, textMark, textMarks, transposeLine } from "./lanesModel";
 import { LaneType, lanePath, laneText, lineKind } from "./textLanes";
 
 type Who = "A" | "B";
@@ -165,7 +165,9 @@ function PeerPane(props: {
   const notes = resolveLaneNotes(peer, display);
   const [pending, setPending] = useState<TextMark[]>([]);
 
-  const ranges = notes.flatMap((n) => n.marks.filter((m) => m.range && display[m.mark.lane]).map((m) => m.range!));
+  const ranges = notes.flatMap((n) =>
+    n.marks.filter((m) => m.range && laneShown(peer.editor, m.seg!, m.mark.lane, display)).map((m) => m.range!),
+  );
   const decorate = useCallback(
     ([node, path]: NodeEntry) => {
       if (!Text.isText(node)) return [];
@@ -331,7 +333,9 @@ function TextLane({ attributes, children, element, lane }: RenderElementProps & 
   // курсором, щоб можна було записати рядок самих акордів. У структурної
   // примітки акордів немає.
   const visible =
-    pane.display[lane] && (lane === "words" || kind === "segment" || (kind === "empty" && focused));
+    kind === "note"
+      ? lane === "words" // структурна примітка — завжди, незалежно від галочок
+      : pane.display[lane] && (lane === "words" || kind === "segment" || (kind === "empty" && focused));
   const transposed = lane === "chords" && pane.display.semis !== 0;
 
   // Сховане лишаємо в DOM для Slate, але не показуємо.
