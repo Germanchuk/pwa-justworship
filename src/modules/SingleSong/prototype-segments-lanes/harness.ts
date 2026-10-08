@@ -11,7 +11,7 @@
  *     корені документа, який сама бібліотека переносить при split/merge/move;
  *     назва акорду — окремий Y.Map `chordNames`.
  */
-import { createEditor, Descendant, Editor, Element, Node, Transforms } from "slate";
+import { createEditor, Descendant, Editor, Element, Node, Range, Transforms } from "slate";
 import * as Y from "yjs";
 import {
   slateNodesToInsertDelta,
@@ -23,12 +23,21 @@ import {
 export type Segment = { type: "segment"; children: { text: string }[]; [k: string]: unknown };
 export type Peer = { doc: Y.Doc; root: Y.XmlText; editor: Editor & YjsEditor };
 
+export type PairOptions = {
+  /** Базовий редактор до `withYjs` (сторінка дає `withReact(createEditor())`). */
+  base?: () => Editor;
+  /** Плагіни поверх `withYjs` — правила варіанту. */
+  extend?: (peer: Peer) => void;
+};
+
 /** Два підключені редактори; `link()`/`unlink()` імітують мережу. */
-export function makePair(lines: string[]) {
+export function makePair(seed: (string | Segment)[], opts: PairOptions = {}) {
   const a = new Y.Doc();
   const b = new Y.Doc();
-  const seed: Segment[] = lines.map((text) => ({ type: "segment", children: [{ text }] }));
-  a.get("content", Y.XmlText).applyDelta(slateNodesToInsertDelta(seed as Descendant[]), {
+  const nodes: Segment[] = seed.map((s) =>
+    typeof s === "string" ? { type: "segment", children: [{ text: s }] } : s,
+  );
+  a.get("content", Y.XmlText).applyDelta(slateNodesToInsertDelta(nodes as unknown as Descendant[]), {
     sanitize: false,
   });
   Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
@@ -49,14 +58,22 @@ export function makePair(lines: string[]) {
 
   const peer = (doc: Y.Doc): Peer => {
     const root = doc.get("content", Y.XmlText) as Y.XmlText;
-    const editor = withYjs(createEditor(), root) as Editor & YjsEditor;
+    const editor = withYjs((opts.base ?? createEditor)(), root) as Editor & YjsEditor;
+    const p = { doc, root, editor };
+    opts.extend?.(p);
     YjsEditor.connect(editor);
-    return { doc, root, editor };
+    return p;
   };
 
   return {
     A: peer(a),
     B: peer(b),
+    get online() {
+      return online;
+    },
+    get queued() {
+      return queueAB.length + queueBA.length;
+    },
     unlink() {
       online = false;
     },
@@ -65,6 +82,52 @@ export function makePair(lines: string[]) {
       queueAB.splice(0).forEach((u) => Y.applyUpdate(b, u, "net"));
       queueBA.splice(0).forEach((u) => Y.applyUpdate(a, u, "net"));
     },
+  };
+}
+
+export type Pair = ReturnType<typeof makePair>;
+
+// ── правила варіантів (плагіни поверх withYjs) ─────────────────────────────
+
+/**
+ * Правило Германа «атрибут лишається першій половині, друга отримує
+ * порожній»: при діленні відрізка новий вузол не успадковує жодного
+ * атрибута (Slate за замовчуванням копіює всі).
+ */
+export function withEmptySecondHalf(p: Peer) {
+  const { apply } = p.editor;
+  p.editor.apply = (op) => {
+    if (op.type === "split_node" && op.path.length === 1) {
+      return apply({ ...op, properties: { type: "segment" } as Partial<Node> });
+    }
+    apply(op);
+  };
+}
+
+/** Backspace на початку відрізка — злиття з власним переносом позицій (див. нижче). */
+export function withMergeRemap(p: Peer) {
+  const { deleteBackward } = p.editor;
+  let inside = false;
+  p.editor.deleteBackward = (unit) => {
+    const sel = p.editor.selection;
+    if (
+      !inside &&
+      sel &&
+      Range.isCollapsed(sel) &&
+      sel.anchor.offset === 0 &&
+      sel.anchor.path.length === 2 &&
+      sel.anchor.path[1] === 0 &&
+      sel.anchor.path[0] > 0
+    ) {
+      inside = true;
+      try {
+        backspaceAtStartRemapped(p, sel.anchor.path[0]);
+      } finally {
+        inside = false;
+      }
+      return;
+    }
+    deleteBackward(unit);
   };
 }
 
@@ -118,6 +181,16 @@ export function addChordOnSegment(p: Peer, seg: number, offset: number, id: stri
   flush(p);
 }
 
+export function removeChordOnSegment(p: Peer, seg: number, id: string) {
+  Transforms.unsetNodes(p.editor, `chord:${id}`, { at: [seg] });
+  flush(p);
+}
+
+export function renameChordOnSegment(p: Peer, seg: number, id: string, name: string) {
+  const cur = (p.editor.children[seg] as Record<string, unknown>)[`chord:${id}`] as { at: unknown };
+  setSegmentProps(p, seg, { [`chord:${id}`]: { ...cur, name } });
+}
+
 // ── спосіб B: stored position @slate-yjs ───────────────────────────────────
 
 export function addChordStored(p: Peer, seg: number, offset: number, id: string, name: string) {
@@ -163,6 +236,15 @@ export function segmentProps(p: Peer) {
       Object.entries(n).filter(([k]) => k !== "type" && k !== "children" && !k.startsWith("chord:")),
     ),
   );
+}
+
+export function removeChordStored(p: Peer, id: string) {
+  YjsEditor.removeStoredPosition(p.editor, `chord:${id}`);
+  p.doc.getMap<string>("chordNames").delete(id);
+}
+
+export function renameChordStored(p: Peer, id: string, name: string) {
+  p.doc.getMap<string>("chordNames").set(id, name);
 }
 
 // ── читання стану ──────────────────────────────────────────────────────────
