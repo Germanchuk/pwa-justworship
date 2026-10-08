@@ -326,10 +326,12 @@ function TextLane({ attributes, children, element, lane }: RenderElementProps & 
   }
   const kind = ln < 0 ? "empty" : lineKind(pane.peer.editor, ln);
   const focused = pane.myLine === ln;
-  // Рядок акордів видно, лише коли в ньому щось є або курсор у цьому рядку
-  // (щоб дописати). У структурної примітки акордів немає.
+  // Рядок акордів у відрізка видно завжди (Герман: відрізок «прагне акордів»).
+  // Порожній рядок — не відрізок: його рядок акордів зʼявляється лише під
+  // курсором, щоб можна було записати рядок самих акордів. У структурної
+  // примітки акордів немає.
   const visible =
-    pane.display[lane] && (lane === "words" || (kind !== "note" && (text !== "" || focused)));
+    pane.display[lane] && (lane === "words" || kind === "segment" || (kind === "empty" && focused));
   const transposed = lane === "chords" && pane.display.semis !== 0;
 
   // Сховане лишаємо в DOM для Slate, але не показуємо.
