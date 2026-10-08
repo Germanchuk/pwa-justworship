@@ -1,0 +1,158 @@
+/**
+ * PROTOTYPE — ітерація 2: акорди й слова — дві текстові доріжки відрізка.
+ * Справжні Slate + @slate-yjs, два Y.Doc. `expect` фіксує те, ЩО Є.
+ */
+import { describe, expect, it } from "vitest";
+import { Editor, Element, Node, Transforms } from "slate";
+import { flush, makePair, Peer, removeSegment, Segment } from "./harness";
+import { lanePath, segment, withTextLanes } from "./textLanes";
+
+const SONG = [
+  //       0123456789012345678
+  segment("Ти святий, Господь", "Am F       C   G", { dyn: 2, "cajon:1.1": "B" }),
+  segment("Твоє світло серед ночі", "F    C      G     Am"),
+];
+
+const pair = () => makePair(SONG as unknown as Segment[], { extend: (p) => withTextLanes(p.editor) });
+
+function enter(p: Peer, seg: number, offset: number) {
+  Transforms.select(p.editor, { path: [seg, 1, 0], offset });
+  Editor.insertBreak(p.editor);
+  flush(p);
+}
+function backspace(p: Peer, seg: number, lane: 0 | 1 = 1) {
+  Transforms.select(p.editor, { path: [seg, lane, 0], offset: 0 });
+  Editor.deleteBackward(p.editor, { unit: "character" });
+  flush(p);
+}
+function type(p: Peer, seg: number, lane: "chords" | "words", offset: number, text: string) {
+  Transforms.insertText(p.editor, text, { at: { path: [...lanePath(p.editor, seg, lane), 0], offset } });
+  flush(p);
+}
+
+/** Відрізок у читабельному вигляді: атрибути, акорди, слова. */
+type SegView = Record<string, unknown> & { chords: string; words: string; lanes: string };
+function view(p: Peer): SegView[] {
+  return p.editor.children.map((n) => {
+    const { type: _t, children, ...props } = n as Element & Record<string, unknown>;
+    const lanes = Object.fromEntries(
+      (children as Element[]).map((c) => [(c as unknown as { type: string }).type, Node.string(c)]),
+    );
+    return { ...props, ...lanes, lanes: (children as unknown as { type: string }[]).map((c) => c.type).join("+") } as SegView;
+  });
+}
+
+describe("Enter і Backspace", () => {
+  it("Enter посеред слів: перша частина отримує все, друга — порожні доріжки", () => {
+    const { A, B } = pair();
+    enter(A, 0, 11);
+    expect(view(B).slice(0, 2)).toEqual([
+      { dyn: 2, "cajon:1.1": "B", chords: "Am F       C   G", words: "Ти святий, ", lanes: "chords+words" },
+      { chords: "", words: "Господь", lanes: "chords+words" },
+    ]);
+  });
+
+  it("Enter → Backspace повертає рівно те, що було", () => {
+    const { A, B } = pair();
+    const before = view(B);
+    enter(A, 0, 11);
+    backspace(A, 1);
+    expect(view(B)).toEqual(before);
+  });
+
+  it("злиття з непорожніми акордами другого: дописуються вирівняними під кінець слів першого", () => {
+    const { A, B } = pair();
+    backspace(A, 1);
+    expect(view(B)).toEqual([
+      {
+        dyn: 2,
+        "cajon:1.1": "B",
+        chords: "Am F       C   G  F    C      G     Am",
+        words: "Ти святий, ГосподьТвоє світло серед ночі",
+        lanes: "chords+words",
+      },
+    ]);
+  });
+
+  it("Backspace на початку рядка акордів і Enter в акордах нічого не роблять", () => {
+    const { A, B } = pair();
+    const before = view(B);
+    backspace(A, 1, 0);
+    Transforms.select(A.editor, { path: [1, 0, 0], offset: 2 });
+    Editor.insertBreak(A.editor);
+    flush(A);
+    expect(view(B)).toEqual(before);
+  });
+});
+
+describe("конкурентно (A і B без мережі, потім зустрічаються)", () => {
+  it("A ділить слова, B пише в хвіст слів — набране B опиняється в кінці першої частини", () => {
+    const net = pair();
+    net.unlink();
+    enter(net.A, 0, 11);
+    type(net.B, 0, "words", 14, "Х"); // «Гос|Хподь»
+    net.link();
+    expect(view(net.A).slice(0, 2).map((s) => s.words)).toEqual(["Ти святий, Х", "Господь"]);
+    expect(view(net.A)).toEqual(view(net.B));
+  });
+
+  it("A ділить слова, B правит рядок акордів того ж відрізка — акорди лишаються першій частині, правка B ціла", () => {
+    const net = pair();
+    net.unlink();
+    enter(net.A, 0, 11);
+    type(net.B, 0, "chords", 16, " D");
+    net.link();
+    expect(view(net.A).slice(0, 2).map((s) => s.chords)).toEqual(["Am F       C   G D", ""]);
+  });
+
+  it("A і B одночасно тиснуть Enter в одному рядку — хвіст слів ЗАДВОЮЄТЬСЯ", () => {
+    // Кожен копіює хвіст у свій новий відрізок (split = копія + видалення);
+    // видалення з оригіналу зливаються, а дві копії — ні.
+    const net = pair();
+    net.unlink();
+    enter(net.A, 0, 11);
+    enter(net.B, 0, 11);
+    net.link();
+    expect(view(net.A)).toEqual(view(net.B));
+    expect(view(net.A).map((s) => `${s.lanes}|${s.words}`)).toEqual([
+      "chords+words|Ти святий, ",
+      "chords+words|Господь",
+      "chords+words|Господь",
+      "chords+words|Твоє світло серед ночі",
+    ]);
+  });
+
+  it("A зливає #1 у #0, B пише в слова #1 — набране B ЗНИКАЄ", () => {
+    const net = pair();
+    net.unlink();
+    backspace(net.A, 1);
+    type(net.B, 1, "words", 4, " ясне");
+    net.link();
+    expect(view(net.A)).toEqual(view(net.B));
+    expect(view(net.A).map((s) => s.words)).toEqual(["Ти святий, ГосподьТвоє світло серед ночі"]);
+  });
+
+  it("A зливає #1 у #0, B пише в акорди #1 — правка B теж зникає", () => {
+    const net = pair();
+    net.unlink();
+    backspace(net.A, 1);
+    type(net.B, 1, "chords", 0, "Dm ");
+    net.link();
+    expect(view(net.A)[0].chords).toEqual("Am F       C   G  F    C      G     Am");
+  });
+
+  it("A видаляє відрізок, B у ньому пише — видалення перемагає", () => {
+    const net = pair();
+    net.unlink();
+    removeSegment(net.A, 1);
+    type(net.B, 1, "words", 0, "О, ");
+    net.link();
+    expect(view(net.A).map((s) => s.words)).toEqual(["Ти святий, Господь"]);
+  });
+
+  it("правка слів не рухає акорди: дописали на початку — слова зʼїхали під акордами", () => {
+    const { A, B } = pair();
+    type(A, 0, "words", 0, "О, ");
+    expect(view(B)[0]).toMatchObject({ chords: "Am F       C   G", words: "О, Ти святий, Господь" });
+  });
+});

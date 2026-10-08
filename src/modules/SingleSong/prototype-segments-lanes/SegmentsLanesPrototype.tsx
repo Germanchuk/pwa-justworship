@@ -2,85 +2,39 @@
  * PROTOTYPE (гілка `prototype/segments-lanes`) — викинути після оцінки ADR-0006.
  * Маршрут: `/prototype/segments-lanes`. Усе в памʼяті, жодного сервера.
  *
- * Два редактори (Оля й Герман) на двох Y.Doc, справжні Slate + @slate-yjs,
- * мережа між ними вмикається й вимикається. Пісня — ряд відрізків, на кожному
- * доріжки: слова (текст із курсором), акорди (позиції в словах), кахон
- * (клітинки-ключі). Динаміка й заголовок — атрибути відрізка.
+ * Ітерація 2 (2026-10-09): акорди НЕ привʼязані до букв — це рядок тексту на
+ * відрізку, своя доріжка з курсором, як слова. Enter у словах — новий
+ * відрізок: перша частина отримує все, друга — порожні доріжки.
+ * Ітерація 1 (акорди на буквах) — у `splitMerge.prototype.test.ts` і git.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { createEditor, Editor, Node, NodeEntry, Range, Text } from "slate";
-import {
-  Editable,
-  ReactEditor,
-  RenderElementProps,
-  RenderLeafProps,
-  Slate,
-  useSlateStatic,
-  withReact,
-} from "slate-react";
-import {
-  backspaceAtStart,
-  deleteRange,
-  fmt,
-  Pair,
-  Peer,
-  pressEnter,
-  removeSegment,
-  setSegmentProps,
-  typeAt,
-} from "./harness";
-import {
-  CAJON_STEPS,
-  cajonKey,
-  cajonOf,
-  ChordView,
-  chordOps,
-  inherited,
-  makeSongPair,
-  mockChordId,
-  NoteView,
-  notesMap,
-  resolveNotes,
-  transposeName,
-  VariantId,
-  VARIANTS,
-  Visibility,
-  wordsMark,
-} from "./model";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createEditor, Editor, Element, Node, NodeEntry, Range, Text, Transforms } from "slate";
+import { Editable, ReactEditor, RenderElementProps, RenderLeafProps, Slate, withReact } from "slate-react";
+import { flush, Pair, Peer, removeSegment, setSegmentProps } from "./harness";
+import { CAJON_STEPS, cajonKey, cajonOf, inherited } from "./model";
+import { LaneNoteView, laneNotes, makeLanesPair, resolveLaneNotes, TextMark, textMark, transposeLine } from "./lanesModel";
+import { LaneType, lanePath, laneText } from "./textLanes";
 
 type Who = "A" | "B";
 const NAMES: Record<Who, string> = { A: "Оля", B: "Герман" };
-type Display = Visibility & { semis: number };
+const other = (w: Who): Who => (w === "A" ? "B" : "A");
+type Display = { words: boolean; chords: boolean; cajon: boolean; semis: number };
 const DEFAULT_DISPLAY: Display = { words: true, chords: true, cajon: true, semis: 0 };
+const LANE_LABEL: Record<LaneType | "cajon", string> = { words: "слова", chords: "акорди", cajon: "кахон" };
 
 const newId = () => Math.random().toString(36).slice(2, 7);
 
-// ── контекст однієї панелі (для рендера відрізків) ─────────────────────────
-
-type PaneCtx = {
-  who: Who;
-  peer: Peer;
-  variant: VariantId;
-  chords: ChordView[];
-  notes: NoteView[];
-  display: Display;
-  otherHere: number | null;
-  selectedChords: Set<string>;
-  toggleChord: (id: string) => void;
-};
+type PaneCtx = { who: Who; peer: Peer; notes: LaneNoteView[]; display: Display; otherHere: number | null };
 const Ctx = createContext<PaneCtx | null>(null);
 const usePane = () => useContext(Ctx)!;
 
 // ── сторінка ───────────────────────────────────────────────────────────────
 
 export default function SegmentsLanesPrototype() {
-  const [variant, setVariant] = useState<VariantId>("A");
   const [gen, setGen] = useState(0);
-  const pair = useMemo(
-    () => makeSongPair(variant, () => withReact(createEditor())),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [variant, gen],
-  );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const pair = useMemo(() => makeLanesPair(() => withReact(createEditor())), [gen]);
+  (window as unknown as { __proto_pair?: Pair }).__proto_pair = pair; // налагодження
   const [, setVersion] = useState(0);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
   const [display, setDisplay] = useState<Record<Who, Display>>({ A: DEFAULT_DISPLAY, B: DEFAULT_DISPLAY });
@@ -97,58 +51,35 @@ export default function SegmentsLanesPrototype() {
     };
   }, [pair, bump]);
 
-  const reset = (v: VariantId = variant) => {
-    setVariant(v);
+  const reset = () => {
     setGen((g) => g + 1);
     setDisplay({ A: DEFAULT_DISPLAY, B: DEFAULT_DISPLAY });
     setPresence({ A: null, B: null });
     setStep(0);
   };
-
   const ctx: ScenarioCtx = {
     pair,
-    variant,
     setDisplay: (who, d) => setDisplay((all) => ({ ...all, [who]: { ...all[who], ...d } })),
   };
 
   return (
     <div className="min-h-dvh bg-stone-50 text-stone-900 px-4 py-6">
       <div className="max-w-6xl mx-auto space-y-6">
+        <AskHost />
         <header className="space-y-2">
           <div className="text-xs font-semibold tracking-wider text-amber-700 uppercase">
-            Прототип · викинути після оцінки · ADR-0006
+            Прототип · викинути після оцінки · ADR-0006 · ітерація 2
           </div>
           <h1 className="text-2xl font-semibold">Відрізки й доріжки замість секцій</h1>
           <p className="text-stone-600 max-w-3xl">
-            Питання: чи витримує модель «пісня = ряд відрізків, на кожному доріжки» спільне
-            редагування — передусім <b>Enter посеред слів</b> (ділення відрізка), <b>Backspace на
-            початку</b> (злиття) і правки двох людей одночасно. Нижче — два редактори на двох окремих
-            копіях документа, справжні Slate і @slate-yjs. Вимкни мережу, щоб правки зійшлися пізніше.
+            Пісня — ряд відрізків. На кожному доріжки: <b>акорди</b> і <b>слова</b> — два рядки тексту з курсором
+            (акорди не привʼязані до букв), <b>кахон</b> — клітинки. Динаміка й заголовок — атрибути відрізка.
+            Enter у словах — новий відрізок: перша частина отримує все, друга — порожні доріжки. Нижче — два
+            редактори на двох окремих копіях документа; вимкни мережу, щоб правки зійшлися пізніше.
           </p>
         </header>
 
-        <AskHost />
         <Findings />
-
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold text-stone-500 uppercase tracking-wide">
-            Як акорди привʼязані до слів
-          </h2>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            {(Object.keys(VARIANTS) as VariantId[]).map((id) => (
-              <button
-                key={id}
-                onClick={() => reset(id)}
-                className={`text-left rounded-lg border p-3 text-sm ${
-                  id === variant ? "border-amber-600 bg-amber-50" : "border-stone-200 bg-white hover:border-stone-400"
-                }`}
-              >
-                <div className="font-medium">{VARIANTS[id].title}</div>
-                <div className="text-stone-500 mt-1">{VARIANTS[id].short}</div>
-              </button>
-            ))}
-          </div>
-        </section>
 
         <section className="flex flex-wrap items-center gap-3">
           <button
@@ -163,12 +94,11 @@ export default function SegmentsLanesPrototype() {
           >
             {pair.online ? "● Мережа є — натисни, щоб вимкнути" : `○ Мережі немає (у черзі ${pair.queued}) — увімкнути`}
           </button>
-          <button onClick={() => reset()} className="rounded-full px-4 py-1.5 text-sm border border-stone-300 bg-white">
+          <button onClick={reset} className="rounded-full px-4 py-1.5 text-sm border border-stone-300 bg-white">
             Почати пісню наново
           </button>
           <span className="text-xs text-stone-500">
-            Клік над словами — поставити акорд · клік по акорду — перейменувати (порожньо = видалити) ·
-            Shift+клік по акорду — вибрати для примітки
+            Пиши прямо в рядках акордів і слів · Enter лише в словах · примітка: виділи текст → «позначити»
           </span>
         </section>
 
@@ -184,19 +114,18 @@ export default function SegmentsLanesPrototype() {
             setStep(i + 1);
             bump();
           }}
-          onRestart={() => reset()}
+          onRestart={reset}
         />
 
-        <div className="grid md:grid-cols-2 gap-4" key={`${variant}-${gen}`}>
+        <div className="grid md:grid-cols-2 gap-4" key={gen}>
           {(["A", "B"] as Who[]).map((who) => (
             <PeerPane
               key={who}
               who={who}
               pair={pair}
-              variant={variant}
               display={display[who]}
               setDisplay={(d) => ctx.setDisplay(who, d)}
-              otherHere={pair.online ? presence[who === "A" ? "B" : "A"] : null}
+              otherHere={pair.online ? presence[other(who)] : null}
               onPresence={(seg) => setPresence((p) => (p[who] === seg ? p : { ...p, [who]: seg }))}
               bump={bump}
             />
@@ -207,80 +136,61 @@ export default function SegmentsLanesPrototype() {
   );
 }
 
-// ── панель одного учасника ─────────────────────────────────────────────────
+// ── панель учасника ────────────────────────────────────────────────────────
 
 function PeerPane(props: {
   who: Who;
   pair: Pair;
-  variant: VariantId;
   display: Display;
   setDisplay: (d: Partial<Display>) => void;
   otherHere: number | null;
   onPresence: (seg: number | null) => void;
   bump: () => void;
 }) {
-  const { who, pair, variant, display } = props;
+  const { who, pair, display } = props;
   const peer = pair[who];
-  const ops = chordOps(variant);
-  const chords = ops.list(peer);
-  const notes = resolveNotes(peer, chords, ops.home, display);
-  const [selectedChords, setSelectedChords] = useState<Set<string>>(new Set());
-  const toggleChord = (id: string) =>
-    setSelectedChords((s) => {
-      const n = new Set(s);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
+  const notes = resolveLaneNotes(peer, display);
+  const [pending, setPending] = useState<TextMark[]>([]);
 
-  const wordRanges = notes.flatMap((n) => n.marks.filter((m) => m.range && display.words).map((m) => m.range!));
+  const ranges = notes.flatMap((n) => n.marks.filter((m) => m.range && display[m.mark.lane]).map((m) => m.range!));
   const decorate = useCallback(
     ([node, path]: NodeEntry) => {
       if (!Text.isText(node)) return [];
-      return wordRanges
+      return ranges
         .map((r) => Range.intersection(r, Editor.range(peer.editor, path)))
         .filter((r): r is Range => !!r && !Range.isCollapsed(r))
         .map((r) => ({ ...r, noted: true }));
     },
-    // перераховуємо щоразу — прототип
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(wordRanges), peer],
+    [JSON.stringify(ranges), peer],
   );
 
-  const addNote = async () => {
+  const markSelection = () => {
     const sel = peer.editor.selection;
-    const marks = [
-      ...(sel && !Range.isCollapsed(sel) ? [wordsMark(peer, sel)] : []),
-      ...[...selectedChords].map((chord) => ({ lane: "chords" as const, chord })),
-    ];
-    if (!marks.length) {
-      void ask("Спершу виділи слова в редакторі та/або Shift+клікни акорди.", null);
-      return;
-    }
-    const text = await ask("Текст примітки", "");
+    const m = sel && textMark(peer, sel);
+    if (!m) return void ask("Виділи шматок тексту в одному рядку — акордів або слів.", null);
+    setPending((p) => [...p, m]);
+  };
+  const createNote = async () => {
+    if (!pending.length) return void ask("Спершу позначи виділений текст (можна кілька разів, у різних доріжках).", null);
+    const text = await ask(`Текст примітки (позначено: ${pending.map((m) => `«${m.quote}»`).join(", ")})`, "");
     if (!text) return;
     const id = newId();
-    notesMap(peer).set(id, { id, text, author: NAMES[who], marks });
-    setSelectedChords(new Set());
+    laneNotes(peer).set(id, { id, text, author: NAMES[who], marks: pending });
+    setPending([]);
   };
 
   return (
-    <Ctx.Provider
-      value={{ who, peer, variant, chords, notes, display, otherHere: props.otherHere, selectedChords, toggleChord }}
-    >
+    <Ctx.Provider value={{ who, peer, notes, display, otherHere: props.otherHere }}>
       <div className="rounded-xl border border-stone-200 bg-white shadow-sm overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-stone-100 bg-stone-50">
           <span className="font-semibold">{NAMES[who]}</span>
-          <span className="text-xs text-stone-400">моя копія документа</span>
+          <span className="text-xs text-stone-400">моя копія</span>
           <span className="flex-1" />
-          {(["words", "chords", "cajon"] as const).map((lane) => (
+          {(["chords", "words", "cajon"] as const).map((lane) => (
             <label key={lane} className="text-xs flex items-center gap-1">
-              <input
-                type="checkbox"
-                checked={display[lane]}
-                onChange={(e) => props.setDisplay({ [lane]: e.target.checked })}
-              />
-              {{ words: "слова", chords: "акорди", cajon: "кахон" }[lane]}
+              <input type="checkbox" checked={display[lane]} onChange={(e) => props.setDisplay({ [lane]: e.target.checked })} />
+              {LANE_LABEL[lane]}
             </label>
           ))}
           <span className="text-xs flex items-center gap-1">
@@ -293,9 +203,19 @@ function PeerPane(props: {
               +
             </button>
           </span>
-          <button onClick={addNote} className="text-xs rounded border border-amber-400 bg-amber-50 px-2 py-0.5">
-            + примітка{selectedChords.size ? ` (акордів: ${selectedChords.size})` : ""}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 px-4 py-1.5 border-b border-stone-100 text-xs">
+          <button onMouseDown={(e) => e.preventDefault()} onClick={markSelection} className="rounded border px-2 py-0.5">
+            позначити виділене{pending.length ? ` (${pending.length})` : ""}
           </button>
+          <button onClick={createNote} className="rounded border border-amber-400 bg-amber-50 px-2 py-0.5">
+            + примітка
+          </button>
+          {pending.length > 0 && (
+            <button className="text-stone-400" onClick={() => setPending([])}>
+              скинути позначки
+            </button>
+          )}
         </div>
 
         <div className="px-4 py-3">
@@ -309,8 +229,7 @@ function PeerPane(props: {
             }}
           >
             <Editable
-              readOnly={!display.words}
-              renderElement={(p) => <SegmentElement {...p} />}
+              renderElement={(p) => <LanesElement {...p} />}
               renderLeaf={Leaf}
               decorate={decorate}
               className="outline-none space-y-1"
@@ -318,7 +237,7 @@ function PeerPane(props: {
           </Slate>
         </div>
 
-        <StatePanel peer={peer} chords={chords} notes={notes} variant={variant} />
+        <StatePanel peer={peer} notes={notes} />
       </div>
     </Ctx.Provider>
   );
@@ -327,41 +246,47 @@ function PeerPane(props: {
 function Leaf({ attributes, children, leaf }: RenderLeafProps) {
   const noted = (leaf as { noted?: boolean }).noted;
   return (
-    <span {...attributes} className={noted ? "underline decoration-amber-500 decoration-2 underline-offset-4" : ""}>
+    <span {...attributes} className={noted ? "bg-amber-100 underline decoration-amber-500 decoration-2 underline-offset-4" : ""}>
       {children}
     </span>
   );
+}
+
+function LanesElement(props: RenderElementProps) {
+  const type = (props.element as unknown as { type: string }).type;
+  if (type === "segment") return <SegmentElement {...props} />;
+  return <TextLane {...props} lane={type as LaneType} />;
 }
 
 // ── відрізок ───────────────────────────────────────────────────────────────
 
 function SegmentElement({ attributes, children, element }: RenderElementProps) {
   const pane = usePane();
-  const editor = useSlateStatic();
   let index = -1;
   try {
-    index = ReactEditor.findPath(editor, element)[0];
+    index = ReactEditor.findPath(pane.peer.editor as unknown as ReactEditor, element)[0];
   } catch {
     /* вузол щойно зник */
   }
   const node = element as unknown as Record<string, unknown>;
   const nodes = pane.peer.editor.children;
-  const text = Node.string(element);
   const dyn = typeof node.dyn === "number" ? node.dyn : undefined;
   const dynInherited = dyn === undefined ? inherited(nodes, index, (n) => (n as { dyn?: number }).dyn) : undefined;
   const cards = pane.notes.filter((n) => n.cardAt === index);
+  const otherName = NAMES[other(pane.who)];
 
   const remove = async () => {
-    if (
-      pane.otherHere === index &&
-      (await ask(`Тут зараз пише ${NAMES[pane.who === "A" ? "B" : "A"]}. Видалити відрізок?`, null)) === null
-    )
-      return;
+    if (pane.otherHere === index && (await ask(`Тут зараз пише ${otherName}. Видалити відрізок?`, null)) === null) return;
     removeSegment(pane.peer, index);
   };
+  const setDyn = (v: number | null) => setSegmentProps(pane.peer, index, { dyn: v });
+  const base = dyn ?? dynInherited?.value ?? 3;
 
   return (
-    <div {...attributes} className="group relative rounded-md border border-transparent hover:border-stone-200 px-2 py-1">
+    <div
+      {...attributes}
+      className={`group relative rounded-md border px-2 py-1 ${node.heading ? "bg-stone-50" : ""} border-transparent hover:border-stone-200`}
+    >
       {cards.map((c) => (
         <NoteCard key={c.note.id} view={c} />
       ))}
@@ -375,7 +300,7 @@ function SegmentElement({ attributes, children, element }: RenderElementProps) {
           H
         </button>
         <span className="flex items-center gap-1">
-          <button className="px-1 border rounded" onClick={() => setSegmentProps(pane.peer, index, { dyn: Math.max(1, (dyn ?? dynInherited?.value ?? 3) - 1) })}>
+          <button className="px-1 border rounded" onClick={() => setDyn(Math.max(1, base - 1))}>
             −
           </button>
           {dyn !== undefined ? (
@@ -385,112 +310,63 @@ function SegmentElement({ attributes, children, element }: RenderElementProps) {
           ) : (
             <span className="italic">dyn —</span>
           )}
-          <button className="px-1 border rounded" onClick={() => setSegmentProps(pane.peer, index, { dyn: Math.min(5, (dyn ?? dynInherited?.value ?? 3) + 1) })}>
+          <button className="px-1 border rounded" onClick={() => setDyn(Math.min(5, base + 1))}>
             +
           </button>
           {dyn !== undefined && (
-            <button className="px-1" title="прибрати" onClick={() => setSegmentProps(pane.peer, index, { dyn: null })}>
+            <button className="px-1" title="прибрати" onClick={() => setDyn(null)}>
               ×
             </button>
           )}
         </span>
-        {pane.otherHere === index && (
-          <span className="rounded bg-sky-100 text-sky-800 px-1.5">✎ тут {NAMES[pane.who === "A" ? "B" : "A"]}</span>
-        )}
+        {pane.otherHere === index && <span className="rounded bg-sky-100 text-sky-800 px-1.5">✎ тут {otherName}</span>}
         <span className="flex-1" />
         <button className="opacity-0 group-hover:opacity-100 text-rose-600" onClick={remove}>
           видалити відрізок
         </button>
       </div>
-      {pane.display.chords && <ChordLane index={index} text={text} />}
-      <div
-        className={`font-mono text-[15px] leading-6 whitespace-pre ${node.heading ? "font-bold uppercase tracking-wide" : ""}`}
-        style={pane.display.words ? undefined : { color: "transparent" }}
-      >
-        {children}
-      </div>
+      {children}
       {pane.display.cajon && <CajonLane index={index} />}
     </div>
   );
 }
 
-function ChordLane({ index, text }: { index: number; text: string }) {
+function TextLane({ attributes, children, element, lane }: RenderElementProps & { lane: LaneType }) {
   const pane = usePane();
-  const ops = chordOps(pane.variant);
-  const ref = useRef<HTMLDivElement>(null);
-  const mine = pane.chords.filter((c) => ops.home(c) === index);
+  const text = Node.string(element);
+  const shown = pane.display[lane];
+  const transposed = lane === "chords" && pane.display.semis !== 0;
+  let seg = -1;
+  try {
+    seg = ReactEditor.findPath(pane.peer.editor as unknown as ReactEditor, element)[0];
+  } catch {
+    /* */
+  }
+  const heading = !!(pane.peer.editor.children[seg] as { heading?: boolean } | undefined)?.heading;
 
-  // Групуємо за офсетом: кілька акордів на одному місці — видно, що «злиплись».
-  const groups = new Map<number, ChordView[]>();
-  mine.forEach((c) => {
-    const at = c.seg === index && c.offset != null ? c.offset : -1;
-    groups.set(at, [...(groups.get(at) ?? []), c]);
-  });
-  // «sim.» — лише якщо вище є відрізок з акордами й це не заголовок.
-  const isHeading = !!(pane.peer.editor.children[index] as { heading?: boolean } | undefined)?.heading;
-  const empty =
-    mine.length === 0 && !isHeading && pane.chords.some((c) => (ops.home(c) ?? Infinity) < index);
-
-  const addAt = async (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).dataset.chord) return;
-    const box = ref.current!.getBoundingClientRect();
-    const probe = ref.current!.querySelector<HTMLElement>("[data-probe]")!;
-    const ch = probe.getBoundingClientRect().width / 10;
-    const offset = Math.max(0, Math.min(text.length, Math.round((e.clientX - box.left - 8) / ch)));
-    const name = await ask(`Акорд над «${text[offset] ?? "кінцем рядка"}» (символ ${offset})`, "");
-    if (!name) return;
-    ops.add(pane.peer, index, offset, newId(), name.trim());
-  };
-
-  const edit = async (e: React.MouseEvent, c: ChordView) => {
-    e.stopPropagation();
-    if (e.shiftKey) return pane.toggleChord(c.id);
-    const name = await ask("Назва акорду (порожньо — видалити)", c.name);
-    if (name === null) return;
-    if (!name.trim()) ops.remove(pane.peer, c);
-    else ops.rename(pane.peer, c, name.trim());
-  };
-
+  // Сховану доріжку і транспонований рядок лишаємо в DOM для Slate, але не показуємо.
+  const hiddenStyle = { position: "absolute", opacity: 0, height: 0, overflow: "hidden", pointerEvents: "none" } as const;
   return (
     <div
-      ref={ref}
-      contentEditable={false}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={addAt}
-      className="relative h-6 font-mono text-[15px] leading-6 cursor-crosshair select-none hover:bg-amber-50/60 rounded"
+      {...attributes}
+      className={`relative font-mono text-[15px] leading-6 whitespace-pre ${
+        lane === "chords" ? "text-amber-700 font-semibold min-h-6" : heading ? "font-bold uppercase tracking-wide" : ""
+      }`}
     >
-      <span data-probe className="invisible absolute">
-        0000000000
-      </span>
-      {empty && <span className="absolute left-0 text-stone-300 italic text-xs">sim. (як попередньо)</span>}
-      {[...groups.entries()].map(([at, cs]) => (
+      {shown && transposed && (
+        <div contentEditable={false} className="select-none" title="транспоновано — лише показ, правити при тоні 0">
+          {transposeLine(text, pane.display.semis) || " "}
+        </div>
+      )}
+      <div style={!shown || transposed ? hiddenStyle : undefined}>{children}</div>
+      {shown && !transposed && text === "" && (
         <span
-          key={at}
-          className="absolute top-0 flex gap-0.5"
-          style={{ left: `${Math.max(0, at)}ch` }}
+          contentEditable={false}
+          className="absolute left-0 top-0 text-stone-300 italic text-xs font-normal select-none pointer-events-none"
         >
-          {cs.map((c) => {
-            const elsewhere = c.seg !== index;
-            const stuck = cs.length > 1;
-            const noted = pane.notes.some((n) => n.marks.some((m) => m.mark.lane === "chords" && m.mark.chord === c.id));
-            return (
-              <span
-                key={c.id}
-                data-chord
-                onClick={(e) => edit(e, c)}
-                title={elsewhere ? `ключ на #${index}, а позиція вказує на ${c.seg == null ? "нікуди" : "#" + c.seg}` : `над «${c.char}»`}
-                className={`cursor-pointer font-semibold rounded px-0.5 ${
-                  elsewhere ? "text-rose-600 bg-rose-50 line-through" : stuck ? "text-orange-600 bg-orange-50" : "text-amber-700"
-                } ${pane.selectedChords.has(c.id) ? "ring-2 ring-sky-400" : ""}`}
-              >
-                {transposeName(c.name, pane.display.semis)}
-                {noted && <sup className="text-amber-500">●</sup>}
-                {elsewhere && <sub className="no-underline">→{c.seg == null ? "∅" : "#" + c.seg}</sub>}
-              </span>
-            );
-          })}
+          {lane === "chords" ? "акорди порожні" : "слова порожні"}
         </span>
-      ))}
+      )}
     </div>
   );
 }
@@ -509,7 +385,6 @@ function CajonLane({ index }: { index: number }) {
       })
     : undefined;
   const shown = empty ? inh?.value ?? {} : own;
-
   return (
     <div contentEditable={false} className="flex items-center gap-1 mt-1 select-none" onMouseDown={(e) => e.preventDefault()}>
       <span className="text-[10px] text-stone-400 w-10">кахон</span>
@@ -532,57 +407,48 @@ function CajonLane({ index }: { index: number }) {
   );
 }
 
-function NoteCard({ view }: { view: NoteView }) {
+function NoteCard({ view }: { view: LaneNoteView }) {
   const pane = usePane();
   return (
     <div contentEditable={false} className="mb-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs select-none">
       <b>{view.note.author}:</b> {view.note.text}{" "}
       <span className="text-stone-500">
-        ({view.marks.map((m) => markLabel(m.mark, pane.chords) + (m.lost ? " — втрачено" : "")).join("; ")})
+        ({view.marks.map((m) => `${LANE_LABEL[m.mark.lane]} «${m.mark.quote}»${m.lost ? " — втрачено" : ""}`).join("; ")})
       </span>
-      <button className="ml-2 text-stone-400" onClick={() => notesMap(pane.peer).delete(view.note.id)}>
+      <button className="ml-2 text-stone-400" onClick={() => laneNotes(pane.peer).delete(view.note.id)}>
         ×
       </button>
     </div>
   );
 }
 
-function markLabel(m: NoteView["marks"][number]["mark"], chords: ChordView[]) {
-  if (m.lane === "words") return `слова «${m.quote}»`;
-  const c = chords.find((x) => x.id === m.chord);
-  return `акорд ${c?.name ?? "?"}`;
-}
+// ── стан документа ─────────────────────────────────────────────────────────
 
-// ── стан документа (читається людиною) ─────────────────────────────────────
-
-function StatePanel({ peer, chords, notes, variant }: { peer: Peer; chords: ChordView[]; notes: NoteView[]; variant: VariantId }) {
-  const ops = chordOps(variant);
-  const lostChords = chords.filter((c) => c.seg == null);
+function StatePanel({ peer, notes }: { peer: Peer; notes: LaneNoteView[] }) {
   return (
     <details className="border-t border-stone-100 bg-stone-50/60 px-4 py-2 text-xs" open>
       <summary className="cursor-pointer text-stone-500 font-medium">Що лежить у документі</summary>
       <table className="w-full mt-2 font-mono">
         <tbody>
           {peer.editor.children.map((n, i) => {
-            const props = Object.entries(n).filter(([k]) => !["type", "children"].includes(k) && !k.startsWith("chord:"));
-            const keys = Object.keys(n).filter((k) => k.startsWith("chord:")).length;
+            const el = n as Element;
+            const props = Object.entries(n).filter(([k]) => !["type", "children"].includes(k));
+            const lanes = el.children.map((c) => (c as unknown as { type: string }).type);
+            const dup = lanes.length !== new Set(lanes).size;
             return (
               <tr key={i} className="align-top border-b border-stone-100">
                 <td className="pr-2 text-stone-400">#{i}</td>
-                <td className="pr-2 whitespace-pre">«{Node.string(n)}»</td>
-                <td className="pr-2 text-stone-500">
-                  {props.map(([k, v]) => `${k}=${String(v)}`).join(" ")}
-                  {keys ? ` · ключів chord: ${keys}` : ""}
+                <td className="pr-2 whitespace-pre">
+                  <div className="text-amber-800">{laneText(peer.editor, i, "chords") || "·"}</div>
+                  <div>{laneText(peer.editor, i, "words") || "·"}</div>
                 </td>
-                <td className="text-amber-800">{fmt(chords.filter((c) => ops.home(c) === i)).join(" ")}</td>
+                <td className={`pr-2 ${dup ? "text-rose-700 font-bold" : "text-stone-400"}`}>{lanes.join("+")}</td>
+                <td className="text-stone-500">{props.map(([k, v]) => `${k}=${String(v)}`).join(" ")}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
-      {lostChords.length > 0 && (
-        <div className="mt-2 text-rose-700">Акорди без місця (позиція нікуди не веде): {lostChords.map((c) => c.name).join(", ")}</div>
-      )}
       {notes.length > 0 && (
         <ul className="mt-2 space-y-0.5">
           {notes.map((n) => (
@@ -597,85 +463,36 @@ function StatePanel({ peer, chords, notes, variant }: { peer: Peer; chords: Chor
   );
 }
 
-// ── вікно введення (prompt/confirm у вбудованих браузерах і PWA не працюють) ──
-
-type AskState = { question: string; value: string | null; resolve: (v: string | null) => void };
-let openAsk: ((s: AskState) => void) | null = null;
-
-/** `initial === null` — питання без поля (OK/Скасувати); OK повертає "". */
-function ask(question: string, initial: string | null): Promise<string | null> {
-  return new Promise((resolve) => openAsk?.({ question, value: initial, resolve }));
-}
-
-function AskHost() {
-  const [state, setState] = useState<AskState | null>(null);
-  useEffect(() => {
-    openAsk = setState;
-    return () => {
-      openAsk = null;
-    };
-  }, []);
-  if (!state) return null;
-  const done = (v: string | null) => {
-    state.resolve(v);
-    setState(null);
-  };
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4" onMouseDown={() => done(null)}>
-      <form
-        onMouseDown={(e) => e.stopPropagation()}
-        onSubmit={(e) => {
-          e.preventDefault();
-          done(state.value ?? "");
-        }}
-        className="w-full max-w-sm rounded-xl bg-white p-4 shadow-xl space-y-3"
-      >
-        <div className="text-sm">{state.question}</div>
-        {state.value !== null && (
-          <input
-            autoFocus
-            value={state.value}
-            onChange={(e) => setState({ ...state, value: e.target.value })}
-            className="w-full rounded border border-stone-300 px-2 py-1.5 font-mono"
-          />
-        )}
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={() => done(null)} className="rounded px-3 py-1 text-sm border border-stone-300">
-            Скасувати
-          </button>
-          <button type="submit" autoFocus={state.value === null} className="rounded px-3 py-1 text-sm bg-amber-600 text-white">
-            OK
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 // ── підсумок ───────────────────────────────────────────────────────────────
 
 function Findings() {
   return (
     <details className="rounded-xl border border-stone-200 bg-white p-4 text-sm" open>
-      <summary className="cursor-pointer font-semibold">Що вже показав прототип (vitest + ця сторінка)</summary>
+      <summary className="cursor-pointer font-semibold">Що показав прототип (ітерація 2)</summary>
       <ul className="list-disc pl-5 mt-2 space-y-1 text-stone-700">
         <li>
-          <b>Enter = копія, не перенос.</b> @slate-yjs кладе хвіст слів у новий обʼєкт і стирає зі старого. Позиція
-          акорду в хвості після цього вказує на стерті символи — і падає в <b>кінець першої половини</b>.
-          Підозра підтвердилась (варіант A).
+          <b>Enter і Backspace тепер прості й зворотні.</b> Перша частина отримує все, друга — порожні доріжки;
+          злиття дописує акорди другого вирівняними під кінець слів першого. Enter → Backspace дає рівно те, що було.
         </li>
         <li>
-          <b>Slate копіює всі атрибути відрізка в обидві половини</b> — кожен ключ акорду, динаміка, заголовок, кахон.
-          Те саме, через що колись двоїлись атрибути секцій.
+          <b>Правки акордів і слів не заважають одна одній</b>: поки Оля ділить рядок, Герман спокійно править його
+          акорди — правка ціла й лишається першій частині.
         </li>
         <li>
-          <b>Бібліотека вміє переносити позиції сама</b> («stored positions», варіант B): при Enter акорди хвоста
-          переїжджають у новий відрізок на свої символи. Але при <b>злитті є баг</b> у @slate-yjs 1.0.2 — акорди
-          другого відрізка губляться. Обхід ≈ 20 рядків (варіант B + виправлене).
+          <b>Слова зʼїжджають під акордами</b>: дописав «О, » на початку — акорди стоять на своїх колонках. Ціна того,
+          що акорди не привʼязані до букв.
+        </li>
+        <li className="text-rose-800">
+          <b>Двоє тиснуть Enter в одному рядку (без мережі) — хвіст слів задвоюється.</b> Кожен копіює хвіст у свій
+          новий відрізок.
+        </li>
+        <li className="text-rose-800">
+          <b>Оля склеює рядки, а Герман пише в другий — набране Германом зникає</b> (і в словах, і в акордах).
         </li>
         <li>
-          <b>Не лікується жодним варіантом:</b> якщо Оля ділить рядок, а Герман офлайн пише в його хвіст, набране
-          Германом опиняється в кінці <b>першої</b> половини. Так поводиться й нинішній редактор.
+          Як і раніше: якщо Оля ділить рядок, а Герман пише в його хвіст, набране опиняється в кінці першої частини;
+          видалення відрізка перемагає набір у ньому. Ці три проблеми — від того, як @slate-yjs ділить і склеює
+          вузли, і нинішній редактор має їх так само.
         </li>
       </ul>
     </details>
@@ -684,74 +501,125 @@ function Findings() {
 
 // ── сценарії ───────────────────────────────────────────────────────────────
 
-type ScenarioCtx = {
-  pair: Pair;
-  variant: VariantId;
-  setDisplay: (who: Who, d: Partial<Display>) => void;
-};
+type ScenarioCtx = { pair: Pair; setDisplay: (who: Who, d: Partial<Display>) => void };
 type Scenario = { title: string; what: string; watch: string; steps: { label: string; run: (c: ScenarioCtx) => void }[] };
+
+function enter(p: Peer, seg: number, offset: number) {
+  Transforms.select(p.editor, { path: [seg, 1, 0], offset });
+  Editor.insertBreak(p.editor);
+  flush(p);
+}
+function backspace(p: Peer, seg: number) {
+  Transforms.select(p.editor, { path: [seg, 1, 0], offset: 0 });
+  Editor.deleteBackward(p.editor, { unit: "character" });
+  flush(p);
+}
+function typeIn(p: Peer, seg: number, lane: LaneType, offset: number | "end", text: string) {
+  const path = [...lanePath(p.editor, seg, lane), 0];
+  const at = offset === "end" ? laneText(p.editor, seg, lane).length : offset;
+  Transforms.insertText(p.editor, text, { at: { path, offset: at } });
+  flush(p);
+}
+function eraseIn(p: Peer, seg: number, lane: LaneType, from: number, to: number) {
+  const path = [...lanePath(p.editor, seg, lane), 0];
+  Transforms.delete(p.editor, { at: { anchor: { path, offset: from }, focus: { path, offset: to } } });
+  flush(p);
+}
+function markText(p: Peer, seg: number, lane: LaneType, from: number, to: number) {
+  const path = [...lanePath(p.editor, seg, lane), 0];
+  return textMark(p, { anchor: { path, offset: from }, focus: { path, offset: to } })!;
+}
 
 const offline = { label: "Вимкнути мережу", run: (c: ScenarioCtx) => c.pair.unlink() };
 const online = { label: "Увімкнути мережу — правки зустрічаються", run: (c: ScenarioCtx) => c.pair.link() };
-const olyaEnter = { label: "Оля: Enter перед «Господь» (#1)", run: (c: ScenarioCtx) => pressEnter(c.pair.A, 1, 11) };
+const olyaEnter = { label: "Оля: Enter перед «Господь» (#1)", run: (c: ScenarioCtx) => enter(c.pair.A, 1, 11) };
 
 const SCENARIOS: Scenario[] = [
   {
     title: "Enter посеред рядка",
-    what: "Оля ставить курсор перед «Господь» у рядку з чотирма акордами, динамікою й кахоном і тисне Enter.",
-    watch: "Куди стали C і G? Чи задвоїлись динаміка й кахон у новому відрізку? Порівняй варіанти A і B.",
+    what: "Оля ставить курсор перед «Господь» і тисне Enter.",
+    watch:
+      "Весь рядок акордів, динаміка й кахон лишаються першій частині; у «Господь» — порожні доріжки (кахон і динаміка показуються «як у #1»).",
     steps: [olyaEnter],
   },
   {
     title: "Enter, а потім Backspace",
-    what: "Ділимо рядок і одразу склеюємо назад. Має вийти рівно те, що було (як SONG-27).",
-    watch: "Чи всі чотири акорди повернулись на свої символи? У B без виправлення — два акорди зникають.",
-    steps: [olyaEnter, { label: "Оля: Backspace на початку «Господь» (#2)", run: (c) => backspaceAtStart(c.pair.A, 2) }],
+    what: "Ділимо рядок і одразу склеюємо назад.",
+    watch: "Має вийти рівно те, що було — і в словах, і в акордах, і в атрибутах.",
+    steps: [olyaEnter, { label: "Оля: Backspace на початку «Господь» (#2)", run: (c) => backspace(c.pair.A, 2) }],
   },
   {
-    title: "Ділення під час набору",
-    what: "Без мережі Оля ділить рядок, а Герман у той час дописує в кінець «Господь». Потім мережа повертається.",
-    watch: "Слово Германа опиняється в кінці першої половини, а не в «Господь». Це не залежить від варіанту.",
-    steps: [offline, olyaEnter, { label: "Герман: дописує «, Царю» в кінець #1", run: (c) => typeAt(c.pair.B, 1, 18, ", Царю") }, online],
+    title: "Склеїти два рядки з акордами",
+    what: "Оля тисне Backspace на початку «Твоє світло…» (#2).",
+    watch: "Акорди #2 дописуються в кінець рядка акордів #1, вирівняні під кінець слів #1. Кахон і динаміка — від #1.",
+    steps: [{ label: "Оля: Backspace на початку #2", run: (c) => backspace(c.pair.A, 2) }],
   },
   {
-    title: "Акорд у хвіст під час ділення",
-    what: "Без мережі Оля ділить рядок, а Герман ставить Dm над «с» у «Господь».",
-    watch: "Dm падає на точку розрізу в першій половині — в усіх варіантах.",
+    title: "Ділення, поки інший пише акорди",
+    what: "Без мережі Оля ділить рядок #1, а Герман дописує « D» у рядок акордів #1.",
+    watch: "Правка Германа ціла й лишається першій частині — акорди й слова не заважають одне одному.",
     steps: [
       offline,
       olyaEnter,
+      { label: "Герман: дописує « D» в акорди #1", run: (c) => typeIn(c.pair.B, 1, "chords", "end", " D") },
+      online,
+    ],
+  },
+  {
+    title: "Ділення, поки інший пише слова",
+    what: "Без мережі Оля ділить рядок #1, а Герман дописує «, Царю» в кінець слів #1.",
+    watch: "«, Царю» опиняється в кінці ПЕРШОЇ частини («Ти святий, , Царю»), а не після «Господь».",
+    steps: [
+      offline,
+      olyaEnter,
+      { label: "Герман: дописує «, Царю» в кінець слів #1", run: (c) => typeIn(c.pair.B, 1, "words", "end", ", Царю") },
+      online,
+    ],
+  },
+  {
+    title: "Двоє тиснуть Enter",
+    what: "Без мережі обоє ставлять курсор перед «Господь» і тиснуть Enter.",
+    watch: "«Господь» задвоюється — два відрізки з тим самим словом.",
+    steps: [offline, olyaEnter, { label: "Герман: Enter перед «Господь» (#1)", run: (c) => enter(c.pair.B, 1, 11) }, online],
+  },
+  {
+    title: "Склеїли, поки інший пише",
+    what: "Без мережі Оля склеює #2 з #1, а Герман дописує « ясне» в слова #2 і «Dm » в його акорди.",
+    watch: "Набране Германом зникає — і слова, і акорди.",
+    steps: [
+      offline,
+      { label: "Оля: Backspace на початку #2", run: (c) => backspace(c.pair.A, 2) },
       {
-        label: "Герман: ставить Dm над «с» у «Господь»",
-        run: (c) => chordOps(c.variant).add(c.pair.B, 1, 13, newId(), "Dm"),
+        label: "Герман: пише в слова й акорди #2",
+        run: (c) => {
+          typeIn(c.pair.B, 2, "words", 4, " ясне");
+          typeIn(c.pair.B, 2, "chords", 0, "Dm ");
+        },
       },
       online,
     ],
   },
   {
     title: "Видалили відрізок, поки інший пише",
-    what: "Без мережі Герман дописує в рядок #1, а Оля цей рядок видаляє.",
-    watch: "Видалення перемагає: набране Германом зникає разом із рядком. У B його акорди лишаються «без місця».",
+    what: "Без мережі Герман дописує в #1, а Оля видаляє #1.",
+    watch: "Видалення перемагає: набране Германом зникає разом із рядком.",
     steps: [
       offline,
-      { label: "Герман: дописує «, Царю» в кінець #1", run: (c) => typeAt(c.pair.B, 1, 18, ", Царю") },
-      { label: "Оля: видаляє відрізок #1", run: (c) => removeSegment(c.pair.A, 1) },
+      { label: "Герман: дописує «, Царю» в кінець слів #1", run: (c) => typeIn(c.pair.B, 1, "words", "end", ", Царю") },
+      { label: "Оля: видаляє #1", run: (c) => removeSegment(c.pair.A, 1) },
       online,
     ],
   },
   {
-    title: "Стерли слово під акордами",
-    what: "Герман стирає «Господь», над яким стоять C і G, потім пише «Царю».",
-    watch: "Акорди не зникають — зсуваються на найближче місце (тут — кінець рядка) і злипаються. Куди вони стануть після «Царю»?",
-    steps: [
-      { label: "Герман: стирає «Господь»", run: (c) => deleteRange(c.pair.B, 1, 11, 18) },
-      { label: "Герман: пише «Царю»", run: (c) => typeAt(c.pair.B, 1, 11, "Царю") },
-    ],
+    title: "Дописали слова — акорди стоять",
+    what: "Герман дописує «О, » на початку слів #1.",
+    watch: "Акорди лишаються на своїх колонках, слова зʼїжджають під ними — тепер C стоїть не над «Г». Вирівнювати — справа людини.",
+    steps: [{ label: "Герман: «О, » на початку #1", run: (c) => typeIn(c.pair.B, 1, "words", 0, "О, ") }],
   },
   {
     title: "Кахон: двоє в ту саму клітинку",
     what: "У #2 кахону немає (sim.). Без мережі Оля і Герман водночас починають його писати.",
-    watch: "Доріжка не двоїться: кожна клітинка — один ключ, на спільній клітинці перемагає хтось один.",
+    watch: "Доріжка не двоїться: кожна клітинка — один ключ, на спільній перемагає хтось один.",
     steps: [
       offline,
       { label: "Оля: B на долю 1 і 3 у #2", run: (c) => setSegmentProps(c.pair.A, 2, { [cajonKey(1)]: "B", [cajonKey(3)]: "B" }) },
@@ -760,36 +628,29 @@ const SCENARIOS: Scenario[] = [
     ],
   },
   {
-    title: "Примітка на акорді й словах",
-    what: "Оля лишає примітку на акорді C і словах «Господь». Далі Герман транспонує, ховає доріжки, а Оля стирає позначене.",
-    watch: "Картка переживає транспонування; ховається лише коли сховані ВСІ її доріжки; втрачається лише коли зникло все позначене.",
+    title: "Примітка на акордах і словах",
+    what: "Оля лишає примітку на акордах «C   G» і словах «Господь». Далі Герман транспонує й ховає доріжки, а Оля стирає позначене.",
+    watch: "Картка переживає транспонування; ховається, лише коли сховані ВСІ її доріжки; втрачається, коли зникло все позначене.",
     steps: [
       {
-        label: "Оля: примітка «тут тихо» на C і «Господь»",
+        label: "Оля: примітка «тут тихо» на «C   G» і «Господь»",
         run: (c) => {
           const p = c.pair.A;
-          const r = { anchor: { path: [1, 0], offset: 11 }, focus: { path: [1, 0], offset: 18 } };
           const id = newId();
-          notesMap(p).set(id, {
+          laneNotes(p).set(id, {
             id,
             text: "тут тихо",
             author: "Оля",
-            marks: [wordsMark(p, r), { lane: "chords", chord: mockChordId(1, 11) }],
+            marks: [markText(p, 1, "chords", 11, 16), markText(p, 1, "words", 11, 18)],
           });
         },
       },
       { label: "Герман: транспонує собі на +2", run: (c) => c.setDisplay("B", { semis: 2 }) },
-      { label: "Герман: ховає доріжку акордів", run: (c) => c.setDisplay("B", { chords: false }) },
+      { label: "Герман: ховає акорди", run: (c) => c.setDisplay("B", { chords: false }) },
       { label: "Герман: ховає ще й слова", run: (c) => c.setDisplay("B", { words: false }) },
-      { label: "Герман: показує все назад", run: (c) => c.setDisplay("B", { words: true, chords: true }) },
-      { label: "Оля: стирає «Господь»", run: (c) => deleteRange(c.pair.A, 1, 11, 18) },
-      {
-        label: "Оля: видаляє акорд C",
-        run: (c) => {
-          const ops = chordOps(c.variant);
-          ops.list(c.pair.A).filter((x) => x.id === mockChordId(1, 11)).forEach((x) => ops.remove(c.pair.A, x));
-        },
-      },
+      { label: "Герман: показує все", run: (c) => c.setDisplay("B", { words: true, chords: true, semis: 0 }) },
+      { label: "Оля: стирає «Господь»", run: (c) => eraseIn(c.pair.A, 1, "words", 11, 18) },
+      { label: "Оля: стирає «C   G»", run: (c) => eraseIn(c.pair.A, 1, "chords", 11, 16) },
     ],
   },
 ];
@@ -851,5 +712,60 @@ function Scenarios(props: {
         </div>
       )}
     </section>
+  );
+}
+
+// ── вікно введення (prompt/confirm у вбудованих браузерах і PWA не працюють) ──
+
+type AskState = { question: string; value: string | null; resolve: (v: string | null) => void };
+let openAsk: ((s: AskState) => void) | null = null;
+
+/** `initial === null` — питання без поля (OK/Скасувати); OK повертає "". */
+function ask(question: string, initial: string | null): Promise<string | null> {
+  return new Promise((resolve) => openAsk?.({ question, value: initial, resolve }));
+}
+
+function AskHost() {
+  const [state, setState] = useState<AskState | null>(null);
+  useEffect(() => {
+    openAsk = setState;
+    return () => {
+      openAsk = null;
+    };
+  }, []);
+  if (!state) return null;
+  const done = (v: string | null) => {
+    state.resolve(v);
+    setState(null);
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4" onMouseDown={() => done(null)}>
+      <form
+        onMouseDown={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          done(state.value ?? "");
+        }}
+        className="w-full max-w-sm rounded-xl bg-white p-4 shadow-xl space-y-3"
+      >
+        <div className="text-sm">{state.question}</div>
+        {state.value !== null && (
+          <input
+            autoFocus
+            value={state.value}
+            onChange={(e) => setState({ ...state, value: e.target.value })}
+            className="w-full rounded border border-stone-300 px-2 py-1.5 font-mono"
+          />
+        )}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={() => done(null)} className="rounded px-3 py-1 text-sm border border-stone-300">
+            Скасувати
+          </button>
+          <button type="submit" autoFocus={state.value === null} className="rounded px-3 py-1 text-sm bg-amber-600 text-white">
+            OK
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
