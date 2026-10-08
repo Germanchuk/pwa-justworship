@@ -6,24 +6,24 @@ import * as Y from "yjs";
 import { Editor, Node, Range } from "slate";
 import { relativeRangeToSlateRange, slateRangeToRelativeRange } from "@slate-yjs/core";
 import { makePair, Peer, Segment } from "./harness";
-import { LaneType, segment, withTextLanes } from "./textLanes";
+import { LaneType, line, withTextLanes } from "./textLanes";
 import { transposeName } from "./model";
 
 export const MOCK_SONG = [
-  segment("Куплет 1", "", { heading: true }),
-  //       0123456789012345678
-  segment("Ти святий, Господь", "Am F       C   G", { dyn: 2, "cajon:1.1": "B", "cajon:1.5": "t" }),
-  segment("Твоє світло серед ночі", "F    C      G     Am"),
-  segment("Приспів", "", { heading: true }),
-  segment("Алилуя, алилуя", "F       G", {
-    dyn: 4,
+  line("/Куплет 1"),
+  // Пробіли підібрано під шрифт редактора (Manrope), як вирівнює людина на око.
+  line("Ти святий, Господь", "Am F               C       G", { "cajon:1.1": "B", "cajon:1.5": "t" }),
+  line("Твоє світло серед ночі", "F          C             G            Am"),
+  line(""),
+  line("/Приспів"),
+  line("Алилуя, алилуя", "F                 G", {
     "cajon:1.1": "B",
     "cajon:1.3": "t",
     "cajon:1.5": "B",
     "cajon:1.6": "B",
     "cajon:1.7": "t",
   }),
-  segment("Слава Тобі навіки (x2)", "Am    F    C   G"),
+  line("Слава Тобі навіки (x2)", "Am        F        C      G"),
 ];
 
 export function makeLanesPair(base: () => Editor) {

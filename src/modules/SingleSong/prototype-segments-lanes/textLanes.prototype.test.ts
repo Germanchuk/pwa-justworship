@@ -1,16 +1,16 @@
 /**
- * PROTOTYPE — ітерація 2: акорди й слова — дві текстові доріжки відрізка.
+ * PROTOTYPE — ітерації 2–3: рядок = [акорди, слова], дві текстові доріжки.
  * Справжні Slate + @slate-yjs, два Y.Doc. `expect` фіксує те, ЩО Є.
  */
 import { describe, expect, it } from "vitest";
 import { Editor, Element, Node, Transforms } from "slate";
 import { flush, makePair, Peer, removeSegment, Segment } from "./harness";
-import { lanePath, segment, withTextLanes } from "./textLanes";
+import { lanePath, line, lineKind, withTextLanes } from "./textLanes";
 
 const SONG = [
   //       0123456789012345678
-  segment("Ти святий, Господь", "Am F       C   G", { dyn: 2, "cajon:1.1": "B" }),
-  segment("Твоє світло серед ночі", "F    C      G     Am"),
+  line("Ти святий, Господь", "Am F       C   G", { "cajon:1.1": "B" }),
+  line("Твоє світло серед ночі", "F    C      G     Am"),
 ];
 
 const pair = () => makePair(SONG as unknown as Segment[], { extend: (p) => withTextLanes(p.editor) });
@@ -47,7 +47,7 @@ describe("Enter і Backspace", () => {
     const { A, B } = pair();
     enter(A, 0, 11);
     expect(view(B).slice(0, 2)).toEqual([
-      { dyn: 2, "cajon:1.1": "B", chords: "Am F       C   G", words: "Ти святий, ", lanes: "chords+words" },
+      { "cajon:1.1": "B", chords: "Am F       C   G", words: "Ти святий, ", lanes: "chords+words" },
       { chords: "", words: "Господь", lanes: "chords+words" },
     ]);
   });
@@ -65,7 +65,6 @@ describe("Enter і Backspace", () => {
     backspace(A, 1);
     expect(view(B)).toEqual([
       {
-        dyn: 2,
         "cajon:1.1": "B",
         chords: "Am F       C   G  F    C      G     Am",
         words: "Ти святий, ГосподьТвоє світло серед ночі",
@@ -82,6 +81,37 @@ describe("Enter і Backspace", () => {
     Editor.insertBreak(A.editor);
     flush(A);
     expect(view(B)).toEqual(before);
+  });
+});
+
+describe("порожній рядок, /примітка, видалення кількох рядків", () => {
+  it("що є відрізком, визначає вміст рядка", () => {
+    const { A } = makePair(
+      [line("Слова"), line("", "Am  G"), line(""), line("/Приспів"), line("/ x2 ", "C")] as unknown as Segment[],
+      { extend: (p) => withTextLanes(p.editor) },
+    );
+    expect([0, 1, 2, 3, 4].map((i) => lineKind(A.editor, i))).toEqual(["segment", "segment", "empty", "note", "note"]);
+  });
+
+  it("Enter у кінці рядка дає порожній рядок — не відрізок; дописали «/Міст» — примітка; стерли «/» — відрізок", () => {
+    const { A, B } = pair();
+    enter(A, 1, 22);
+    expect(lineKind(B.editor, 2)).toBe("empty");
+    type(A, 2, "words", 0, "/Міст");
+    expect(lineKind(B.editor, 2)).toBe("note");
+    Transforms.delete(A.editor, { at: { path: [2, 1, 0], offset: 0 }, distance: 1 });
+    flush(A);
+    expect(lineKind(B.editor, 2)).toBe("segment");
+  });
+
+  it("виділили від середини слів #0 до середини слів #1 і стерли — як у звичайному тексті", () => {
+    const { A, B } = pair();
+    Transforms.select(A.editor, { anchor: { path: [0, 1, 0], offset: 3 }, focus: { path: [1, 1, 0], offset: 5 } });
+    Editor.deleteFragment(A.editor);
+    flush(A);
+    expect(view(B)).toEqual([
+      { "cajon:1.1": "B", chords: "Am F       C   G", words: "Ти світло серед ночі", lanes: "chords+words" },
+    ]);
   });
 });
 
