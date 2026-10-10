@@ -2,19 +2,23 @@
  * PROTOTYPE (гілка `prototype/segments-lanes`) — викинути після оцінки ADR-0006.
  * Маршрут: `/prototype/segments-lanes`. Усе в памʼяті, жодного сервера.
  *
+ * Ітерація 4 (2026-10-10): два дерева — повне (Yjs) і видиме (лише вибрані
+ * користувачем доріжки), мідлвер `laneView.ts`. Правити можна, бачачи
+ * частину доріжок.
  * Ітерація 3 (2026-10-09): записничок без «рядків-кіборгів» — рядок
  * `[акорди, слова]`, чим він є, визначає вміст (порожній — не відрізок,
  * `/текст` — структурна примітка). Динаміки, заголовка, нумерації немає.
  * Ітерація 2: акорди — текстова доріжка, не на буквах слів.
  * Ітерація 1 (акорди на буквах) — у `splitMerge.prototype.test.ts` і git.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { createEditor, Editor, Element, Node, NodeEntry, Range, Text, Transforms } from "slate";
-import { Editable, ReactEditor, RenderElementProps, RenderLeafProps, Slate, withReact } from "slate-react";
+import { Editable, ReactEditor, RenderElementProps, RenderLeafProps, Slate, useSlateStatic, withReact } from "slate-react";
 import { flush, Pair, Peer, removeSegment, setSegmentProps } from "./harness";
 import { CAJON_STEPS, cajonKey, cajonOf, inherited } from "./model";
-import { LaneNoteView, laneNotes, makeLanesPair, laneAccess, laneShown, resolveLaneNotes, TextMark, textMark, textMarks, transposeLine } from "./lanesModel";
-import { LaneEditable, LaneType, lanePath, laneText, lineKind } from "./textLanes";
+import { LaneNoteView, laneNotes, makeLanesPair, resolveLaneNotes, TextMark, textMark, textMarks, transposeLine } from "./lanesModel";
+import { LaneType, lanePath, laneText, lineKind } from "./textLanes";
+import { createLaneView, toFullPoint, toViewPoint } from "./laneView";
 
 type Who = "A" | "B";
 const NAMES: Record<Who, string> = { A: "Оля", B: "Герман" };
@@ -32,8 +36,10 @@ type PaneCtx = {
   notes: LaneNoteView[];
   display: Display;
   otherHere: number | null;
-  /** рядок, де мій курсор */
+  /** рядок (у повному дереві), де мій курсор */
   myLine: number | null;
+  /** видимий рядок → рядок повного дерева */
+  lines: number[];
 };
 const Ctx = createContext<PaneCtx | null>(null);
 const usePane = () => useContext(Ctx)!;
@@ -43,7 +49,8 @@ const usePane = () => useContext(Ctx)!;
 export default function SegmentsLanesPrototype() {
   const [gen, setGen] = useState(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const pair = useMemo(() => makeLanesPair(() => withReact(createEditor())), [gen]);
+  // Повні дерева — невидимі (без React); видимі створює кожна панель.
+  const pair = useMemo(() => makeLanesPair(() => createEditor()), [gen]);
   (window as unknown as { __proto_pair?: Pair }).__proto_pair = pair; // налагодження
   const [, setVersion] = useState(0);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
@@ -79,7 +86,7 @@ export default function SegmentsLanesPrototype() {
         <AskHost />
         <header className="space-y-2">
           <div className="text-xs font-semibold tracking-wider text-amber-700 uppercase">
-            Прототип · викинути після оцінки · ADR-0006 · ітерація 3
+            Прототип · викинути після оцінки · ADR-0006 · ітерація 4
           </div>
           <h1 className="text-2xl font-semibold">Відрізки й доріжки замість секцій</h1>
           <p className="text-stone-600 max-w-3xl">
@@ -111,7 +118,7 @@ export default function SegmentsLanesPrototype() {
             Почати пісню наново
           </button>
           <span className="text-xs text-stone-500">
-            Рядок акордів зʼявляється над рядком, де стоїть курсор · Enter лише в словах · примітка: виділи текст → «позначити»
+            Галочки — що бачиш і правиш саме ти · Enter лише в словах · «/» — лише на початку порожнього рядка · примітка: виділи текст → «позначити»
           </span>
         </section>
 
@@ -162,35 +169,55 @@ function PeerPane(props: {
 }) {
   const { who, pair, display } = props;
   const peer = pair[who];
+  // Видиме дерево цього учасника: лише вибрані доріжки (ітерація 4).
+  const handle = useMemo(
+    () =>
+      createLaneView(peer.editor as Parameters<typeof createLaneView>[0], display, {
+        base: () => withReact(createEditor()),
+        afterFullChange: () => flush(peer),
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [peer],
+  );
+  useEffect(() => handle.setDisplay({ words: display.words, chords: display.chords }), [handle, display.words, display.chords]);
+  const view = handle.view;
+  const proj = handle.projection();
   const notes = resolveLaneNotes(peer, display);
   const [pending, setPending] = useState<TextMark[]>([]);
-  const dirRef = useRef<1 | -1>(1);
-  // Правила видалення в плагіні питають, чи бачу я доріжку (особиста видимість).
-  (peer.editor as unknown as { laneEditable: LaneEditable }).laneEditable = (ln, lane) =>
-    laneAccess(peer.editor, ln, lane, display, peer.editor.selection?.anchor.path[0] ?? null).editable;
 
+  // Діапазони приміток живуть у повному дереві — перекладаємо у видиме.
   const ranges = notes.flatMap((n) =>
-    n.marks.filter((m) => m.range && laneShown(peer.editor, m.seg!, m.mark.lane, display)).map((m) => m.range!),
+    n.marks.flatMap((m) => {
+      if (!m.range) return [];
+      const a = toViewPoint(peer.editor, proj, m.range.anchor);
+      const f = toViewPoint(peer.editor, proj, m.range.focus);
+      return a && f ? [{ anchor: a, focus: f }] : [];
+    }),
   );
   const decorate = useCallback(
     ([node, path]: NodeEntry) => {
       if (!Text.isText(node)) return [];
+      const lane = (Node.parent(view, path) as unknown as { type: string }).type;
       const slash =
-        path[1] === 1 && node.text.startsWith("/")
+        lane === "words" && node.text.startsWith("/")
           ? [{ anchor: { path, offset: 0 }, focus: { path, offset: 1 }, slash: true }]
           : [];
-      return [...slash, ...ranges
-        .map((r) => Range.intersection(r, Editor.range(peer.editor, path)))
-        .filter((r): r is Range => !!r && !Range.isCollapsed(r))
-        .map((r) => ({ ...r, noted: true }))];
+      return [
+        ...slash,
+        ...ranges
+          .map((r) => Range.intersection(r, Editor.range(view, path)))
+          .filter((r): r is Range => !!r && !Range.isCollapsed(r))
+          .map((r) => ({ ...r, noted: true })),
+      ];
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(ranges), peer],
+    [JSON.stringify(ranges), view],
   );
 
+  const fullRange = (r: Range) => ({ anchor: toFullPoint(peer.editor, proj, r.anchor), focus: toFullPoint(peer.editor, proj, r.focus) });
   const markSelection = () => {
-    const sel = peer.editor.selection;
-    const ms = sel ? textMarks(peer, sel, display) : [];
+    const sel = view.selection;
+    const ms = sel ? textMarks(peer, fullRange(sel), display) : [];
     if (!ms.length) return void ask("Виділи текст — можна через кілька рядків.", null);
     setPending((p) => [...p, ...ms]);
   };
@@ -203,10 +230,10 @@ function PeerPane(props: {
     setPending([]);
   };
 
+  const myLine = view.selection ? proj.lines[view.selection.anchor.path[0]] ?? null : null;
+
   return (
-    <Ctx.Provider
-      value={{ who, peer, notes, display, otherHere: props.otherHere, myLine: peer.editor.selection?.anchor.path[0] ?? null }}
-    >
+    <Ctx.Provider value={{ who, peer, notes, display, otherHere: props.otherHere, myLine, lines: proj.lines }}>
       <div className="rounded-xl border border-stone-200 shadow-sm overflow-hidden" style={{ background: "#fdfbf0" }}>
         <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-stone-200/70 bg-stone-100/40">
           <span className="font-semibold">{NAMES[who]}</span>
@@ -245,24 +272,15 @@ function PeerPane(props: {
 
         <div className="px-4 py-3">
           <Slate
-            editor={peer.editor as unknown as ReactEditor}
-            initialValue={peer.editor.children}
+            editor={view as unknown as ReactEditor}
+            initialValue={view.children}
             onChange={() => {
-              skipHidden(peer, display, dirRef.current);
-              const sel = peer.editor.selection;
-              props.onPresence(sel ? sel.anchor.path[0] : null);
+              const sel = view.selection;
+              props.onPresence(sel ? handle.projection().lines[sel.anchor.path[0]] ?? null : null);
               props.bump();
             }}
           >
-            <Editable
-              onKeyDown={(e) => {
-                dirRef.current = e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "Backspace" ? -1 : 1;
-              }}
-              renderElement={(p) => <LanesElement {...p} />}
-              renderLeaf={Leaf}
-              decorate={decorate}
-              className="outline-none"
-            />
+            <Editable renderElement={(p) => <LanesElement {...p} />} renderLeaf={Leaf} decorate={decorate} className="outline-none" />
           </Slate>
         </div>
 
@@ -270,26 +288,6 @@ function PeerPane(props: {
       </div>
     </Ctx.Provider>
   );
-}
-
-/**
- * Курсор опинився в схованій доріжці (Slate сам рухає його стрілками по
- * всіх вузлах) — переносимо далі в тому ж напрямку до першої видимої.
- */
-function skipHidden(peer: Peer, display: Display, dir: 1 | -1) {
-  const e = peer.editor;
-  const ok = () => {
-    const sel = e.selection;
-    if (!sel || !Range.isCollapsed(sel)) return true;
-    const [ln, l] = sel.anchor.path;
-    const lane = (Node.get(e, [ln, l]) as unknown as { type: LaneType }).type;
-    return laneAccess(e, ln, lane, display, ln).editable;
-  };
-  for (let i = 0; i < 200 && !ok(); i++) {
-    const before = e.selection;
-    Transforms.move(e, { unit: "offset", reverse: dir < 0 });
-    if (JSON.stringify(before) === JSON.stringify(e.selection)) dir = dir < 0 ? 1 : -1; // уперлись у край
-  }
 }
 
 function Leaf({ attributes, children, leaf }: RenderLeafProps) {
@@ -317,17 +315,23 @@ function LanesElement(props: RenderElementProps) {
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
 const INK = { words: "#1e3a8a", chords: "#3b82f6" };
 
+/** Номер рядка в повному дереві для вузла видимого дерева (−1 — вузол щойно зник). */
+function useFullLine(element: Element) {
+  const pane = usePane();
+  const editor = useSlateStatic();
+  try {
+    return pane.lines[ReactEditor.findPath(editor, element)[0]] ?? -1;
+  } catch {
+    return -1;
+  }
+}
+
 function LineElement({ attributes, children, element }: RenderElementProps) {
   const pane = usePane();
-  let index = -1;
-  try {
-    index = ReactEditor.findPath(pane.peer.editor as unknown as ReactEditor, element)[0];
-  } catch {
-    /* вузол щойно зник */
-  }
-  const kind = index < 0 ? "empty" : lineKind(pane.peer.editor, index);
-  const cards = pane.notes.filter((n) => n.cardAt === index);
-  const otherHere = pane.otherHere === index;
+  const ln = useFullLine(element);
+  const kind = ln < 0 ? "empty" : lineKind(pane.peer.editor, ln);
+  const cards = pane.notes.filter((n) => n.cardAt === ln);
+  const otherHere = pane.otherHere === ln;
   return (
     <div
       {...attributes}
@@ -340,57 +344,43 @@ function LineElement({ attributes, children, element }: RenderElementProps) {
         <NoteCard key={c.note.id} view={c} />
       ))}
       {children}
-      {pane.display.cajon && kind === "segment" && <CajonLane index={index} />}
+      {pane.display.cajon && kind === "segment" && <CajonLane index={ln} />}
     </div>
   );
 }
 
+/** Доріжка є у видимому дереві — отже її видно й можна правити (крім транспонування). */
 function TextLane({ attributes, children, element, lane }: RenderElementProps & { lane: LaneType }) {
   const pane = usePane();
   const text = Node.string(element);
-  let ln = -1;
-  try {
-    ln = ReactEditor.findPath(pane.peer.editor as unknown as ReactEditor, element)[0];
-  } catch {
-    /* */
-  }
+  const ln = useFullLine(element);
   const kind = ln < 0 ? "empty" : lineKind(pane.peer.editor, ln);
-  // Рядок акордів у відрізка видно завжди (Герман: відрізок «прагне акордів»).
-  // Сховане не існує для курсору й правок — див. `laneAccess`.
-  const access = ln < 0 ? { shown: false, editable: false } : laneAccess(pane.peer.editor, ln, lane, pane.display, pane.myLine);
-  const visible = access.shown;
   const transposed = lane === "chords" && pane.display.semis !== 0;
-  const editable = access.editable && !transposed;
-
   const note = lane === "words" && kind === "note";
   return (
     <div
       {...attributes}
       className="relative whitespace-pre"
-      style={
-        visible
-          ? {
-              paddingLeft: 16,
-              fontSize: 16,
-              lineHeight: 1.6,
-              minHeight: "1.6em",
-              boxShadow: RULE,
-              color: INK[lane],
-              fontWeight: lane === "chords" || note ? 700 : 500,
-              letterSpacing: note ? "0.01em" : undefined,
-            }
-          : { display: "none" }
-      }
+      style={{
+        paddingLeft: 16,
+        fontSize: 16,
+        lineHeight: 1.6,
+        minHeight: "1.6em",
+        boxShadow: RULE,
+        color: INK[lane],
+        fontWeight: lane === "chords" || note ? 700 : 500,
+        letterSpacing: note ? "0.01em" : undefined,
+      }}
     >
-      {visible && transposed && (
+      {transposed && (
         <div contentEditable={false} className="select-none" title="транспоновано — лише показ, правити при тоні 0">
           {transposeLine(text, pane.display.semis) || " "}
         </div>
       )}
-      <div contentEditable={editable ? undefined : false} style={transposed ? { display: "none" } : undefined}>
+      <div contentEditable={transposed ? false : undefined} style={transposed ? { display: "none" } : undefined}>
         {children}
       </div>
-      {visible && !transposed && lane === "chords" && text === "" && (kind !== "empty" || pane.myLine === ln) && (
+      {!transposed && lane === "chords" && text === "" && (kind !== "empty" || pane.myLine === ln) && (
         <span
           contentEditable={false}
           className="absolute left-4 top-0 italic text-sm font-normal select-none pointer-events-none"
