@@ -163,6 +163,41 @@ const pickFocus = (
   return hit ? { row: hit.row, node: hit.node } : null;
 };
 
+/** Скільки триває переїзд сторінки до нового рядка (`SCROLL-18`). */
+const GLIDE_MS = 1200;
+
+const GLIDE_STOPPERS = ["touchstart", "wheel"] as const;
+const GLIDE_OPTIONS = { capture: true, passive: true } as const;
+
+/** Розгін і гальмування: рух починається й закінчується без ривка. */
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+
+let stopGlide = () => {};
+
+/**
+ * Повільний плавний переїзд замість штатного `smooth` — той різкий і
+ * короткий. Новий переїзд перебиває попередній; дотик чи колесо — теж, щоб
+ * сторінка не боролась із пальцем.
+ */
+const glide = (from: number, to: number, apply: (value: number) => void) => {
+  stopGlide();
+  let raf = 0;
+  const begin = performance.now();
+  const stop = () => {
+    cancelAnimationFrame(raf);
+    GLIDE_STOPPERS.forEach((type) => window.removeEventListener(type, stop, GLIDE_OPTIONS));
+  };
+  const step = (now: number) => {
+    const t = Math.min(1, (now - begin) / GLIDE_MS);
+    apply(from + (to - from) * easeInOut(t));
+    if (t < 1) raf = requestAnimationFrame(step);
+    else stop();
+  };
+  GLIDE_STOPPERS.forEach((type) => window.addEventListener(type, stop, GLIDE_OPTIONS));
+  raf = requestAnimationFrame(step);
+  stopGlide = stop;
+};
+
 /**
  * Тримає кружечок у полі зору, поки його веде автоскрол (`SCROLL-18`).
  * Один стовпець — сторінка плавно підтягує рядок до центру екрана. Колонки —
@@ -171,10 +206,11 @@ const pickFocus = (
  */
 const keepInView = (rect: DOMRect, editable: HTMLElement) => {
   if (!window.matchMedia(COLUMNS_QUERY).matches) {
-    window.scrollTo({
-      top: window.scrollY + (rect.top + rect.bottom) / 2 - window.innerHeight / 2,
-      behavior: "smooth",
-    });
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    const target = window.scrollY + (rect.top + rect.bottom) / 2 - window.innerHeight / 2;
+    glide(window.scrollY, Math.min(Math.max(0, target), max), (top) =>
+      window.scrollTo({ top, behavior: "instant" }),
+    );
     return;
   }
 
@@ -195,7 +231,9 @@ const keepInView = (rect: DOMRect, editable: HTMLElement) => {
         ? 1
         : 0;
   if (steps !== 0) {
-    editable.scrollBy({ left: steps * pitch, behavior: "smooth" });
+    const max = editable.scrollWidth - editable.clientWidth;
+    const target = Math.min(Math.max(0, editable.scrollLeft + steps * pitch), max);
+    glide(editable.scrollLeft, target, (left) => editable.scrollTo({ left, behavior: "instant" }));
   }
 };
 
@@ -245,6 +283,9 @@ export const FocusRowProvider = ({
   const beat = drive?.beatMs ?? null;
   const startedAt = drive?.startedAt ?? null;
 
+  // Пішов із пісні посеред переїзду — наступна сторінка не мусить їхати.
+  useEffect(() => () => stopGlide(), []);
+
   useEffect(() => {
     activeStore = store;
     return () => {
@@ -281,8 +322,9 @@ export const FocusRowProvider = ({
       const previous = store.get();
       // Сторінку рухаємо, лише коли кружечок перейшов на інший вузол, — а
       // не на кожну зміну розкладки й не на старті: рядок старту вже там, де
-      // його лишила людина. Хто почав слідувати, переїжджає звідси ж: його
-      // кружечок стояв там, куди він доскролив.
+      // його лишила людина. Учасник, чий екран був деінде (на старті чи
+      // після власного скролу), переїжджає звідси ж — на наступному рядку
+      // (`SCROLL-22`).
       const moved = previous?.node !== focus.node;
       // Анімація відліку стартує разом із класом, а доля — від моменту
       // старту: хто приєднався посеред такту, блимає в долю, а не від свого

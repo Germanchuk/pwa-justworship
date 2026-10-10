@@ -44,8 +44,7 @@ export default function SingleSong() {
 
   return (
     <SongMenuSlotProvider>
-      {/* `key`: інша пісня — інше слідування, «відкрив пісню» рахується заново. */}
-      <AutoscrollFollowProvider key={songId} songId={songId ?? null}>
+      <AutoscrollFollowProvider songId={songId ?? null}>
         <Song />
         <SongControls />
       </AutoscrollFollowProvider>

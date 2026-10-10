@@ -1,5 +1,6 @@
 /**
- * Ручний скрол (`SCROLL-22`) — за ЖЕСТОМ, а не за подією `scroll`: власний
+ * Ручний скрол ініціатора, що рухає гурт (`SCROLL-26`), — за ЖЕСТОМ, а не
+ * за подією `scroll`: власний
  * переїзд автоскролу (`scrollTo`, `scrollBy`) теж шле `scroll`, а жестів —
  * ні, тож він ніколи не виглядає як ручний. Ідея — з архівного автоскролу
  * (`archive/chord-player`, `useNeedleScroll`).
@@ -62,7 +63,7 @@ const onScrollbar = (event: MouseEvent): boolean => {
 };
 
 /** Слухати ручний скрол. Повертає відписку. */
-export const onManualScroll = (handler: () => void): (() => void) => {
+const onManualScroll = (handler: () => void): (() => void) => {
   const onKey = (event: KeyboardEvent) => {
     if (SCROLL_KEYS.has(event.key) && !keyIsForTarget(event)) handler();
   };

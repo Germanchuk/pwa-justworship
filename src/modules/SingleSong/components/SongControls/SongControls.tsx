@@ -2,7 +2,7 @@ import React, {useEffect} from "react";
 
 import DronePlayer from "../../services/DronePlayer/DronePlayer";
 import {useCanAnnotate, useCanPlay} from "../../mode";
-import {AutoscrollControls, AutoscrollEdge, AutoscrollReturn} from "./AutoscrollControls";
+import {AutoscrollControls, AutoscrollEdge} from "./AutoscrollControls";
 import {NotesAudienceSelect} from "../SlateLyricsPlayground/comments/NotesAudienceSelect";
 import {ModeSwitch} from "./ModeSwitch/ModeSwitch";
 import {PlaybackControls} from "./PlaybackControls";
@@ -46,7 +46,6 @@ export const SongControls = () => {
   return (
     <>
       <AutoscrollEdge />
-      <AutoscrollReturn />
       <div
         // Один проміжок між усіма групами кнопок — і в рядку, і в стовпчику.
         className="fixed right-2 z-40 flex flex-col items-end gap-2"
