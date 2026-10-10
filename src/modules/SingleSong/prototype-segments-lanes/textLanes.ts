@@ -143,8 +143,27 @@ function deleteAcross(editor: Editor, range: Range) {
   }
 }
 
+/**
+ * Правило Германа (2026-10-10): `/` на початку слів (тобто структурну
+ * примітку) можна надрукувати лише в порожньому рядку. Рядок із вмістом
+ * приміткою не стає, і перед `/` примітки нічого не вставити. Деінде `/`
+ * звичайний символ (`D/F#` в акордах, «і/або» в словах).
+ */
+export function slashAllowed(editor: Editor, at: Point, text: string) {
+  const { line: ln, lane } = laneAt(editor, at);
+  if (lane !== "words" || at.offset !== 0) return true;
+  if (laneText(editor, ln, "words").startsWith("/")) return false;
+  return !text.startsWith("/") || lineKind(editor, ln) === "empty";
+}
+
 export function withTextLanes<E extends Editor>(editor: E): E {
-  const { apply, deleteBackward, deleteForward, deleteFragment } = editor;
+  const { apply, deleteBackward, deleteForward, deleteFragment, insertText } = editor;
+
+  editor.insertText = (text, options) => {
+    const at = editor.selection && Range.isCollapsed(editor.selection) ? editor.selection.anchor : null;
+    if (at && !slashAllowed(editor, at, text)) return;
+    insertText(text, options);
+  };
 
   // «Друга частина — нічого»: новий рядок не успадковує атрибутів.
   editor.apply = (op) => {
