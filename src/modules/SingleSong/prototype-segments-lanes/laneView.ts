@@ -170,9 +170,13 @@ export function createLaneView(
 
   /** Виконати команду в повному дереві з курсором, перекладеним з видимого. */
   const inFull = (run: () => void) => {
+    // Структурна дія — окремий крок історії (Y.UndoManager склеює все за 500 мс).
+    const um = (full as unknown as { undoManager?: { stopCapturing: () => void } }).undoManager;
+    um?.stopCapturing();
     fullSelectionFromView();
     run();
     opts.afterFullChange?.();
+    um?.stopCapturing();
     sync();
   };
 
@@ -205,6 +209,20 @@ export function createLaneView(
     if (!slashAllowed(full, toFullPoint(full, proj, at), text)) return;
     Transforms.insertText(view, text);
   };
+  // Undo/redo — штатний `withYHistory` повного дерева (Y.UndoManager); курсор
+  // бібліотека відновлює після транзакції, тому вирівнюємо видиме вже після.
+  const history = full as unknown as { undo?: () => void; redo?: () => void };
+  if (typeof history.undo === "function") {
+    (view as unknown as { undo: () => void }).undo = () => {
+      history.undo!();
+      sync();
+    };
+    (view as unknown as { redo: () => void }).redo = () => {
+      history.redo!();
+      sync();
+    };
+  }
+
   view.insertBreak = () => inFull(() => Editor.insertBreak(full));
   view.deleteBackward = (unit) => inFull(() => Editor.deleteBackward(full, { unit }));
   view.deleteForward = (unit) => inFull(() => Editor.deleteForward(full, { unit }));

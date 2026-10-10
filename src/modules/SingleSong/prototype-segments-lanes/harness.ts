@@ -14,7 +14,6 @@
 import { createEditor, Descendant, Editor, Element, Node, Range, Transforms } from "slate";
 import * as Y from "yjs";
 import {
-  slateNodesToInsertDelta,
   slatePointToRelativePosition,
   withYjs,
   YjsEditor,
@@ -37,11 +36,6 @@ export function makePair(seed: (string | Segment)[], opts: PairOptions = {}) {
   const nodes: Segment[] = seed.map((s) =>
     typeof s === "string" ? { type: "segment", children: [{ text: s }] } : s,
   );
-  a.get("content", Y.XmlText).applyDelta(slateNodesToInsertDelta(nodes as unknown as Descendant[]), {
-    sanitize: false,
-  });
-  Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
-
   let online = true;
   const queueAB: Uint8Array[] = [];
   const queueBA: Uint8Array[] = [];
@@ -65,9 +59,18 @@ export function makePair(seed: (string | Segment)[], opts: PairOptions = {}) {
     return p;
   };
 
+  // Засів — як у проді: документ наповнюється через підключений редактор,
+  // а не напряму в Yjs до підключення (інакше undo в іншого учасника дописує
+  // «\n» — артефакт стенда, див. журнал ітерації 4).
+  const A = peer(a);
+  const B = peer(b);
+  Transforms.insertNodes(A.editor, nodes as unknown as Node[], { at: [0] });
+  YjsEditor.flushLocalChanges(A.editor);
+  [A, B].forEach((p) => (p.editor as unknown as { undoManager?: Y.UndoManager }).undoManager?.clear());
+
   return {
-    A: peer(a),
-    B: peer(b),
+    A,
+    B,
     get online() {
       return online;
     },

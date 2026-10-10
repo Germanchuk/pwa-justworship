@@ -4,7 +4,7 @@
  */
 import * as Y from "yjs";
 import { Editor, Node, Range } from "slate";
-import { relativeRangeToSlateRange, slateRangeToRelativeRange } from "@slate-yjs/core";
+import { relativeRangeToSlateRange, slateRangeToRelativeRange, withYHistory } from "@slate-yjs/core";
 import { makePair, Peer, Segment } from "./harness";
 import { LaneType, line, lineKind, withTextLanes } from "./textLanes";
 import { transposeName } from "./model";
@@ -27,7 +27,13 @@ export const MOCK_SONG = [
 ];
 
 export function makeLanesPair(base: () => Editor) {
-  return makePair(MOCK_SONG as unknown as Segment[], { base, extend: (p) => withTextLanes(p.editor) });
+  return makePair(MOCK_SONG as unknown as Segment[], {
+    base,
+    extend: (p) => {
+      withTextLanes(p.editor);
+      withYHistory(p.editor as never); // undo — штатний, у повному дереві
+    },
+  });
 }
 
 // ── примітки ───────────────────────────────────────────────────────────────
