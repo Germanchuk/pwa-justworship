@@ -58,20 +58,23 @@ function transposeToken(
   }
 }
 
+/** Заміна одного акорд-токена: символи `[start, end)` старого тексту → `text`. */
+export type ChordEdit = { start: number; end: number; text: string };
+
 /**
- * Транспонує текст ОДНОГО chord-line з `fromKey` у `toKey`, зберігаючи всі
- * пробіли, бари `|` та крапки `.` на своїх місцях. Заміняємо лише реальні
- * акорд-токени, ідучи справа наліво — щоб офсети решти токенів лишались валідні.
+ * Які акорд-токени ОДНОГО chord-line міняються при транспозиції з `fromKey` у
+ * `toKey`. Пробіли, бари `|` та крапки `.` не чіпаються. Порядок — справа
+ * наліво: застосовуючи правки по черзі, офсети решти лишаються валідні.
  */
-export function transposeChordText(
+export function chordEdits(
   text: string,
   fromKey: SongKeyValue,
   toKey: SongKeyValue,
-): string {
-  if (fromKey === toKey) return text;
+): ChordEdit[] {
+  if (fromKey === toKey) return [];
 
   const tokens = tokenizeChordLine(text);
-  let result = text;
+  const edits: ChordEdit[] = [];
 
   for (let i = tokens.length - 1; i >= 0; i--) {
     const tk = tokens[i];
@@ -81,10 +84,22 @@ export function transposeChordText(
     const transposed = transposeToken(tk.token, fromKey, toKey);
     if (transposed === tk.token) continue;
 
-    result = result.slice(0, tk.charStart) + transposed + result.slice(tk.charEnd);
+    edits.push({ start: tk.charStart, end: tk.charEnd, text: transposed });
   }
 
-  return result;
+  return edits;
+}
+
+/** Транспонує текст ОДНОГО chord-line з `fromKey` у `toKey` (див. `chordEdits`). */
+export function transposeChordText(
+  text: string,
+  fromKey: SongKeyValue,
+  toKey: SongKeyValue,
+): string {
+  return chordEdits(text, fromKey, toKey).reduce(
+    (result, e) => result.slice(0, e.start) + e.text + result.slice(e.end),
+    text,
+  );
 }
 
 /**

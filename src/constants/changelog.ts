@@ -18,6 +18,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.9.1",
+    date: "2026-10-10",
+    changes: [
+      "Транспонування більше не стирає примітки на акордах: вони лишаються на своїх тактах.",
+    ],
+  },
+  {
     version: "1.9.0",
     date: "2026-10-10",
     changes: [
