@@ -18,13 +18,15 @@ import {
   deleteRange,
   fmt,
   lyrics,
-  makePair,
   pressEnter,
-  removeSegment,
   segmentProps,
+  segments,
   setSegmentProps,
   typeAt,
-} from "./harness";
+} from "./chordAnchors";
+import { makePair, removeLine } from "../harness";
+
+const pairOf = (lines: string[]) => makePair(segments(lines) as never);
 
 //            0         1
 //            012345678901234567
@@ -40,7 +42,7 @@ const ORIGINAL = ["Am@seg0:0'Т'", "C@seg0:11'Г'", "F@seg0:3'с'", "G@seg0:15'�
 
 describe("як @slate-yjs пише split_node / merge_node", () => {
   it("Enter = скопіювати хвіст у НОВИЙ Y.XmlText і видалити його зі старого", () => {
-    const { A } = makePair([LINE]);
+    const { A } = pairOf([LINE]);
     const before = A.root.toDelta()[0].insert;
     pressEnter(A, 0, 11);
     const [first, second] = A.root.toDelta().map((d: { insert: unknown }) => d.insert);
@@ -52,7 +54,7 @@ describe("як @slate-yjs пише split_node / merge_node", () => {
 
 describe("A: chord:<id> на відрізку (як записано в ADR-0006)", () => {
   it("Enter посеред слів: КОЖЕН ключ задвоюється, акорди хвоста зʼїжджають у кінець першої половини", () => {
-    const { A, B } = makePair([LINE]);
+    const { A, B } = pairOf([LINE]);
     CHORDS.forEach(([o, n], i) => addChordOnSegment(A, 0, o, `c${i}`, n));
     expect(fmt(chordsOnSegments(B))).toEqual(ORIGINAL);
 
@@ -72,7 +74,7 @@ describe("A: chord:<id> на відрізку (як записано в ADR-0006
   });
 
   it("Enter + Backspace НЕ взаємно зворотні: G втрачає свій символ", () => {
-    const { A, B } = makePair([LINE]);
+    const { A, B } = pairOf([LINE]);
     CHORDS.forEach(([o, n], i) => addChordOnSegment(A, 0, o, `c${i}`, n));
     pressEnter(A, 0, 11);
     backspaceAtStart(A, 1);
@@ -88,7 +90,7 @@ describe("A: chord:<id> на відрізку (як записано в ADR-0006
   });
 
   it("решта атрибутів відрізка (динаміка, заголовок, кахон) так само копіюються в обидві половини", () => {
-    const { A, B } = makePair([LINE]);
+    const { A, B } = pairOf([LINE]);
     setSegmentProps(A, 0, { dyn: 3, heading: true, "cajon:1.1": "B" });
     pressEnter(A, 0, 11);
     expect(segmentProps(B)).toEqual([
@@ -100,7 +102,7 @@ describe("A: chord:<id> на відрізку (як записано в ADR-0006
 
 describe("B: stored position @slate-yjs (атрибут кореня, бібліотека переносить сама)", () => {
   it("Enter посеред слів: акорди хвоста переїжджають у новий відрізок на свої символи", () => {
-    const { A, B } = makePair([LINE]);
+    const { A, B } = pairOf([LINE]);
     CHORDS.forEach(([o, n], i) => addChordStored(A, 0, o, `c${i}`, n));
     pressEnter(A, 0, 11);
     expect(fmt(chordsStored(B))).toEqual([
@@ -112,7 +114,7 @@ describe("B: stored position @slate-yjs (атрибут кореня, біблі
   });
 
   it("Backspace (злиття): акорди другого відрізка ГУБЛЯТЬСЯ — баг mergeNode у 1.0.2", () => {
-    const { A, B } = makePair([LINE]);
+    const { A, B } = pairOf([LINE]);
     CHORDS.forEach(([o, n], i) => addChordStored(A, 0, o, `c${i}`, n));
     pressEnter(A, 0, 11);
     backspaceAtStart(A, 1);
@@ -125,7 +127,7 @@ describe("B: stored position @slate-yjs (атрибут кореня, біблі
   });
 
   it("…доказ, що це баг офсету: акорд, що стоїть далі за довжину першого відрізка, переноситься", () => {
-    const { A, B } = makePair(["Ти", "святий Господь"]); // довжина першого = 2
+    const { A, B } = pairOf(["Ти", "святий Господь"]); // довжина першого = 2
     addChordStored(A, 1, 1, "x", "D"); // «в» (1 < 2) — загубиться
     addChordStored(A, 1, 7, "y", "E"); // «Г» (7 ≥ 2) — переживе
     backspaceAtStart(A, 1);
@@ -134,7 +136,7 @@ describe("B: stored position @slate-yjs (атрибут кореня, біблі
   });
 
   it("з власним переносом при злитті Enter + Backspace взаємно зворотні", () => {
-    const { A, B } = makePair([LINE]);
+    const { A, B } = pairOf([LINE]);
     CHORDS.forEach(([o, n], i) => addChordStored(A, 0, o, `c${i}`, n));
     pressEnter(A, 0, 11);
     backspaceAtStartRemapped(A, 1);
@@ -145,7 +147,7 @@ describe("B: stored position @slate-yjs (атрибут кореня, біблі
 
 describe("конкурентно: Enter у A, поки B (офлайн) пише в хвіст", () => {
   it("набране B в хвості опиняється в кінці ПЕРШОЇ половини", () => {
-    const net = makePair([LINE]);
+    const net = pairOf([LINE]);
     const { A, B } = net;
     net.unlink();
     pressEnter(A, 0, 11);
@@ -156,7 +158,7 @@ describe("конкурентно: Enter у A, поки B (офлайн) пише
   });
 
   it("акорд, який B ставить у хвіст, так само падає на точку розрізу (обидва способи)", () => {
-    const net = makePair([LINE]);
+    const net = pairOf([LINE]);
     const { A, B } = net;
     net.unlink();
     pressEnter(A, 0, 11);
@@ -171,7 +173,7 @@ describe("конкурентно: Enter у A, поки B (офлайн) пише
 
 describe("інші конкурентні сценарії", () => {
   it("видалення символу під акордом — акорд переїжджає на наступний, не зникає", () => {
-    const { A, B } = makePair([LINE]);
+    const { A, B } = pairOf([LINE]);
     addChordStored(A, 0, 11, "c", "C");
     addChordOnSegment(A, 0, 11, "k", "C");
     deleteRange(B, 0, 11, 12); // B стирає «Г»
@@ -180,11 +182,11 @@ describe("інші конкурентні сценарії", () => {
   });
 
   it("видалення відрізка, поки інший у ньому пише: видалення перемагає, набране зникає", () => {
-    const net = makePair(["Перший рядок", LINE]);
+    const net = pairOf(["Перший рядок", LINE]);
     const { A, B } = net;
     addChordStored(A, 1, 3, "c", "F");
     net.unlink();
-    removeSegment(A, 1);
+    removeLine(A, 1);
     typeAt(B, 1, 18, " навіки");
     net.link();
     expect(lyrics(A)).toEqual(["Перший рядок"]);
@@ -193,7 +195,7 @@ describe("інші конкурентні сценарії", () => {
   });
 
   it("двоє одночасно «створюють» одну клітинку кахону — одна перемагає, нічого не двоїться", () => {
-    const net = makePair([LINE]);
+    const net = pairOf([LINE]);
     const { A, B } = net;
     net.unlink();
     setSegmentProps(A, 0, { "cajon:1.1": "B" });
@@ -204,7 +206,7 @@ describe("інші конкурентні сценарії", () => {
   });
 
   it("різні доріжки одного відрізка паралельно (слова в A, акорд і динаміка в B) — усе зливається", () => {
-    const net = makePair([LINE]);
+    const net = pairOf([LINE]);
     const { A, B } = net;
     net.unlink();
     typeAt(A, 0, 0, "О, ");

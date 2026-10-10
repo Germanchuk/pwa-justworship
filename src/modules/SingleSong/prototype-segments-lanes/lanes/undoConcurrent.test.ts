@@ -5,9 +5,9 @@
 import { describe, expect, it } from "vitest";
 import { Editor, Element, Node, Transforms } from "slate";
 import { withYHistory } from "@slate-yjs/core";
-import { flush, makePair, Peer, Segment } from "./harness";
+import { flush, makePair, Peer } from "../harness";
 import { line, withTextLanes } from "./textLanes";
-import { createLaneView, LaneDisplay, LaneViewHandle } from "./laneView";
+import { createLaneView, LaneDisplay, LaneView } from "./laneView";
 
 const SONG = [
   line("/Куплет"),
@@ -19,20 +19,20 @@ const ALL: LaneDisplay = { words: true, chords: true };
 const WORDS: LaneDisplay = { words: true, chords: false };
 
 function setup(a: LaneDisplay, b: LaneDisplay) {
-  const net = makePair(SONG as unknown as Segment[], {
+  const net = makePair(SONG as unknown as Node[], {
     extend: (p) => {
       withTextLanes(p.editor);
       withYHistory(p.editor as never);
     },
   });
-  const mk = (p: Peer, d: LaneDisplay) => createLaneView(p.editor, d, { afterFullChange: () => flush(p) });
+  const mk = (p: Peer, d: LaneDisplay) => createLaneView(p.editor, d, { flush: () => flush(p) });
   return { net, A: mk(net.A, a), B: mk(net.B, b) };
 }
 const doc = (p: Peer) => p.editor.children.map((l) => (l as Element).children.map((c) => Node.string(c)).join(" / "));
-const at = (h: LaneViewHandle, ln: number, lane: number, offset: number) =>
+const at = (h: LaneView, ln: number, lane: number, offset: number) =>
   Transforms.select(h.view, { path: [ln, lane, 0], offset });
-const undo = (h: LaneViewHandle) => (h.view as unknown as { undo: () => void }).undo();
-const redo = (h: LaneViewHandle) => (h.view as unknown as { redo: () => void }).redo();
+const undo = (h: LaneView) => (h.view as unknown as { undo: () => void }).undo();
+const redo = (h: LaneView) => (h.view as unknown as { redo: () => void }).redo();
 /**
  * Між діями користувача — тік: у браузері кожне натискання — окрема подія, і
  * відкладений `onChange` Slate встигає відпрацювати. Без цього undo в тій самій

@@ -6,9 +6,9 @@
  */
 import { describe, expect, it } from "vitest";
 import { Editor, Element, Node, Transforms } from "slate";
-import { flush, makePair, Peer, Segment } from "./harness";
+import { flush, makePair, Peer } from "../harness";
 import { line, withTextLanes } from "./textLanes";
-import { createLaneView, LaneDisplay, LaneViewHandle } from "./laneView";
+import { createLaneView, LaneDisplay, LaneView } from "./laneView";
 
 const SONG = [
   line("/Куплет"),
@@ -25,20 +25,20 @@ const CHORDS: LaneDisplay = { words: false, chords: true };
 const NONE: LaneDisplay = { words: false, chords: false };
 
 function setup(a: LaneDisplay, b: LaneDisplay) {
-  const net = makePair(SONG as unknown as Segment[], { extend: (p) => withTextLanes(p.editor) });
-  const mk = (p: Peer, d: LaneDisplay) => createLaneView(p.editor, d, { afterFullChange: () => flush(p) });
+  const net = makePair(SONG as unknown as Node[], { extend: (p) => withTextLanes(p.editor) });
+  const mk = (p: Peer, d: LaneDisplay) => createLaneView(p.editor, d, { flush: () => flush(p) });
   return { net, A: mk(net.A, a), B: mk(net.B, b) };
 }
 
 /** Видиме дерево: рядок = доріжки через « | », тип доріжки — першою літерою. */
-const shown = (h: LaneViewHandle) =>
+const shown = (h: LaneView) =>
   h.view.children.map((l) =>
     (l as Element).children.map((c) => `${(c as unknown as { type: string }).type[0]}:${Node.string(c)}`).join(" | "),
   );
 /** Повне дерево в документі (однакове в обох після синхронізації). */
 const doc = (p: Peer) => p.editor.children.map((l) => (l as Element).children.map((c) => Node.string(c)).join(" / "));
 
-const at = (h: LaneViewHandle, ln: number, lane: number, offset: number) =>
+const at = (h: LaneView, ln: number, lane: number, offset: number) =>
   Transforms.select(h.view, { path: [ln, lane, 0], offset });
 
 describe("проєкція: кожен бачить лише свої доріжки, каркас — завжди", () => {
@@ -194,5 +194,59 @@ describe("правило «/»", () => {
     net.link();
     expect(doc(net.A)[3]).toBe(doc(net.B)[3]);
     expect([" / /Ми", " / Ми/"]).toContain(doc(net.A)[3]);
+  });
+});
+
+describe("вставка з буфера й захист від правок в обхід команд", () => {
+  const clipboard = (text: string) => ({ getData: (t: string) => (t === "text/plain" ? text : "") }) as DataTransfer;
+
+  it("кілька рядків у словах стають рядками; «/Міст» на новому порожньому рядку — примітка", () => {
+    const { net, A } = setup(WORDS, ALL);
+    at(A, 2, 0, 22);
+    A.view.insertData(clipboard("\n/Міст\nНовий рядок"));
+    expect(doc(net.B).slice(2, 5)).toEqual([
+      "F    C      G     Am / Твоє світло серед ночі",
+      " / /Міст",
+      " / Новий рядок",
+    ]);
+    expect(A.view.selection?.anchor).toEqual({ path: [4, 0, 0], offset: 11 });
+  });
+
+  it("в акорди кілька рядків вставляються одним рядком через пробіл", () => {
+    const { net, A } = setup(CHORDS, ALL);
+    at(A, 1, 0, 0);
+    A.view.insertData(clipboard("Dm\nC "));
+    expect(doc(net.B)[1]).toBe("Dm C Am F       C   G / Ти святий, Господь");
+  });
+
+  it("структурна операція в обхід команд не потрапляє в документ — видиме відкочується", async () => {
+    const { net, A } = setup(ALL, ALL);
+    const before = doc(net.A);
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      Transforms.removeNodes(A.view, { at: [1] });
+      await new Promise((r) => setTimeout(r, 0));
+    } finally {
+      console.warn = warn;
+    }
+    expect(doc(net.A)).toEqual(before);
+    expect(shown(A)[1]).toBe("c:Am F       C   G | w:Ти святий, Господь");
+  });
+});
+
+describe("зміни повного дерева в обхід видимого", () => {
+  it("видалили рядок прямо в повному дереві — видиме підтягується на onChange", async () => {
+    const { net, A } = setup(WORDS, ALL);
+    Transforms.removeNodes(net.A.editor, { at: [1] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(shown(A)).toEqual(["w:/Куплет", "w:Твоє світло серед ночі", "w:", "w:Алилуя"]);
+  });
+
+  it("змінили атрибут рядка (кахон) прямо в повному — у видимому рядок має той самий атрибут", async () => {
+    const { net, A } = setup(ALL, ALL);
+    Transforms.setNodes(net.A.editor, { "cajon:1.1": "B" } as Partial<Node>, { at: [1] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect((A.view.children[1] as unknown as Record<string, unknown>)["cajon:1.1"]).toBe("B");
   });
 });

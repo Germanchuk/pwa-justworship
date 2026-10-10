@@ -14,11 +14,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { createEditor, Editor, Element, Node, NodeEntry, Range, Text, Transforms } from "slate";
 import { Editable, ReactEditor, RenderElementProps, RenderLeafProps, Slate, useSlateStatic, withReact } from "slate-react";
-import { flush, Pair, Peer, removeSegment, setSegmentProps } from "./harness";
-import { CAJON_STEPS, cajonKey, cajonOf, inherited } from "./model";
-import { LaneNoteView, laneNotes, makeLanesPair, resolveLaneNotes, TextMark, textMark, textMarks, transposeLine } from "./lanesModel";
-import { LaneType, lanePath, laneText, lineKind } from "./textLanes";
-import { createLaneView, toFullPoint, toViewPoint } from "./laneView";
+import { flush, Pair, Peer, removeLine, setLineProps } from "./harness";
+import { makeSongPair } from "./mockSong";
+import { CAJON_STEPS, cajonAt, cajonKey, cajonOf } from "./lanes/cajon";
+import { transposeLine } from "./lanes/chords";
+import { createLaneView, LaneView } from "./lanes/laneView";
+import { laneNotes, NoteView, resolveNotes, TextMark, textMark } from "./lanes/notes";
+import { LaneType, lanePath, laneText, lineKind } from "./lanes/textLanes";
 
 type Who = "A" | "B";
 const NAMES: Record<Who, string> = { A: "Оля", B: "Герман" };
@@ -33,13 +35,13 @@ const newId = () => Math.random().toString(36).slice(2, 7);
 type PaneCtx = {
   who: Who;
   peer: Peer;
-  notes: LaneNoteView[];
+  notes: NoteView[];
   display: Display;
   otherHere: number | null;
   /** рядок (у повному дереві), де мій курсор */
   myLine: number | null;
   /** видимий рядок → рядок повного дерева */
-  lines: number[];
+  fullLine: (vln: number) => number;
 };
 const Ctx = createContext<PaneCtx | null>(null);
 const usePane = () => useContext(Ctx)!;
@@ -48,9 +50,10 @@ const usePane = () => useContext(Ctx)!;
 
 export default function SegmentsLanesPrototype() {
   const [gen, setGen] = useState(0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   // Повні дерева — невидимі (без React); видимі створює кожна панель.
-  const pair = useMemo(() => makeLanesPair(() => createEditor()), [gen]);
+  // `gen` — «почати наново»: нова пара на кожне скидання.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const pair = useMemo(() => makeSongPair(), [gen]);
   (window as unknown as { __proto_pair?: Pair }).__proto_pair = pair; // налагодження
   const [, setVersion] = useState(0);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
@@ -170,28 +173,22 @@ function PeerPane(props: {
   const { who, pair, display } = props;
   const peer = pair[who];
   // Видиме дерево цього учасника: лише вибрані доріжки (ітерація 4).
-  const handle = useMemo(
-    () =>
-      createLaneView(peer.editor as Parameters<typeof createLaneView>[0], display, {
-        base: () => withReact(createEditor()),
-        afterFullChange: () => flush(peer),
-      }),
+  const lanes: LaneView = useMemo(
+    () => createLaneView(peer.editor, display, { base: () => withReact(createEditor()), flush: () => flush(peer) }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [peer],
   );
-  useEffect(() => handle.setDisplay({ words: display.words, chords: display.chords }), [handle, display.words, display.chords]);
-  const view = handle.view;
-  const proj = handle.projection();
-  const notes = resolveLaneNotes(peer, display);
+  useEffect(() => lanes.setDisplay({ words: display.words, chords: display.chords }), [lanes, display.words, display.chords]);
+  const view = lanes.view;
+  const notes = resolveNotes(peer, lanes.isShown);
   const [pending, setPending] = useState<TextMark[]>([]);
 
   // Діапазони приміток живуть у повному дереві — перекладаємо у видиме.
   const ranges = notes.flatMap((n) =>
-    n.marks.flatMap((m) => {
-      if (!m.range) return [];
-      const a = toViewPoint(peer.editor, proj, m.range.anchor);
-      const f = toViewPoint(peer.editor, proj, m.range.focus);
-      return a && f ? [{ anchor: a, focus: f }] : [];
+    n.marks.flatMap(({ range }) => {
+      const anchor = range && lanes.toView(range.anchor);
+      const focus = range && lanes.toView(range.focus);
+      return anchor && focus ? [{ anchor, focus }] : [];
     }),
   );
   const decorate = useCallback(
@@ -214,10 +211,9 @@ function PeerPane(props: {
     [JSON.stringify(ranges), view],
   );
 
-  const fullRange = (r: Range) => ({ anchor: toFullPoint(peer.editor, proj, r.anchor), focus: toFullPoint(peer.editor, proj, r.focus) });
   const markSelection = () => {
     const sel = view.selection;
-    const ms = sel ? textMarks(peer, fullRange(sel), display) : [];
+    const ms = sel ? lanes.fullPieces(sel).map((piece) => textMark(peer, piece)) : [];
     if (!ms.length) return void ask("Виділи текст — можна через кілька рядків.", null);
     setPending((p) => [...p, ...ms]);
   };
@@ -230,10 +226,10 @@ function PeerPane(props: {
     setPending([]);
   };
 
-  const myLine = view.selection ? proj.lines[view.selection.anchor.path[0]] ?? null : null;
+  const myLine = view.selection ? lanes.fullLine(view.selection.anchor.path[0]) : null;
 
   return (
-    <Ctx.Provider value={{ who, peer, notes, display, otherHere: props.otherHere, myLine, lines: proj.lines }}>
+    <Ctx.Provider value={{ who, peer, notes, display, otherHere: props.otherHere, myLine, fullLine: lanes.fullLine }}>
       <div className="rounded-xl border border-stone-200 shadow-sm overflow-hidden" style={{ background: "#fdfbf0" }}>
         <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-stone-200/70 bg-stone-100/40">
           <span className="font-semibold">{NAMES[who]}</span>
@@ -276,7 +272,7 @@ function PeerPane(props: {
             initialValue={view.children}
             onChange={() => {
               const sel = view.selection;
-              props.onPresence(sel ? handle.projection().lines[sel.anchor.path[0]] ?? null : null);
+              props.onPresence(sel ? lanes.fullLine(sel.anchor.path[0]) : null);
               props.bump();
             }}
           >
@@ -320,7 +316,8 @@ function useFullLine(element: Element) {
   const pane = usePane();
   const editor = useSlateStatic();
   try {
-    return pane.lines[ReactEditor.findPath(editor, element)[0]] ?? -1;
+    const ln = pane.fullLine(ReactEditor.findPath(editor, element)[0]);
+    return ln < pane.peer.editor.children.length ? ln : -1;
   } catch {
     return -1;
   }
@@ -397,16 +394,10 @@ const CAJON_CYCLE = ["", "B", "t", "S"];
 
 function CajonLane({ index }: { index: number }) {
   const pane = usePane();
-  const nodes = pane.peer.editor.children;
-  const own = nodes[index] ? cajonOf(nodes[index]) : {};
-  const empty = Object.keys(own).length === 0;
-  const inh = empty
-    ? inherited(nodes, index, (n) => {
-        const c = cajonOf(n);
-        return Object.keys(c).length ? c : undefined;
-      })
-    : undefined;
-  const shown = empty ? inh?.value ?? {} : own;
+  const own = cajonOf(pane.peer.editor.children[index]);
+  const sounding = cajonAt(pane.peer.editor.children, index);
+  const shown = sounding?.cells ?? {};
+  const inherited = sounding && sounding.from !== index ? sounding.from : null;
   return (
     <div
       contentEditable={false}
@@ -420,7 +411,7 @@ function CajonLane({ index }: { index: number }) {
           key={s}
           onClick={() => {
             const next = CAJON_CYCLE[(CAJON_CYCLE.indexOf(own[s] ?? "") + 1) % CAJON_CYCLE.length];
-            setSegmentProps(pane.peer, index, { [cajonKey(s)]: next || null });
+            setLineProps(pane.peer, index, { [cajonKey(s)]: next || null });
           }}
           className={`w-6 h-5 text-[11px] font-mono rounded border ${
             own[s] ? "bg-stone-800 text-white border-stone-800" : shown[s] ? "text-stone-300 border-dashed" : "border-stone-200"
@@ -429,12 +420,12 @@ function CajonLane({ index }: { index: number }) {
           {shown[s] ?? "·"}
         </button>
       ))}
-      {empty && inh && <span className="text-[10px] italic text-stone-400 ml-1">sim. (як у #{inh.from})</span>}
+      {inherited !== null && <span className="text-[10px] italic text-stone-400 ml-1">sim. (як у рядку {inherited})</span>}
     </div>
   );
 }
 
-function NoteCard({ view }: { view: LaneNoteView }) {
+function NoteCard({ view }: { view: NoteView }) {
   const pane = usePane();
   return (
     <div
@@ -444,7 +435,7 @@ function NoteCard({ view }: { view: LaneNoteView }) {
     >
       <b>{view.note.author}:</b> {view.note.text}{" "}
       <span className="text-stone-500">
-        ({view.marks.map((m) => `${LANE_LABEL[m.mark.lane]} «${m.mark.quote}»${m.lost ? " — втрачено" : ""}`).join("; ")})
+        ({view.marks.map((m) => `${LANE_LABEL[m.mark.lane]} «${m.mark.quote}»${m.line === null ? " — втрачено" : ""}`).join("; ")})
       </span>
       <button className="ml-2 text-stone-400" onClick={() => laneNotes(pane.peer).delete(view.note.id)}>
         ×
@@ -457,7 +448,7 @@ function NoteCard({ view }: { view: LaneNoteView }) {
 
 const KIND_LABEL = { segment: "відрізок", empty: "порожній", note: "примітка" } as const;
 
-function StatePanel({ peer, notes }: { peer: Peer; notes: LaneNoteView[] }) {
+function StatePanel({ peer, notes }: { peer: Peer; notes: NoteView[] }) {
   return (
     <details className="border-t border-stone-200/70 bg-stone-100/40 px-4 py-2 text-xs">
       <summary className="cursor-pointer text-stone-500 font-medium">Що лежить у документі</summary>
@@ -645,7 +636,7 @@ const SCENARIOS: Scenario[] = [
     steps: [
       offline,
       { label: "Герман: дописує «, Царю» в кінець", run: (c) => typeIn(c.pair.B, 1, "words", "end", ", Царю") },
-      { label: "Оля: видаляє рядок", run: (c) => removeSegment(c.pair.A, 1) },
+      { label: "Оля: видаляє рядок", run: (c) => removeLine(c.pair.A, 1) },
       online,
     ],
   },
@@ -668,8 +659,8 @@ const SCENARIOS: Scenario[] = [
         },
       },
       offline,
-      { label: "Оля: B на долю 1 і 3", run: (c) => setSegmentProps(c.pair.A, 2, { [cajonKey(1)]: "B", [cajonKey(3)]: "B" }) },
-      { label: "Герман: t на долю 3 і 7", run: (c) => setSegmentProps(c.pair.B, 2, { [cajonKey(3)]: "t", [cajonKey(7)]: "t" }) },
+      { label: "Оля: B на долю 1 і 3", run: (c) => setLineProps(c.pair.A, 2, { [cajonKey(1)]: "B", [cajonKey(3)]: "B" }) },
+      { label: "Герман: t на долю 3 і 7", run: (c) => setLineProps(c.pair.B, 2, { [cajonKey(3)]: "t", [cajonKey(7)]: "t" }) },
       online,
     ],
   },

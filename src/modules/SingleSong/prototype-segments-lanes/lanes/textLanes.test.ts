@@ -4,8 +4,8 @@
  */
 import { describe, expect, it } from "vitest";
 import { Editor, Element, Node, Transforms } from "slate";
-import { flush, makePair, Peer, removeSegment, Segment } from "./harness";
-import { lanePath, line, lineKind, withTextLanes } from "./textLanes";
+import { flush, makePair, Peer, removeLine } from "../harness";
+import { lanePath, line, lineKind, setLaneAccess, withTextLanes } from "./textLanes";
 
 const SONG = [
   //       0123456789012345678
@@ -13,7 +13,7 @@ const SONG = [
   line("Твоє світло серед ночі", "F    C      G     Am"),
 ];
 
-const pair = () => makePair(SONG as unknown as Segment[], { extend: (p) => withTextLanes(p.editor) });
+const pair = () => makePair(SONG as unknown as Node[], { extend: (p) => withTextLanes(p.editor) });
 
 function enter(p: Peer, seg: number, offset: number) {
   Transforms.select(p.editor, { path: [seg, 1, 0], offset });
@@ -34,7 +34,8 @@ function type(p: Peer, seg: number, lane: "chords" | "words", offset: number, te
 type SegView = Record<string, unknown> & { chords: string; words: string; lanes: string };
 function view(p: Peer): SegView[] {
   return p.editor.children.map((n) => {
-    const { type: _t, children, ...props } = n as Element & Record<string, unknown>;
+    const { children, ...rest } = n as Element & Record<string, unknown>;
+    const props = Object.fromEntries(Object.entries(rest).filter(([k]) => k !== "type"));
     const lanes = Object.fromEntries(
       (children as Element[]).map((c) => [(c as unknown as { type: string }).type, Node.string(c)]),
     );
@@ -87,7 +88,7 @@ describe("Enter і Backspace", () => {
 describe("порожній рядок, /примітка, видалення кількох рядків", () => {
   it("що є відрізком, визначає вміст рядка", () => {
     const { A } = makePair(
-      [line("Слова"), line("", "Am  G"), line(""), line("/Приспів"), line("/ x2 ", "C")] as unknown as Segment[],
+      [line("Слова"), line("", "Am  G"), line(""), line("/Приспів"), line("/ x2 ", "C")] as unknown as Node[],
       { extend: (p) => withTextLanes(p.editor) },
     );
     expect([0, 1, 2, 3, 4].map((i) => lineKind(A.editor, i))).toEqual(["segment", "segment", "empty", "note", "note"]);
@@ -117,7 +118,7 @@ describe("порожній рядок, /примітка, видалення к�
 
 describe("сховане не стирається («що бачу, те й правлю»)", () => {
   const only = (p: Peer, lane: "chords" | "words") => {
-    (p.editor as unknown as { laneEditable: (ln: number, l: string) => boolean }).laneEditable = (_ln, l) => l === lane;
+    setLaneAccess(p.editor, (_ln, l) => l === lane);
   };
 
   it("бачу лише слова: виділив від слів #0 до слів #1 і стер — акорди #1 цілі й переїхали в склеєний рядок", () => {
@@ -208,7 +209,7 @@ describe("конкурентно (A і B без мережі, потім зус�
   it("A видаляє відрізок, B у ньому пише — видалення перемагає", () => {
     const net = pair();
     net.unlink();
-    removeSegment(net.A, 1);
+    removeLine(net.A, 1);
     type(net.B, 1, "words", 0, "О, ");
     net.link();
     expect(view(net.A).map((s) => s.words)).toEqual(["Ти святий, Господь"]);
