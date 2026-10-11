@@ -30,6 +30,7 @@ import Landing from "#views/Landing/Landing";
 import SearchSongs from "#views/SearchSongs/SearchSongs";
 // PROTOTYPE (гілка prototype/segments-lanes) — не зливати в main.
 import SegmentsLanesPrototype from "#modules/SingleSong/prototype-segments-lanes/SegmentsLanesPrototype";
+import LaneViewExample from "#modules/SingleSong/prototype-segments-lanes/example/LaneViewExample";
 
 function Router() {
   const location = useLocation();
@@ -84,6 +85,7 @@ function Router() {
         <Route path="/shadcn-demo" element={<ShadcnDemo />} />
         <Route path="/landing" element={<Landing />} />
         <Route path="/prototype/segments-lanes" element={<SegmentsLanesPrototype />} />
+        <Route path="/prototype/lane-view-example" element={<LaneViewExample />} />
       </RouterRoutes>
     </div>
   );
