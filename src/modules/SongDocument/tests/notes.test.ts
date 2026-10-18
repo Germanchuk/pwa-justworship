@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { Editor } from "slate";
 import { change } from "./harness";
 import { LaneView } from "../bridge/laneView";
-import { addNote, ALL, LaneType, linesOf, notesOf, resolveNotes, Song } from "../model";
+import { addNote, ALL, LaneType, linesOf, notesOf, removeNote, resolveNotes, Song } from "../model";
 import { at, setup } from "./testKit";
 
 const SONG = [
@@ -161,5 +161,23 @@ describe("примітки конкурентно", () => {
     net.link();
     expect(notes(net.A).map((n) => n.id).sort()).toEqual(["друга", "перша"]);
     expect(notes(net.B)).toEqual(notes(net.A));
+  });
+});
+
+describe("видалення звужує адресатів (NOTE-25, NOTE-32)", () => {
+  const owned = (song: Song) => notesOf(linesOf(song)[0], "words");
+  it("дивлюсь очима Олі — з адресатів зникає лише Оля", () => {
+    const { net } = setup(SONG);
+    note(net.A, 0, "words", 0, 2, "спільна", ["Оля", "Вова"]);
+    change(net.A, () => removeNote(linesOf(net.A)[0], "words", owned(net.A).get("спільна")!, ["Оля"]));
+    expect(owned(net.B).get("спільна")?.visibleFor).toEqual(["Вова"]);
+  });
+  it("не лишилось адресатів — примітка зникає; публічна — зникає для всіх", () => {
+    const { net } = setup(SONG);
+    note(net.A, 0, "words", 0, 2, "своя", ["Оля"]);
+    note(net.A, 0, "words", 3, 9, "усім");
+    change(net.A, () => removeNote(linesOf(net.A)[0], "words", owned(net.A).get("своя")!, ["Оля"]));
+    change(net.A, () => removeNote(linesOf(net.A)[0], "words", owned(net.A).get("усім")!, ["Оля"]));
+    expect(owned(net.B).size).toBe(0);
   });
 });

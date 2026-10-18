@@ -91,3 +91,18 @@ export function addNote(
 ) {
   notesOf(layout(song)[ln].line, lane).set(note.id, { ...note, ...noteRange(song, ln, lane, from, to) });
 }
+
+/**
+ * Видалити примітку очима `audience` (`NOTE-25`): з адресатів зникають ті,
+ * чиїми очима дивимось; не лишилось нікого — примітка зникає. Публічну
+ * звузити нема кого — вона зникає для всіх (`NOTE-32`). Викликати в транзакції.
+ */
+export function removeNote(line: Line, lane: LaneType, note: NoteRecord, audience: Audience) {
+  const rest = note.visibleFor.includes(ALL) ? [] : note.visibleFor.filter((nick) => !audience.includes(nick));
+  if (rest.length) notesOf(line, lane).set(note.id, { ...note, visibleFor: rest });
+  else notesOf(line, lane).delete(note.id);
+}
+
+/** Скільки людей бачить примітку поза `audience` — «+N» на картці (`NOTE-31`); публічна — 0. */
+export const othersSeeing = (note: NoteRecord, audience: Audience) =>
+  note.visibleFor.includes(ALL) ? 0 : note.visibleFor.filter((nick) => !audience.includes(nick)).length;

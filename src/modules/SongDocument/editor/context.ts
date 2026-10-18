@@ -13,6 +13,8 @@ export type EditorCtx = {
   me: string | null;
   /** Примітки, які зараз видно, — картки над рядками. */
   notes: NoteView[];
+  /** Чиїми очима дивимось на примітки. */
+  viewers: string[];
   /** Капо, що діє зараз: акорди показуються транспонованими (лише в читанні). */
   capo: number;
   songKey: string;

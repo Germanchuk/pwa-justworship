@@ -1,6 +1,6 @@
 /** Картка примітки над рядком. */
 import { cardBg, cardBorder } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/colors";
-import type { NoteView } from "../../model";
+import { othersSeeing, type NoteView } from "../../model";
 import { useEditorCtx } from "../context";
 
 export function NoteCard({ view }: { view: NoteView }) {
@@ -14,6 +14,11 @@ export function NoteCard({ view }: { view: NoteView }) {
       style={{ fontFamily: "Pangolin, cursive", background: cardBg(color), borderColor: cardBorder(color), color: "#3f2a06" }}
     >
       <span className="flex-1 whitespace-pre-wrap">{note.body || <i className="text-stone-400">підсвітка «{note.quote}»</i>}</span>
+      {othersSeeing(note, ctx.viewers) > 0 && (
+        <span className="text-xs text-stone-500 shrink-0" title="Бачить ще стільки людей поза вибраними">
+          +{othersSeeing(note, ctx.viewers)}
+        </span>
+      )}
       {note.author && <span className="text-xs text-stone-500 shrink-0">{note.author}</span>}
       {ctx.canAnnotate && (
         <button
