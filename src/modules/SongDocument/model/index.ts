@@ -11,6 +11,6 @@ export * from "./rules/merge";
 export * from "./rules/deleteRange";
 export * from "./rules/paste";
 export { addNote, ALL, canSee, noteRange, notesOf, STRIKE } from "./notes/marks";
-export type { NoteRange, NoteRecord, TextAt } from "./notes/marks";
+export type { Audience, NoteRange, NoteRecord, TextAt } from "./notes/marks";
 export { resolveNotes } from "./notes/show";
 export type { NoteView } from "./notes/show";

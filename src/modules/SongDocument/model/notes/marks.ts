@@ -33,8 +33,15 @@ export const STRIKE = "strike";
 
 export const notesOf = (line: Line, lane: LaneType) => laneMap(line, lane).get("notes") as Y.Map<NoteRecord>;
 
-export const canSee = (note: NoteRecord, nick: string | null) =>
-  note.visibleFor.includes(ALL) || (nick !== null && note.visibleFor.includes(nick));
+/**
+ * Чиїми очима дивимось — набір ніків. Примітку видно, коли її бачить КОЖЕН
+ * з набору: публічну — завжди, адресну — коли всі з набору серед адресатів.
+ * Порожній набір бачить лише публічні.
+ */
+export type Audience = readonly string[];
+
+export const canSee = (note: NoteRecord, audience: Audience) =>
+  note.visibleFor.includes(ALL) || (audience.length > 0 && audience.every((nick) => note.visibleFor.includes(nick)));
 
 export const rel = (type: Y.AbstractType<unknown>, index: number, assoc: number) =>
   Y.relativePositionToJSON(Y.createRelativePositionFromTypeIndex(type, index, assoc));

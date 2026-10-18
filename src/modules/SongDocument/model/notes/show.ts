@@ -1,7 +1,7 @@
 /** Примітки для показу: над яким рядком картка, що зараз позначено, чи видно. */
 import { layout } from "../read";
 import { LANES, LaneType, Line, Song } from "../song";
-import { canSee, NoteRecord, notesOf, resolveRange, TextAt } from "./marks";
+import { Audience, canSee, NoteRecord, notesOf, resolveRange, TextAt } from "./marks";
 
 export type NoteView = {
   note: NoteRecord;
@@ -15,15 +15,15 @@ export type NoteView = {
 };
 
 /**
- * Примітки пісні, які може бачити `nick`, з поточними позначками. Схована —
+ * Примітки пісні, які бачить `audience` (`marks.ts`), з поточними позначками. Схована —
  * коли схована її доріжка; втрачена — коли зникло все позначене.
  */
-export function resolveNotes(song: Song, nick: string | null, isShown: (line: number, lane: LaneType) => boolean): NoteView[] {
+export function resolveNotes(song: Song, audience: Audience, isShown: (line: number, lane: LaneType) => boolean): NoteView[] {
   const lines = layout(song);
   return lines.flatMap((l, owner) =>
     LANES.flatMap((lane) =>
       Array.from(notesOf(l.line, lane).values())
-        .filter((note) => canSee(note, nick))
+        .filter((note) => canSee(note, audience))
         .map((note): NoteView => {
           const at = resolveRange(song, lines, owner, lane, note);
           const line = at?.line ?? owner;

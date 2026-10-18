@@ -20,8 +20,8 @@ const note = (song: Song, ln: number, lane: LaneType, from: number, to: number, 
   change(song, () => addNote(song, ln, lane, from, to, { id, author: "Оля", visibleFor, color: "#F5C518", body: id }));
 
 /** Примітки коротко: доріжка, рядок картки, стан і що зараз позначено. */
-const notes = (song: Song, nick: string | null = null) =>
-  resolveNotes(song, nick, () => true).map((n) => ({
+const notes = (song: Song, audience: string[] = []) =>
+  resolveNotes(song, audience, () => true).map((n) => ({
     id: n.note.id,
     status: n.status,
     at: n.at ? `${n.lane}@${n.at.line}:${n.at.from}-${n.at.to}` : `${n.lane}@${n.line}:втрачено`,
@@ -110,23 +110,24 @@ describe("примітки при Enter і склеюванні", () => {
 });
 
 describe("хто бачить примітку", () => {
-  it("приватну бачить лише автор, адресну — автор і адресати, публічну — усі", () => {
+  it("приватну бачить лише її адресат, адресну — кожен з адресатів, набір очей — спільне для всіх з набору, публічну — усі", () => {
     const { net } = setup(SONG);
     note(net.A, 0, "words", 0, 2, "своя", ["Оля"]);
     note(net.A, 0, "words", 3, 9, "адресна", ["Оля", "Герман"]);
     note(net.A, 1, "words", 0, 4, "усім");
-    const ids = (nick: string | null) => notes(net.B, nick).map((n) => n.id);
+    const ids = (...audience: string[]) => notes(net.B, audience).map((n) => n.id);
     expect(ids("Оля")).toEqual(["своя", "адресна", "усім"]);
     expect(ids("Герман")).toEqual(["адресна", "усім"]);
     expect(ids("Вова")).toEqual(["усім"]);
-    expect(ids(null)).toEqual(["усім"]);
+    expect(ids()).toEqual(["усім"]);
+    expect(ids("Оля", "Герман")).toEqual(["адресна", "усім"]);
   });
 
   it("схована доріжка — схована її примітка", () => {
     const { net } = setup(SONG);
     note(net.A, 0, "chords", 0, 2, "Am");
     note(net.A, 0, "words", 0, 2, "Ти");
-    const statuses = resolveNotes(net.B, null, (_, lane) => lane === "words").map((n) => `${n.note.id}:${n.status}`);
+    const statuses = resolveNotes(net.B, [], (_, lane) => lane === "words").map((n) => `${n.note.id}:${n.status}`);
     expect(statuses).toEqual(["Am:hidden", "Ти:visible"]);
   });
 });
