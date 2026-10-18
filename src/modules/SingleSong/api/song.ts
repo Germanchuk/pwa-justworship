@@ -24,5 +24,4 @@ export const songApi = {
   }),
   // `bandId` — куди кладемо копію, `songId` — що копіюємо.
   copySong: (bandId: Id, songId: Id) => fetchAPI(`/bands/${bandId}/songs/${songId}/copy`, {}, { method: "POST" }),
-  getSong: (bandId: Id, songId: Id) => fetchAPI(`/bands/${bandId}/songs/${songId}`, {}, {}, true),
 }
