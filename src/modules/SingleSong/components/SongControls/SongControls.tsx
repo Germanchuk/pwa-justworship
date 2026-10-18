@@ -2,7 +2,7 @@ import React, {useEffect} from "react";
 
 import DronePlayer from "../../services/DronePlayer/DronePlayer";
 import {useCanAnnotate, useCanPlay} from "../../mode";
-import {NotesAudienceSelect} from "../SlateLyricsPlayground/comments/NotesAudienceSelect";
+import {NotesAudienceSelect} from "#modules/SongDocument/editor/notes/NotesAudienceSelect";
 import {ModeSwitch} from "./ModeSwitch/ModeSwitch";
 import {PlaybackControls} from "./PlaybackControls";
 import {SongActions} from "./SongActions";
@@ -23,8 +23,8 @@ import {useSongMenuOpen} from "./menuOpen";
  *             [🗒]
  *
  *             [⋯]    ← дії з піснею (нативний список)
- *             [⏻]    ← кнопка режиму: дрон у читанні, адресат
- *                      у примітках, у редагуванні нічого
+ *             [⏻]    ← кнопки режиму: дрон у читанні, адресат у
+ *                      примітках, у редагуванні нічого
  *
  *             [🖍]   ← слот: палітра / меню позначки (`SongMenuSlot`)
  *
@@ -58,8 +58,8 @@ export const SongControls = () => {
 };
 
 /**
- * Кнопка поточного режиму — окрема плитка під «⋯»: дрон у читанні
- * (`PLAY-2`), адресат приміток у примітках, у редагуванні нічого.
+ * Кнопки поточного режиму — плитки під «⋯»: дрон (`PLAY-2`) у читанні,
+ * адресат приміток у примітках, у редагуванні нічого.
  */
 const ModeActions = () => {
   const canPlay = useCanPlay();

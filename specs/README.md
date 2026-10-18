@@ -75,6 +75,7 @@
 | [11-service-lists.md](11-service-lists.md) | Списки служінь |
 | [12-export.md](12-export.md) | Експорт у .docx |
 | [13-app-shell.md](13-app-shell.md) | Оболонка застосунку, офлайн, оформлення |
+| [14-autoscroll.md](14-autoscroll.md) | Спільний автоскрол пісні, фокусний рядок, слідування |
 
 ---
 

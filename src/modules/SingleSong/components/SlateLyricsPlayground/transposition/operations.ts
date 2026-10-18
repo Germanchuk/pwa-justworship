@@ -7,10 +7,10 @@
  *   resolveTransposition — обчислити стан транспозиції для користувача.
  */
 
-import { Editor, Node, Path, Transforms } from "slate";
+import { Editor, Node, Path, Point, Transforms } from "slate";
 
 import type { CapoElement, SongKeyElement } from "../types";
-import { keyForCapo, transposeChordText } from "./transposeChords";
+import { chordEdits, keyForCapo, type ChordEdit } from "./transposeChords";
 import type {
   ChangePlayingKey,
   RelabelKey,
@@ -43,12 +43,39 @@ function findChordLines(editor: Editor): Found<Node>[] {
   return out;
 }
 
-/** Замінити весь текст блока на `newText`, лишивши сам блок. */
-function replaceBlockText(editor: Editor, blockPath: Path, newText: string): void {
-  const start = Editor.start(editor, blockPath);
-  const end = Editor.end(editor, blockPath);
-  Transforms.delete(editor, { at: { anchor: start, focus: end } });
-  Transforms.insertText(editor, newText, { at: start });
+/**
+ * Точка в блоці за офсетом його тексту. На межі двох листків `forward` бере
+ * наступний листок (початок токена), інакше — попередній (кінець токена).
+ */
+function pointAt(block: Node, blockPath: Path, offset: number, forward: boolean): Point {
+  let rest = offset;
+  let last: Point = { path: blockPath, offset: 0 };
+  for (const [leaf, path] of Node.texts(block)) {
+    const len = leaf.text.length;
+    if (forward ? rest < len : rest <= len) {
+      return { path: [...blockPath, ...path], offset: rest };
+    }
+    rest -= len;
+    last = { path: [...blockPath, ...path], offset: len };
+  }
+  return last;
+}
+
+/**
+ * Замінити в блоці лише змінені акорди, кожен на своєму місці. Новий акорд
+ * лягає в той самий листок, що й старий, тож мітки (примітки, виділення)
+ * лишаються на своїх тактах. Заміна всього рядка їх стирала.
+ */
+function applyChordEdits(editor: Editor, block: Node, blockPath: Path, edits: ChordEdit[]): void {
+  // Правки йдуть справа наліво — листки ліворуч від правки не зсуваються.
+  for (const edit of edits) {
+    const at = {
+      anchor: pointAt(block, blockPath, edit.start, true),
+      focus: pointAt(block, blockPath, edit.end, false),
+    };
+    Transforms.insertText(editor, edit.text, { at });
+    block = Node.get(editor, blockPath);
+  }
 }
 
 /** РЕЖИМ 1 — змінити лише ярлик тональності (акорди не чіпаємо). */
@@ -73,11 +100,8 @@ export const changePlayingKey: ChangePlayingKey = (editor, toKey) => {
 
   Editor.withoutNormalizing(editor, () => {
     for (const [node, path] of lines) {
-      const oldText = Node.string(node);
-      if (!oldText) continue;
-      const newText = transposeChordText(oldText, fromKey, toKey);
-      if (newText === oldText) continue;
-      replaceBlockText(editor, path, newText);
+      const edits = chordEdits(Node.string(node), fromKey, toKey);
+      applyChordEdits(editor, node, path, edits);
     }
     if (songKeyEntry) {
       Transforms.setNodes<SongKeyElement>(

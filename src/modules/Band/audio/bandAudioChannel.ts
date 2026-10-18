@@ -1,7 +1,5 @@
-import * as Y from "yjs";
-import {HocuspocusProvider} from "@hocuspocus/provider";
-
-import {COLLAB_URL} from "#utils/serviceUrls";
+import type {Room} from "../room/bandRoom";
+import BandRoom from "../room/bandRoom";
 
 import type {AudioHostStatus, PlaybackCommand} from "./types";
 
@@ -9,20 +7,17 @@ type HostStatusListener = (status: AudioHostStatus | null) => void;
 type CommandListener = (command: PlaybackCommand) => void;
 
 /**
- * Синглтон-канал band-кімнати (`band:<bandId>`): один WebSocket на застосунок,
- * незалежний від кімнат пісень. Через нього їздять команди програвання і
- * статус хоста звуку.
+ * Звук гурту в кімнаті гурту (`BandRoom`): команди програвання і статус
+ * хоста звуку. Усе — через awareness кімнати.
  *
  * Чому синглтон, а не контекст: кнопки служіння живуть у верхньому барі —
  * НАД band-роутами, контекст туди не дістає (той самий паттерн, що
- * DronePlayer). Підключенням керує BandAudioBridge у BandLayout.
+ * DronePlayer). Підключенням керує кімната гурту.
  */
 class BandAudioChannel {
   static instance: BandAudioChannel;
 
-  private provider: HocuspocusProvider | null = null;
-  private ydoc: Y.Doc | null = null;
-  private bandId: string | number | null = null;
+  private room: Room | null = null;
 
   private hostStatus: AudioHostStatus | null = null;
   private hostListeners = new Set<HostStatusListener>();
@@ -34,47 +29,26 @@ class BandAudioChannel {
   static getInstance = () => {
     if (!BandAudioChannel.instance) {
       BandAudioChannel.instance = new BandAudioChannel();
+      BandRoom.getInstance().onRoom(BandAudioChannel.instance.attach);
     }
     return BandAudioChannel.instance;
   };
 
-  connect(bandId: string | number) {
-    if (this.bandId != null && String(this.bandId) === String(bandId)) return;
-    this.disconnect();
-
-    const url = COLLAB_URL;
-    const token = localStorage.getItem("authToken") ?? "";
-
-    this.bandId = bandId;
-    this.ydoc = new Y.Doc();
-    this.provider = new HocuspocusProvider({
-      url,
-      name: `band:${bandId}`,
-      document: this.ydoc,
-      token,
-    });
+  private attach = (room: Room | null) => {
+    this.room?.provider.awareness?.off("change", this.handleAwarenessChange);
+    this.room = room;
+    this.seenNonces.clear();
+    if (!room) {
+      this.setHostStatus(null);
+      return;
+    }
 
     // Свіжопідключений peer бачить у awareness старі команди інших — вони вже
     // виконані або протухли. Запам'ятовуємо їх як «бачені», не виконуючи.
     this.seedSeenNonces();
-    this.provider.awareness?.on("change", this.handleAwarenessChange);
+    room.provider.awareness?.on("change", this.handleAwarenessChange);
     this.handleAwarenessChange();
-  }
-
-  disconnect() {
-    this.provider?.awareness?.off("change", this.handleAwarenessChange);
-    this.provider?.destroy();
-    this.ydoc?.destroy();
-    this.provider = null;
-    this.ydoc = null;
-    this.bandId = null;
-    this.seenNonces.clear();
-    this.setHostStatus(null);
-  }
-
-  getBandId() {
-    return this.bandId;
-  }
+  };
 
   getHostStatus() {
     return this.hostStatus;
@@ -97,7 +71,7 @@ class BandAudioChannel {
   }
 
   sendCommand(command: Omit<PlaybackCommand, "nonce" | "issuedAt">) {
-    const awareness = this.provider?.awareness;
+    const awareness = this.room?.provider.awareness;
     if (!awareness) return;
     this.commandNonce += 1;
     const full: PlaybackCommand = {
@@ -110,7 +84,7 @@ class BandAudioChannel {
 
   /** Для хоста: опублікувати (або зняти — null) свій статус у кімнату. */
   publishHostStatus(status: AudioHostStatus | null) {
-    this.provider?.awareness?.setLocalStateField("audioHost", status ?? null);
+    this.room?.provider.awareness?.setLocalStateField("audioHost", status ?? null);
   }
 
   /**
@@ -118,7 +92,7 @@ class BandAudioChannel {
    * акаунт відкрив режим хоста на двох пристроях) — привід для попередження.
    */
   countPublishingHosts(): number {
-    const states = this.provider?.awareness?.getStates();
+    const states = this.room?.provider.awareness?.getStates();
     if (!states) return 0;
     let count = 0;
     states.forEach((state) => {
@@ -128,7 +102,7 @@ class BandAudioChannel {
   }
 
   private seedSeenNonces() {
-    const states = this.provider?.awareness?.getStates();
+    const states = this.room?.provider.awareness?.getStates();
     if (!states) return;
     states.forEach((state, clientId) => {
       const command = state?.playbackCommand as PlaybackCommand | undefined;
@@ -137,7 +111,7 @@ class BandAudioChannel {
   }
 
   private handleAwarenessChange = () => {
-    const states = this.provider?.awareness?.getStates();
+    const states = this.room?.provider.awareness?.getStates();
     if (!states) {
       this.setHostStatus(null);
       return;
@@ -155,7 +129,7 @@ class BandAudioChannel {
     this.setHostStatus(freshest);
 
     // Команди: виконуємо лише свіжіші за бачені, свої — ніколи.
-    const myClientId = this.ydoc?.clientID;
+    const myClientId = this.room?.doc.clientID;
     states.forEach((state, clientId) => {
       if (clientId === myClientId) return;
       const command = state?.playbackCommand as PlaybackCommand | undefined;

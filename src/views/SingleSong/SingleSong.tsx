@@ -22,7 +22,7 @@ export default function SingleSong() {
   }, []);
 
   // The song itself is never fetched over HTTP: the collab WebSocket document
-  // (`song:<id>`) is the single source of truth for content *and* header
+  // (`lines:<id>`) is the single source of truth for content *and* header
   // attributes (name/bpm/key/time signature). All the client needs from the
   // route is the id to open that document with.
   React.useEffect(() => {

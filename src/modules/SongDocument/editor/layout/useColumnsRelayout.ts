@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 
+/**
+ * Коли пісня лягає в колонки. Дублює медіа-запит із `SlateLyricsPlayground.css`.
+ */
+export const COLUMNS_QUERY = "(min-width: 768px)";
+
 /** Пауза в наборі, після якої скидаємо розбиття на колонки. */
 const IDLE_MS = 200;
 
@@ -8,7 +13,7 @@ const IDLE_MS = 200;
  * колонок наїжджають один на одного.
  *
  * Що відбувається. На широких екранах редактор — це multicol із прибитою
- * висотою (див. `SlateLyricsPlayground.css`). Коли посеред пісні зʼявляються
+ * висотою (див. `SlateLyricsPlayground.css`, правило `.slate-editable`). Коли посеред пісні зʼявляються
  * нові рядки, весь вміст нижче переїжджає в інші колонки. Chrome оновлює
  * розбиття інкрементно і лишається з неузгодженим станом: `getClientRects`
  * дає правильні координати рядків, а малює він їх за старим розбиттям — по
@@ -34,7 +39,7 @@ const IDLE_MS = 200;
  *
  * Знімається одним файлом: коли Chrome це полагодить або коли колонки
  * поїдуть із редактора — видалити цей модуль і `onValueChange` у
- * `SlateLyricsPlayground.tsx`, більше він нікуди не вплетений. Перевірити
+ * `SongEditor.tsx`, більше він нікуди не вплетений. Перевірити
  * можна мінімальним відтворенням (див. коміт, у якому зʼявився цей файл).
  *
  * Повертає колбек для `<Slate onValueChange>`.
@@ -46,8 +51,7 @@ export function useColumnsRelayout(ref: RefObject<HTMLElement | null>) {
 
   return useCallback(() => {
     // Вузькі екрани малюють пісню одним стовпцем — ламатись нема чому.
-    // Умова дублює медіа-запит із SlateLyricsPlayground.css.
-    if (!window.matchMedia("(min-width: 768px)").matches) return;
+    if (!window.matchMedia(COLUMNS_QUERY).matches) return;
 
     // Перерахунок коштує ~10 мс на пісню в сотню рядків, тобто цілий кадр.
     // Робити його на кожну літеру — це гарантовано рвана анімація набору,
