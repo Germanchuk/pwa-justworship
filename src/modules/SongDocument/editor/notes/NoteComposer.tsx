@@ -12,7 +12,7 @@ import {
   STRIKE_INK,
 } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/colors";
 import { useBandMembers } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/useBandMembers";
-import { addNote, ALL, Pos, Song } from "../../model";
+import { addNote, Pos, Song } from "../../model";
 
 export type NoteTarget = { anchor: Pos; focus: Pos; quote: string };
 
@@ -31,17 +31,17 @@ export function NoteComposer({ song, me, audience: viewers, target, onClose }: P
   const members = useBandMembers();
   const [body, setBody] = useState("");
   const [color, setColor] = useState(COMMENT_PALETTE[0].hex);
+  // Початково — ті, чиїми очима дивимось (`NOTE-21`); останнього зняти не можна (`NOTE-38`).
   const [audience, setAudience] = useState<string[]>(viewers.length ? viewers : [me]);
-  const everyone = audience.includes(ALL);
-
   const toggle = (nick: string) =>
-    setAudience((a) => (a.includes(nick) ? a.filter((n) => n !== nick) : [...a.filter((n) => n !== ALL), nick]));
+    setAudience((a) => (a.includes(nick) ? (a.length > 1 ? a.filter((n) => n !== nick) : a) : [...a, nick]));
 
   const save = () => {
     const { anchor, focus } = target;
     const from = Math.min(anchor.offset, focus.offset);
     const to = Math.max(anchor.offset, focus.offset);
-    const visibleFor = everyone || !audience.length ? [ALL] : audience;
+    // Нових публічних коментарів немає (`NOTE-3`): примітка — завжди переліку людей.
+    const visibleFor = audience;
     song.doc.transact(() => addNote(song, anchor.line, anchor.lane, from, to, { id: newId(), author: me, visibleFor, color, body: body.trim() }));
     onClose();
   };
@@ -75,19 +75,12 @@ export function NoteComposer({ song, me, audience: viewers, target, onClose }: P
         </div>
         <div className="text-xs text-stone-500 mb-1">Хто бачить</div>
         <div className="flex flex-wrap gap-1.5 mb-3 text-sm">
-          <button
-            type="button"
-            onClick={() => setAudience(everyone ? [me] : [ALL])}
-            className={`rounded-full border px-2 py-0.5 ${everyone ? "bg-stone-700 text-white" : ""}`}
-          >
-            усі
-          </button>
           {[me, ...members.map((m) => m.username).filter((n) => n && n !== me)].map((nick) => (
             <button
               key={nick}
               type="button"
               onClick={() => toggle(nick)}
-              className={`rounded-full border px-2 py-0.5 ${!everyone && audience.includes(nick) ? "bg-stone-700 text-white" : ""}`}
+              className={`rounded-full border px-2 py-0.5 ${audience.includes(nick) ? "bg-stone-700 text-white" : ""}`}
             >
               {nick === me ? "я" : nick}
             </button>
