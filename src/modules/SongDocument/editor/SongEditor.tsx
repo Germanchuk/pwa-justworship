@@ -6,11 +6,11 @@
  * капо діє; правка — вміст, шапка й динаміка; примітки — виділення й картки.
  * Особистий вибір доріжок діє в усіх режимах (ADR-0006).
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createEditor, Editor, Node, NodeEntry, Range, Text, Transforms } from "slate";
 import { Editable, ReactEditor, Slate, withReact } from "slate-react";
 import { useCanAnnotate, useCanEditContent, useCapoApplies } from "#modules/SingleSong/mode";
-import { useConnectionStatus } from "#modules/SingleSong/redux/selectors";
+import { useConnectionStatus, useNotesViewers } from "#modules/SingleSong/redux/selectors";
 import { useCurrentUsername } from "#modules/SingleSong/components/SlateLyricsPlayground/elements/hooks";
 import DronePlayer from "#modules/SingleSong/services/DronePlayer/DronePlayer";
 import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/model";
@@ -23,7 +23,12 @@ import { Leaf } from "./elements/Leaf";
 import { renderElement } from "./elements/renderElement";
 import { SongHeader } from "./header/SongHeader";
 import { NoteComposer, type NoteTarget } from "./notes/NoteComposer";
+import { useColumnsRelayout } from "./layout/useColumnsRelayout";
+import { useFillViewportHeight } from "./layout/useFillViewportHeight";
 import { useDocVersion, useLinesDoc } from "./useLinesDoc";
+// Колонки на широких екранах і решта вигляду записничка — спільні зі
+// статичним показом (зібрання), що ще на старому редакторі.
+import "#modules/SingleSong/components/SlateLyricsPlayground/SlateLyricsPlayground.css";
 
 export function SongEditor({ songId }: { songId: string | number }) {
   const { song, synced } = useLinesDoc(songId);
@@ -63,11 +68,16 @@ function LoadedEditor({ song }: { song: Song }) {
   const stroke = useStroke(song, brush, personalDyn ? me : null, lanes.paint);
   const [composing, setComposing] = useState<NoteTarget | null>(null);
   const [cursorLine, setCursorLine] = useState<number | null>(null);
+  const editableRef = useRef<HTMLDivElement | null>(null);
+  useFillViewportHeight(editableRef);
+  const relayoutColumns = useColumnsRelayout(editableRef);
 
   const meta = readMeta(song.doc);
   const capo = me ? readCapo(song.doc, me) : { fret: 0, off: false };
   const activeCapo = capoApplies && !capo.off ? capo.fret : 0;
-  const notes = resolveNotes(song, me ? [me] : [], lanes.isShown);
+  // Чиїми очима: поза режимом приміток — своїми, у примітках — вибраних у меню.
+  const viewers = useNotesViewers();
+  const notes = resolveNotes(song, viewers, lanes.isShown);
 
   // Дрон грає ЦЮ пісню: тональність і темп — з документа на кожне «увімкнути».
   useEffect(() => {
@@ -155,8 +165,10 @@ function LoadedEditor({ song }: { song: Song }) {
           editor={view}
           initialValue={view.children}
           onChange={() => setCursorLine(view.selection ? lanes.modelLine(view.selection.anchor.path[0]) : null)}
+          onValueChange={relayoutColumns}
         >
           <Editable
+            ref={editableRef}
             className="slate-editable outline-none pb-24"
             readOnly={!canEdit}
             renderElement={renderElement}
@@ -175,7 +187,7 @@ function LoadedEditor({ song }: { song: Song }) {
             + Примітка
           </button>
         )}
-        {composing && me && <NoteComposer song={song} me={me} target={composing} onClose={() => setComposing(null)} />}
+        {composing && me && <NoteComposer song={song} me={me} audience={viewers} target={composing} onClose={() => setComposing(null)} />}
       </div>
     </Ctx.Provider>
   );

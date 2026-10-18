@@ -9,17 +9,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { MENU_TILE } from "../../SongControls/tile";
-
-import {
-  useNotesViewers,
-  useSetNotesAudience,
-} from "../../../redux/selectors";
-import { useCurrentUsername } from "../elements/hooks";
-import { getActiveSongEditor } from "../songEditorRegistry";
-import { useBandMembers } from "./useBandMembers";
-import { countWithMember } from "./visibility";
-import { listMarks } from "./withComments";
+import { MENU_TILE } from "#modules/SingleSong/components/SongControls/tile";
+import { useNotesViewers, useSetNotesAudience } from "#modules/SingleSong/redux/selectors";
+import { useCurrentUsername } from "#modules/SingleSong/components/SlateLyricsPlayground/elements/hooks";
+import { useBandMembers } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/useBandMembers";
 
 /**
  * Чиї примітки я зараз бачу й редагую. Окрема плитка під «⋯» у меню пісні
@@ -94,60 +87,19 @@ export const NotesAudienceSelect = () => {
       <DropdownMenuContent side="left" align="start" className="min-w-48">
         <DropdownMenuLabel>Чиї примітки показувати</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <AudienceItems
-          ordered={ordered}
-          viewers={viewers}
-          me={me}
-          onToggle={toggle}
-        />
+        {ordered.map((username) => (
+          <DropdownMenuCheckboxItem
+            key={username}
+            checked={viewers.includes(username)}
+            // Меню лишається відкритим: відмітити трьох вокалістів — це три
+            // тапи поспіль, а не три відкривання дропдауна.
+            onSelect={(e) => e.preventDefault()}
+            onCheckedChange={() => toggle(username)}
+          >
+            {username === me ? "Мої" : username}
+          </DropdownMenuCheckboxItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-};
-
-/**
- * Пункти списку з лічильниками (`NOTE-45`): біля кожного — скільки позначок
- * у нього разом з уже відміченими, а в дужках — скільки в нього особисто.
- * Окремий компонент, бо вміст
- * дропдауна існує лише поки він відкритий: документ перебираємо тоді ж, і
- * наново після кожної галочки.
- */
-const AudienceItems = ({
-  ordered,
-  viewers,
-  me,
-  onToggle,
-}: {
-  ordered: string[];
-  viewers: string[];
-  me: string;
-  onToggle: (username: string) => void;
-}) => {
-  // Редактор живе в іншому дереві (`songEditorRegistry`); поки його нема —
-  // просто без чисел.
-  const editor = getActiveSongEditor();
-  const marks = editor ? listMarks(editor) : null;
-
-  return (
-    <>
-      {ordered.map((username) => (
-        <DropdownMenuCheckboxItem
-          key={username}
-          checked={viewers.includes(username)}
-          // Меню лишається відкритим: відмітити трьох вокалістів — це три
-          // тапи поспіль, а не три відкривання дропдауна.
-          onSelect={(e) => e.preventDefault()}
-          onCheckedChange={() => onToggle(username)}
-        >
-          {username === me ? "Мої" : username}
-          {marks && (
-            <span className="ml-auto pl-4 text-xs tabular-nums text-muted-foreground">
-              {countWithMember(marks, viewers, username)} (
-              {countWithMember(marks, [], username)})
-            </span>
-          )}
-        </DropdownMenuCheckboxItem>
-      ))}
-    </>
   );
 };

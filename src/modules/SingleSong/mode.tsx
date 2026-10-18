@@ -165,6 +165,3 @@ export const useCanAnnotate = () => useSongMode() === "notes";
 
 /** Програвати акорди й вибирати акорд, з якого продовжити гру. */
 export const useCanPlay = () => useSongMode() === "read";
-
-/** Чи є на пісні фокусний рядок — місце старту автоскролу (`SCROLL-1`). */
-export const useHasFocusRow = () => useSongMode() === "read";

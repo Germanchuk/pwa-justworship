@@ -18,11 +18,20 @@ export type NoteTarget = { anchor: Pos; focus: Pos; quote: string };
 
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
-export function NoteComposer({ song, me, target, onClose }: { song: Song; me: string; target: NoteTarget; onClose: () => void }) {
+type Props = {
+  song: Song;
+  me: string;
+  /** Чиїми очима зараз дивимось — початковий вибір «хто бачить». */
+  audience: string[];
+  target: NoteTarget;
+  onClose: () => void;
+};
+
+export function NoteComposer({ song, me, audience: viewers, target, onClose }: Props) {
   const members = useBandMembers();
   const [body, setBody] = useState("");
   const [color, setColor] = useState(COMMENT_PALETTE[0].hex);
-  const [audience, setAudience] = useState<string[]>([me]);
+  const [audience, setAudience] = useState<string[]>(viewers.length ? viewers : [me]);
   const everyone = audience.includes(ALL);
 
   const toggle = (nick: string) =>

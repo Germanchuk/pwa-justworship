@@ -8,7 +8,6 @@ import { bandPath } from "#constants/routes";
 import {SongControls} from "#modules/SingleSong/components/SongControls/SongControls";
 import {SongMenuSlotProvider} from "#modules/SingleSong/components/SongControls/menuSlot";
 import {setNotesAudience} from "#modules/SingleSong/redux/songSlice";
-import {AutoscrollFollowProvider} from "#modules/SingleSong/services/Autoscroll/AutoscrollFollow";
 
 export default function SingleSong() {
   const { bandId, listId, songId, mode } = useParams();
@@ -23,7 +22,7 @@ export default function SingleSong() {
   }, []);
 
   // The song itself is never fetched over HTTP: the collab WebSocket document
-  // (`song:<id>`) is the single source of truth for content *and* header
+  // (`lines:<id>`) is the single source of truth for content *and* header
   // attributes (name/bpm/key/time signature). All the client needs from the
   // route is the id to open that document with.
   React.useEffect(() => {
@@ -44,10 +43,8 @@ export default function SingleSong() {
 
   return (
     <SongMenuSlotProvider>
-      <AutoscrollFollowProvider songId={songId ?? null}>
-        <Song />
-        <SongControls />
-      </AutoscrollFollowProvider>
+      <Song />
+      <SongControls />
     </SongMenuSlotProvider>
   );
 }
