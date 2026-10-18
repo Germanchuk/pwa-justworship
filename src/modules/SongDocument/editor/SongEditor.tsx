@@ -14,7 +14,7 @@ import { useConnectionStatus, useNotesViewers } from "#modules/SingleSong/redux/
 import { useCurrentUsername } from "#modules/SingleSong/components/SlateLyricsPlayground/elements/hooks";
 import DronePlayer from "#modules/SingleSong/services/DronePlayer/DronePlayer";
 import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/model";
-import { notesOf, readCapo, readHiddenLanes, readMeta, resolveNotes, Song, type NoteView } from "../model";
+import { readCapo, removeNote, readHiddenLanes, readMeta, resolveNotes, Song, type NoteView } from "../model";
 import { createLaneView, type LaneDisplay } from "../bridge/laneView";
 import { Ctx, type EditorCtx } from "./context";
 import { DynamicsPalette } from "./dynamics/DynamicsPalette";
@@ -147,9 +147,8 @@ function LoadedEditor({ song }: { song: Song }) {
     canAnnotate,
     stroke: canEdit ? stroke : null,
     cursorLine,
-    onNoteDelete: (n: NoteView) => {
-      if (window.confirm("Видалити примітку?")) song.doc.transact(() => notesOf(n.holder, n.lane).delete(n.note.id));
-    },
+    viewers,
+    onNoteDelete: (n: NoteView) => song.doc.transact(() => removeNote(n.holder, n.lane, n.note, viewers)),
   };
 
   return (
