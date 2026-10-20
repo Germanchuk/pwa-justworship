@@ -6,11 +6,13 @@
  *     ▸ — маркер рядка, вбудована в текст Y.Map:
  *       chords:     Y.Map { text: Y.Text, notes: Y.Map }  — рядок акордів і його примітки
  *       words:      Y.Map { notes: Y.Map }                — примітки слів (самі слова — у тексті пісні)
+ *       <id>:       Y.Map { cells: Y.Map, notes: Y.Map }  — додана доріжка пісні (`lanes.ts`, ADR-0008)
  *       dynamics:   рядок                                 — спільний колір динаміки, може не бути
  *       dynamicsBy: Y.Map  нік → колір                    — особиста динаміка
  *     слова рядка — символи між його маркером і наступним.
  *
- *   meta: Y.Map — шапка пісні (`meta.ts`); особисте поза рядками — `personal.ts`.
+ *   lanes: Y.Map — доріжки пісні (`lanes.ts`); meta: Y.Map — шапка пісні
+ *   (`meta.ts`); особисте поза рядками — `personal.ts`.
  *
  * Чому так: Enter — це вставка маркера, склеювання — видалення маркера.
  * Слова між рядками ніколи не копіюються, тож одночасні Enter не задвоюють
@@ -22,9 +24,10 @@
  */
 import * as Y from "yjs";
 import type { DynamicsStepKey } from "./dynamicsSteps";
+import { allLanes, isTextKind, newSlot, type LaneDef } from "./lanes";
 
+/** Текстові доріжки — ті, що правляться в Slate; порядок у рядку — `textLaneOrder`. */
 export type LaneType = "chords" | "words";
-/** Порядок доріжок у рядку (і в порядку документа: акорди рядка → його слова). */
 export const LANES: readonly LaneType[] = ["chords", "words"];
 export type LineKind = "segment" | "empty" | "note";
 
@@ -49,17 +52,16 @@ export type CanEdit = (line: number, lane: LaneType) => boolean;
 
 export const songOf = (doc: Y.Doc): Song => ({ doc, text: doc.getText("song") });
 
-/** Новий маркер. Поля створюються разом із ним, тож ніхто не створює їх одночасно з іншим. */
-export function newLine({ chords = "", dynamics, dynamicsBy = {} }: Omit<LineInit, "words"> = {}): Line {
-  const chordsLane = new Y.Map<unknown>();
-  chordsLane.set("text", new Y.Text(chords));
-  chordsLane.set("notes", new Y.Map());
-  const wordsLane = new Y.Map<unknown>();
-  wordsLane.set("notes", new Y.Map());
-
+/**
+ * Новий маркер. Поля створюються разом із ним, тож ніхто не створює їх
+ * одночасно з іншим; слоти — для слів, акордів і всіх доріжок `lanes`
+ * (і прибраних — повернута доріжка має мати слот).
+ */
+export function newLine({ chords = "", dynamics, dynamicsBy = {} }: Omit<LineInit, "words"> = {}, lanes: readonly LaneDef[] = []): Line {
   const line = new Y.Map<unknown>();
-  line.set("chords", chordsLane);
-  line.set("words", wordsLane);
+  line.set("chords", newSlot("chords", chords));
+  line.set("words", newSlot("words"));
+  lanes.forEach((lane) => isTextKind(lane.kind) || line.set(lane.id, newSlot(lane.kind)));
   line.set("dynamicsBy", new Y.Map<string>(Object.entries(dynamicsBy)));
   if (dynamics) line.set("dynamics", dynamics);
   return line;
@@ -67,8 +69,9 @@ export function newLine({ chords = "", dynamics, dynamicsBy = {} }: Omit<LineIni
 
 /** Дописати рядки в кінець пісні (засів документа). */
 export function appendLines(song: Song, inits: LineInit[]) {
+  const all = allLanes(song.doc);
   inits.forEach(({ words = "", ...lanes }) => {
-    song.text.insertEmbed(song.text.length, newLine(lanes));
+    song.text.insertEmbed(song.text.length, newLine(lanes, all));
     if (words) song.text.insert(song.text.length, words);
   });
 }

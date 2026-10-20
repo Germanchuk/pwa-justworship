@@ -49,6 +49,8 @@ export type LaneView = {
   modelPieces: (r: Range) => { anchor: Pos; focus: Pos }[];
   /** Пофарбувати рядки динамікою (`null` — стерти) — один крок undo. */
   paint: Paint;
+  /** Зміна поза Slate (доріжки пісні) — одна транзакція, один крок undo. */
+  change: (fn: () => void) => void;
   undoManager: Y.UndoManager;
   destroy: () => void;
 };
@@ -61,7 +63,8 @@ export function createLaneView(song: Song, display: LaneDisplay, opts: { base?: 
     lines: [],
     sources: [],
     syncing: false,
-    undoManager: new Y.UndoManager(song.text, { trackedOrigins: new Set([TYPING, COMMAND]) }),
+    // Список доріжок — теж у undo: додав чи переставив доріжку — скасував.
+    undoManager: new Y.UndoManager([song.text, song.doc.getMap("lanes")], { trackedOrigins: new Set([TYPING, COMMAND]) }),
   };
   const history = setupHistory(s);
   interceptTyping(s, history);
@@ -88,6 +91,13 @@ export function createLaneView(song: Song, display: LaneDisplay, opts: { base?: 
         .filter((piece): piece is Range => !!piece && Range.isExpanded(piece))
         .map((piece) => ({ anchor: toModel(s, piece.anchor), focus: toModel(s, piece.focus) })),
     paint,
+    change: (fn) => {
+      history.before();
+      s.undoManager.stopCapturing();
+      s.song.doc.transact(fn, COMMAND);
+      s.undoManager.stopCapturing();
+      history.after();
+    },
     undoManager: s.undoManager,
     destroy: () => {
       unobserve();

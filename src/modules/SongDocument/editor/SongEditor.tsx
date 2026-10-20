@@ -14,7 +14,19 @@ import { useConnectionStatus, useNotesViewers } from "#modules/SingleSong/redux/
 import { useCurrentUsername } from "#modules/SingleSong/components/SlateLyricsPlayground/elements/hooks";
 import DronePlayer from "#modules/SingleSong/services/DronePlayer/DronePlayer";
 import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/model";
-import { readCapo, removeNote, readHiddenLanes, readMeta, resolveNotes, Song, type NoteView } from "../model";
+import {
+  ensureSlots,
+  linesOf,
+  missingSlots,
+  readCapo,
+  readHiddenLanes,
+  readMeta,
+  removeNote,
+  resolveNotes,
+  Song,
+  songLanes,
+  type NoteView,
+} from "../model";
 import { createLaneView, type LaneDisplay } from "../bridge/laneView";
 import { Ctx, type EditorCtx } from "./context";
 import { DynamicsPalette } from "./dynamics/DynamicsPalette";
@@ -68,6 +80,27 @@ function LoadedEditor({ song }: { song: Song }) {
     rerender((n) => n + 1);
   }, [lanes, display.words, display.chords]); // eslint-disable-line react-hooks/exhaustive-deps
   const view = lanes.view;
+
+  // Рядок, що народився одночасно з новою доріжкою, — без її слота: дописати (ADR-0008).
+  useEffect(() => {
+    if (!canEdit) return;
+    const heal = () => {
+      const lines = linesOf(song);
+      if (missingSlots(song, lines).length) song.doc.transact(() => ensureSlots(song, lines), "heal");
+    };
+    let queued = false;
+    const onTransaction = () => {
+      if (queued) return;
+      queued = true;
+      queueMicrotask(() => {
+        queued = false;
+        heal();
+      });
+    };
+    heal();
+    song.doc.on("afterTransaction", onTransaction);
+    return () => song.doc.off("afterTransaction", onTransaction);
+  }, [song, canEdit]);
 
   const [brush, setBrush] = useState<Brush>("calm");
   const stroke = useStroke(song, brush, lanes.paint);
@@ -152,6 +185,7 @@ function LoadedEditor({ song }: { song: Song }) {
     canAnnotate,
     stroke: canEdit ? stroke : null,
     cursorLine,
+    shownLanes: songLanes(song.doc).filter((l) => !hidden.includes(l.id)),
     viewers,
     onNoteDelete: (n: NoteView) => song.doc.transact(() => removeNote(n.holder, n.lane, n.note, viewers)),
   };
@@ -159,7 +193,7 @@ function LoadedEditor({ song }: { song: Song }) {
   return (
     <Ctx.Provider value={ctx}>
       <div data-song-editor className="relative">
-        <SongHeader song={song} me={me} canEdit={canEdit} capoApplies={capoApplies} />
+        <SongHeader song={song} me={me} canEdit={canEdit} capoApplies={capoApplies} change={lanes.change} />
         {canEdit && (
           <div className="mb-2 pl-4">
             <DynamicsPalette brush={brush} setBrush={setBrush} />

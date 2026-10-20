@@ -3,7 +3,7 @@
  * режимі правки); капо й видимі доріжки — особисте кожного.
  */
 import { useState, type ReactNode } from "react";
-import { MusicalNoteIcon, ChatBubbleBottomCenterTextIcon } from "@heroicons/react/24/outline";
+import { MusicalNoteIcon, ChatBubbleBottomCenterTextIcon, Squares2X2Icon, AdjustmentsHorizontalIcon } from "@heroicons/react/24/outline";
 import { Switch } from "@/components/ui/switch";
 import { BpmModal } from "#modules/SingleSong/components/SlateLyricsPlayground/elements/Bpm/BpmModal";
 import { CapoModal } from "#modules/SingleSong/components/SlateLyricsPlayground/elements/Capo/CapoModal";
@@ -13,10 +13,20 @@ import { keyDisplayName, keyForCapo } from "#modules/SingleSong/components/Slate
 import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/model";
 import "#modules/SingleSong/components/SlateLyricsPlayground/elements/SongMetaRow/SongMetaRow.css";
 import "#modules/SingleSong/components/SlateLyricsPlayground/display/DisplayToggles.css";
-import { LaneType, readCapo, readHiddenLanes, readMeta, Song, writeCapo, writeHiddenLanes, writeMeta } from "../../model";
+import { readCapo, readHiddenLanes, readMeta, Song, songLanes, writeCapo, writeHiddenLanes, writeMeta } from "../../model";
+import { LanesPanel } from "./LanesPanel";
 import { transposeSong } from "./transposeSong";
 
-type Props = { song: Song; me: string | null; canEdit: boolean; capoApplies: boolean };
+type Props = {
+  song: Song;
+  me: string | null;
+  canEdit: boolean;
+  capoApplies: boolean;
+  /** Зміна доріжок пісні — один крок undo (`LaneView.change`). */
+  change: (fn: () => void) => void;
+};
+
+const LANE_ICONS = { words: ChatBubbleBottomCenterTextIcon, chords: MusicalNoteIcon } as const;
 
 function Badge(props: { label: string; value: ReactNode; readonly: boolean; muted?: boolean; title?: string; onOpen: () => void }) {
   return (
@@ -38,17 +48,17 @@ const tempoScale = (timeSignature: string) =>
     ? { max: 240, unitLabel: "вісімок/хв (BPM)" }
     : { max: 160, unitLabel: "уд/хв (BPM)" };
 
-export function SongHeader({ song, me, canEdit, capoApplies }: Props) {
+export function SongHeader({ song, me, canEdit, capoApplies, change }: Props) {
   const { doc } = song;
   const meta = readMeta(doc);
   const capo = me ? readCapo(doc, me) : { fret: 0, off: false };
   const hidden = me ? readHiddenLanes(doc, me) : [];
-  const [open, setOpen] = useState<"bpm" | "ts" | "key" | "capo" | null>(null);
+  const [open, setOpen] = useState<"bpm" | "ts" | "key" | "capo" | "lanes" | null>(null);
   const close = () => setOpen(null);
   const capoOn = capo.fret > 0 && !capo.off && capoApplies;
   const editTitle = canEdit ? undefined : "Змінюється в режимі редагування";
 
-  const toggleLane = (lane: LaneType) => {
+  const toggleLane = (lane: string) => {
     if (!me) return;
     const next = hidden.includes(lane) ? hidden.filter((l) => l !== lane) : [...hidden, lane];
     writeHiddenLanes(doc, me, next);
@@ -107,12 +117,9 @@ export function SongHeader({ song, me, canEdit, capoApplies }: Props) {
         )}
         {me && (
           <span className="display-toggles">
-            {(
-              [
-                ["words", "Слова", ChatBubbleBottomCenterTextIcon],
-                ["chords", "Акорди", MusicalNoteIcon],
-              ] as const
-            ).map(([lane, label, Icon]) => (
+            {songLanes(doc).map(({ id: lane, kind, name: label }) => {
+              const Icon = kind === "words" || kind === "chords" ? LANE_ICONS[kind] : Squares2X2Icon;
+              return (
               <span key={lane} className="song-meta-line">
                 <span
                   className="song-meta-badge display-toggle"
@@ -127,7 +134,21 @@ export function SongHeader({ song, me, canEdit, capoApplies }: Props) {
                   <Switch checked={!hidden.includes(lane)} onCheckedChange={() => toggleLane(lane)} aria-label={label} />
                 </span>
               </span>
-            ))}
+              );
+            })}
+            {canEdit && (
+              <span className="song-meta-line">
+                <span
+                  className="song-meta-badge display-toggle"
+                  title="Доріжки пісні: порядок, додати, прибрати"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setOpen("lanes")}
+                >
+                  <AdjustmentsHorizontalIcon />
+                  <span className="song-meta-badge__label">Доріжки</span>
+                </span>
+              </span>
+            )}
           </span>
         )}
       </div>
@@ -147,6 +168,7 @@ export function SongHeader({ song, me, canEdit, capoApplies }: Props) {
           onClose={close}
         />
       )}
+      {open === "lanes" && <LanesPanel song={song} change={change} onClose={close} />}
       {open === "capo" && me && <CapoModal current={capo.fret} onSave={(fret) => writeCapo(doc, me, { fret, off: false })} onClose={close} />}
     </div>
   );

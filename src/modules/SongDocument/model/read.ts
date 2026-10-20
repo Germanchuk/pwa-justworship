@@ -1,5 +1,6 @@
 /** Читання моделі: рядки по порядку і що в кожному з них. */
 import * as Y from "yjs";
+import { hasCells } from "./lanes";
 import { LaneType, Line, LineAt, LineKind, Song } from "./song";
 
 /** Рядки пісні по порядку. */
@@ -40,9 +41,9 @@ export const chordsString = (line: Line) => chordsOf(line)?.toString() ?? "";
 export const laneOf = (l: LineAt, lane: LaneType) => (lane === "words" ? l.words : chordsString(l.line));
 export const laneString = (song: Song, ln: number, lane: LaneType) => laneOf(lineAt(song, ln), lane);
 
-/** Вид рядка — з вмісту: `/…` — структурна примітка, нічого — порожній, решта — відрізок. */
+/** Вид рядка — з вмісту: `/…` — структурна примітка, нічого в жодній доріжці — порожній, решта — відрізок. */
 export function lineKind(l: LineAt): LineKind {
   if (l.words.startsWith("/")) return "note";
-  if (!l.words && !chordsString(l.line)) return "empty";
+  if (!l.words && !chordsString(l.line) && !hasCells(l.line)) return "empty";
   return "segment";
 }

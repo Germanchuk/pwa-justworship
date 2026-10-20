@@ -2,7 +2,7 @@
 import { createContext, useContext } from "react";
 import { Element } from "slate";
 import { ReactEditor, useSlateStatic } from "slate-react";
-import type { NoteView, Song } from "../model";
+import type { LaneDef, NoteView, Song } from "../model";
 import type { LaneView } from "../bridge/laneView";
 import type { Stroke } from "./dynamics/useStroke";
 
@@ -24,6 +24,8 @@ export type EditorCtx = {
   stroke: Stroke | null;
   /** Рядок моделі з курсором — показати натяки «акорди…» / «слова…» на порожньому. */
   cursorLine: number | null;
+  /** Доріжки пісні, які людина бачить, — у порядку пісні (клітинкові малює рядок). */
+  shownLanes: LaneDef[];
   onNoteDelete: (note: NoteView) => void;
 };
 
