@@ -6,7 +6,7 @@
  * капо діє; правка — вміст, шапка й динаміка; примітки — виділення й картки.
  * Особистий вибір доріжок діє в усіх режимах (ADR-0006).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createEditor, Editor, Node, NodeEntry, Range, Text, Transforms } from "slate";
 import { Editable, ReactEditor, Slate, withReact } from "slate-react";
 import { useCanAnnotate, useCanEditContent, useCapoApplies } from "#modules/SingleSong/mode";
@@ -60,7 +60,13 @@ function LoadedEditor({ song }: { song: Song }) {
     [song],
   );
   useEffect(() => () => lanes.destroy(), [lanes]);
-  useEffect(() => lanes.setDisplay(display), [lanes, display.words, display.chords]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Вибір доріжок → видиме дерево. Примітки й позначки цього рендера порахувались ще
+  // зі старим вибором — тож одразу, до показу, рендеримо ще раз зі свіжим.
+  const [, rerender] = useState(0);
+  useLayoutEffect(() => {
+    lanes.setDisplay(display);
+    rerender((n) => n + 1);
+  }, [lanes, display.words, display.chords]); // eslint-disable-line react-hooks/exhaustive-deps
   const view = lanes.view;
 
   const [brush, setBrush] = useState<Brush>("calm");
