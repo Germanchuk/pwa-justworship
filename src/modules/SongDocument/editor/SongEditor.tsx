@@ -24,7 +24,6 @@ import {
   removeNote,
   resolveNotes,
   Song,
-  songLanes,
   type NoteView,
 } from "../model";
 import { createLaneView, type LaneDisplay } from "../bridge/laneView";
@@ -64,7 +63,7 @@ function LoadedEditor({ song }: { song: Song }) {
   useDocVersion(song.doc); // шапка, примітки, особисте — перечитуються на кожну зміну
 
   const hidden = me ? readHiddenLanes(song.doc, me) : [];
-  const display: LaneDisplay = { words: !hidden.includes("words"), chords: !hidden.includes("chords") };
+  const display: LaneDisplay = { words: !hidden.includes("words"), chords: !hidden.includes("chords"), hidden };
   const lanes = useMemo(
     () => createLaneView(song, display, { base: () => withReact(createEditor()) }),
     // Видиме дерево створюється раз на документ; вибір доріжок міняє `setDisplay`.
@@ -78,7 +77,7 @@ function LoadedEditor({ song }: { song: Song }) {
   useLayoutEffect(() => {
     lanes.setDisplay(display);
     rerender((n) => n + 1);
-  }, [lanes, display.words, display.chords]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lanes, hidden.join()]); // eslint-disable-line react-hooks/exhaustive-deps
   const view = lanes.view;
 
   // Рядок, що народився одночасно з новою доріжкою, — без її слота: дописати (ADR-0008).
@@ -185,7 +184,6 @@ function LoadedEditor({ song }: { song: Song }) {
     canAnnotate,
     stroke: canEdit ? stroke : null,
     cursorLine,
-    shownLanes: songLanes(song.doc).filter((l) => !hidden.includes(l.id)),
     viewers,
     onNoteDelete: (n: NoteView) => song.doc.transact(() => removeNote(n.holder, n.lane, n.note, viewers)),
   };

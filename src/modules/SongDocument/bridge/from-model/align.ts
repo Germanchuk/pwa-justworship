@@ -1,7 +1,7 @@
 /** Склад рядків і доріжок видимого дерева — за моделлю. */
 import { Element, Transforms } from "slate";
-import { chordsOf, LaneType, layout, LineAt } from "../../model";
-import { laneNode, laneTypeOf, project, viewNode } from "../projection";
+import { chordsOf, layout, LineAt } from "../../model";
+import { isTextLane, laneNode, laneOfNode, project, viewNode, type ViewLane } from "../projection";
 import type { ViewState } from "../state";
 
 /**
@@ -13,7 +13,9 @@ import type { ViewState } from "../state";
 export function alignLines(s: ViewState): Set<unknown> {
   const { view } = s;
   const fresh = new Set<unknown>();
-  const mark = (l: LineAt, lane: LaneType) => fresh.add(lane === "words" ? l.line : chordsOf(l.line));
+  // Клітинкові доріжки тексту не мають — дельт для них немає.
+  const mark = (l: LineAt, lane: ViewLane) =>
+    isTextLane(lane) && fresh.add(lane === "words" ? l.line : chordsOf(l.line));
   const prev = s.sources;
   const next = project(s);
   let pre = 0;
@@ -33,7 +35,14 @@ export function alignLines(s: ViewState): Set<unknown> {
   // Рядки, що лишились, могли змінити вид (порожній ↔ відрізок) — тоді й склад доріжок.
   next.forEach(({ l, lanes }, vln) => {
     if (vln >= pre && vln < next.length - suf) return;
-    const had = (view.children[vln] as Element).children.map(laneTypeOf);
+    const had = (view.children[vln] as Element).children.map(laneOfNode);
+    // Доріжки переставили (порядок доданих) — рядок збирається наново.
+    if (had.filter((lane) => lanes.includes(lane)).join() !== lanes.filter((lane) => had.includes(lane)).join()) {
+      Transforms.removeNodes(view, { at: [vln] });
+      Transforms.insertNodes(view, viewNode(l, lanes), { at: [vln] });
+      lanes.forEach((lane) => mark(l, lane));
+      return;
+    }
     for (let i = had.length - 1; i >= 0; i--) {
       if (!lanes.includes(had[i])) Transforms.removeNodes(view, { at: [vln, i] });
     }

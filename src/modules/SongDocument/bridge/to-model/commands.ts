@@ -2,25 +2,43 @@
  * Усе структурне — Enter, склеювання, видалення виділеного, вставка — правилами
  * моделі (`1-model/rules`), а не в Slate. Видиме лише покаже результат подією Yjs.
  */
-import { Node, Range, Transforms } from "slate";
+import { Editor, Node, Range, Transforms } from "slate";
 import {
   backspaceAtLaneStart,
+  clearCells,
   deleteAtLaneEnd,
   deleteRange,
   insertPlainText,
   insertText,
+  linesOf,
   Pos,
   slashAllowed,
   splitLine,
 } from "../../model";
 import type { History } from "../history";
 import { toModel, toView } from "../positions";
-import { isShown } from "../projection";
+import { isShown, isTextLane, laneOfNode } from "../projection";
 import { COMMAND, quietly, ViewState } from "../state";
 
 export function installCommands(s: ViewState, history: History) {
   const { song, view, undoManager } = s;
-  const canEdit = (ln: number, lane: Pos["lane"]) => isShown(s, ln, lane);
+  const canEdit = (ln: number, lane: string) => isShown(s, ln, lane);
+
+  /**
+   * Стерти виділене: текст — правилом моделі, клітинкові доріжки, які
+   * захопило виділення (атомні вузли), — очистити. Рядки, що зникли
+   * цілком, забирають свої клітинки з собою.
+   */
+  const removeSelection = (anchor: Pos, focus: Pos) => {
+    const cells = Array.from(
+      Editor.nodes(view, { at: view.selection!, match: (n, path) => path.length === 2 && !isTextLane(laneOfNode(n)) }),
+      ([n, path]) => ({ line: s.sources[path[0]].line, id: laneOfNode(n) }),
+    );
+    const at = deleteRange(song, anchor, focus, canEdit);
+    const alive = new Set(linesOf(song));
+    cells.forEach(({ line, id }) => alive.has(line) && clearCells(line, id));
+    return at;
+  };
 
   /** Правило моделі з курсором видимого; окремий крок undo; курсор — куди скаже правило. */
   const command = (run: (anchor: Pos, focus: Pos) => Pos | null) => {
@@ -39,8 +57,7 @@ export function installCommands(s: ViewState, history: History) {
     history.after();
   };
   /** Спершу стерти виділене (якщо є), потім правило в точці, що лишилась. */
-  const collapsed = (anchor: Pos, focus: Pos) =>
-    Range.isExpanded(view.selection!) ? deleteRange(song, anchor, focus, canEdit) : anchor;
+  const collapsed = (anchor: Pos, focus: Pos) => (Range.isExpanded(view.selection!) ? removeSelection(anchor, focus) : anchor);
 
   const { deleteBackward, deleteForward } = view;
   view.insertText = (text) => {
@@ -61,7 +78,7 @@ export function installCommands(s: ViewState, history: History) {
     if (atEnd) return command((a) => deleteAtLaneEnd(song, a));
     deleteForward(unit);
   };
-  view.deleteFragment = () => command((a, f) => deleteRange(song, a, f, canEdit));
+  view.deleteFragment = () => command((a, f) => removeSelection(a, f));
   view.insertData = (data) => {
     const text = data.getData("text/plain");
     if (text) command((a, f) => insertPlainText(song, collapsed(a, f), text));

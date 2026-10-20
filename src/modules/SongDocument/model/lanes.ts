@@ -66,14 +66,20 @@ export function newSlot(kind: LaneKind, chords = ""): Y.Map<unknown> {
 /** Клітинки доріжки `id` рядка; `undefined` — слота ще немає (див. `ensureSlots`). */
 export const cellsOf = (line: Line, id: string) => (line.get(id) as Y.Map<unknown> | undefined)?.get("cells") as Y.Map<unknown> | undefined;
 
-/** Чи є щось у клітинкових доріжках рядка. */
-export function hasCells(line: Line) {
-  for (const value of line.values()) {
+/** id клітинкових доріжок рядка, у яких щось є. */
+export function filledCells(line: Line): string[] {
+  const out: string[] = [];
+  line.forEach((value, id) => {
     const cells = value instanceof Y.Map ? value.get("cells") : undefined;
-    if (cells instanceof Y.Map && cells.size > 0) return true;
-  }
-  return false;
+    if (cells instanceof Y.Map && cells.size > 0) out.push(id);
+  });
+  return out;
 }
+
+export const hasCells = (line: Line) => filledCells(line).length > 0;
+
+/** Стерти вміст клітинкової доріжки рядка (її захопило видалення виділеного). Викликати в транзакції. */
+export const clearCells = (line: Line, id: string) => cellsOf(line, id)?.clear();
 
 /** Слоти рядка, яких бракує, — для рядків, що народились одночасно з доріжкою. */
 export const missingSlots = (song: Song, lines: readonly Line[]) =>

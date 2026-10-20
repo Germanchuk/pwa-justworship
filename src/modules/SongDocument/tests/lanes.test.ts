@@ -1,6 +1,10 @@
 /** Доріжки пісні (ADR-0008): список доріжок, слот у кожному рядку, порядок, вставка за порядком. */
 import { describe, expect, it } from "vitest";
+import { Element, Node, Transforms } from "slate";
 import { change, makePair } from "./harness";
+import { ALL, at, doc, setup } from "./testKit";
+import type { LaneDisplay, LaneView } from "../bridge/laneView";
+import { selectedText } from "../bridge/clipboard";
 import {
   addLane,
   allLanes,
@@ -124,5 +128,80 @@ describe("вставка: акорди беруть слова під собою
       ["", "Господь"],
     ]);
     expect(missingSlots(net.B, linesOf(net.B))).toEqual([]);
+  });
+});
+
+describe("клітинкові доріжки — атомні вузли видимого дерева", () => {
+  const SONG = [
+    { words: "Ти святий", chords: "Am F" },
+    { words: "Господь", chords: "C G" },
+    { words: "Алилуя", chords: "F" },
+  ];
+  /** Рядок видимого: доріжки згори донизу — `t:`/`c:`/`w:` для табів, акордів, слів. */
+  const rowsOf = (h: LaneView, tab: string) =>
+    h.view.children.map((l) =>
+      (l as Element).children
+        .map((c) => {
+          const n = c as unknown as { type: string; lane?: string };
+          return n.type === "cells" ? (n.lane === tab ? "t" : "?") : `${n.type[0]}:${Node.string(c)}`;
+        })
+        .join(" | "),
+    );
+  const withTab = (b: LaneDisplay = ALL) => {
+    const ctx = setup(SONG, ALL, b);
+    let tab = "";
+    ctx.A.change(() => (tab = addLane(ctx.net.A, "tab", linesOf(ctx.net.A))));
+    return { ...ctx, tab };
+  };
+
+  it("додана доріжка з'являється в кожного над акордами; прибрана — зникає; сховав собі — лише в себе", () => {
+    const { net, A, B, tab } = withTab();
+    expect(rowsOf(B, tab)).toEqual(["t | c:Am F | w:Ти святий", "t | c:C G | w:Господь", "t | c:F | w:Алилуя"]);
+    B.setDisplay({ ...ALL, hidden: [tab] });
+    expect(rowsOf(B, tab)[0]).toBe("c:Am F | w:Ти святий");
+    expect(rowsOf(A, tab)[0]).toBe("t | c:Am F | w:Ти святий");
+    A.change(() => removeLane(net.A.doc, tab));
+    expect(rowsOf(A, tab)[0]).toBe("c:Am F | w:Ти святий");
+  });
+
+  it("у клітинкову доріжку не надрукувати; виділення через неї — копіюється лише текст", () => {
+    const { net, A, tab } = withTab();
+    at(A, 1, 0, 0);
+    A.view.insertText("x");
+    expect(doc(net.B)).toEqual(["Am F / Ти святий", "C G / Господь", "F / Алилуя"]);
+    Transforms.select(A.view, { anchor: { path: [0, 2, 0], offset: 3 }, focus: { path: [1, 1, 0], offset: 1 } });
+    expect(selectedText(A.view)).toBe("святий\nC");
+    expect(rowsOf(A, tab)[1]).toBe("t | c:C G | w:Господь");
+  });
+
+  it("видалення виділеного захоплює клітинки видимих доріжок у виділенні; рядок зі схованими клітинками лишається", () => {
+    const { net, A, B, tab } = withTab();
+    const lines = linesOf(net.A);
+    change(net.A, () => lines.forEach((line, i) => cellsOf(line, tab)!.set("1.1/1", String(i))));
+    // від «святий» (рядок 0, слова) до «Г|осподь» (рядок 1, слова): таби рядка 1 — у виділенні
+    Transforms.select(A.view, { anchor: { path: [0, 2, 0], offset: 3 }, focus: { path: [1, 2, 0], offset: 1 } });
+    A.view.deleteFragment();
+    expect(layout(net.B).map((l) => l.words)).toEqual(["Ти осподь", "Алилуя"]);
+    expect(linesOf(net.B).map((line) => cellsOf(line, tab)!.get("1.1/1"))).toEqual(["0", "2"]);
+
+    // B не бачить табів: рядок, у якому вони є, з його виділення не зникає і не склеюється
+    B.setDisplay({ ...ALL, hidden: [tab] });
+    Transforms.select(B.view, { anchor: { path: [0, 1, 0], offset: 0 }, focus: { path: [1, 1, 0], offset: 3 } });
+    B.view.deleteFragment();
+    expect(layout(net.A).map((l) => l.words)).toEqual(["", "луя"]);
+    expect(cellsOf(linesOf(net.A)[1], tab)!.get("1.1/1")).toBe("2");
+  });
+
+  it("перестановка доданих доріжок — рядки в кожного перебудовано", () => {
+    const { net, A, B, tab } = withTab();
+    let cajon = "";
+    A.change(() => (cajon = addLane(net.A, "cajon", linesOf(net.A))));
+    const order = () =>
+      ((B.view.children[0] as Element).children as unknown as { lane?: string; type: string }[]).map((n) => n.lane ?? n.type);
+    expect(order()).toEqual([tab, cajon, "chords", "words"]);
+    A.change(() => moveLane(net.A.doc, cajon, 0));
+    expect(order()).toEqual([cajon, tab, "chords", "words"]);
+    A.undoManager.undo();
+    expect(order()).toEqual([tab, cajon, "chords", "words"]);
   });
 });

@@ -13,7 +13,9 @@ type WithFragment = { setFragmentData?: (data: DataTransfer, origin?: string) =>
 export function selectedText(view: Editor): string | null {
   const sel = view.selection;
   if (!sel || Range.isCollapsed(sel)) return null;
-  return Array.from(Editor.nodes(view, { at: sel, match: (_, path) => path.length === 2 }), ([, path]) => {
+  // Клітинкові доріжки тексту ще не мають — у буфер потраплять разом зі своєю механікою (ADR-0008).
+  const textLane = (n: Node, path: number[]) => path.length === 2 && (n as unknown as { type: string }).type !== "cells";
+  return Array.from(Editor.nodes(view, { at: sel, match: textLane }), ([, path]) => {
     const piece = Range.intersection(sel, Editor.range(view, path));
     if (!piece) return "";
     const [start, end] = Range.edges(piece);

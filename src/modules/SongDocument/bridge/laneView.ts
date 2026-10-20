@@ -26,7 +26,7 @@ import { alignLines, rebuild } from "./from-model/align";
 import { observeModel } from "./from-model/observe";
 import { setupHistory } from "./history";
 import { indexOf, toModel, toView } from "./positions";
-import { isShown, LaneDisplay } from "./projection";
+import { isShown, isTextLane, LaneDisplay, laneOfNode } from "./projection";
 import { COMMAND, quietly, TYPING, ViewState } from "./state";
 import { installCommands } from "./to-model/commands";
 import { installPaint, Paint } from "./to-model/paint";
@@ -66,6 +66,9 @@ export function createLaneView(song: Song, display: LaneDisplay, opts: { base?: 
     // Список доріжок — теж у undo: додав чи переставив доріжку — скасував.
     undoManager: new Y.UndoManager([song.text, song.doc.getMap("lanes")], { trackedOrigins: new Set([TYPING, COMMAND]) }),
   };
+  // Клітинкова доріжка — атомний вузол: курсор переходить через неї, виділення її захоплює, друкувати в неї не можна.
+  const { isVoid } = s.view;
+  s.view.isVoid = (el) => (el as unknown as { type: string }).type === "cells" || isVoid(el);
   const history = setupHistory(s);
   interceptTyping(s, history);
   installCommands(s, history);
@@ -85,7 +88,7 @@ export function createLaneView(song: Song, display: LaneDisplay, opts: { base?: 
     toModel: (p) => toModel(s, p),
     toView: (p) => toView(s, p),
     modelPieces: (r) =>
-      Array.from(Editor.nodes(s.view, { at: r, match: (_, path) => path.length === 2 }), ([, path]) =>
+      Array.from(Editor.nodes(s.view, { at: r, match: (n, path) => path.length === 2 && isTextLane(laneOfNode(n)) }), ([, path]) =>
         Range.intersection(r, Editor.range(s.view, path)),
       )
         .filter((piece): piece is Range => !!piece && Range.isExpanded(piece))

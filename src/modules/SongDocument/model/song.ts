@@ -47,8 +47,8 @@ export type LineAt = { line: Line; at: number; words: string };
 /** Місце в документі: рядок, доріжка, символ. */
 export type Pos = { line: number; lane: LaneType; offset: number };
 
-/** Чи може цей учасник правити доріжку рядка (бачить її). */
-export type CanEdit = (line: number, lane: LaneType) => boolean;
+/** Чи може цей учасник правити доріжку рядка (бачить її); доріжка — `words`, `chords` або id доданої. */
+export type CanEdit = (line: number, lane: string) => boolean;
 
 export const songOf = (doc: Y.Doc): Song => ({ doc, text: doc.getText("song") });
 

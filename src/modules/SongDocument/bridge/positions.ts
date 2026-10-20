@@ -6,15 +6,21 @@
 import * as Y from "yjs";
 import type { Point } from "slate";
 import { chordsOf, laneOf, Line, lineOfIndex, Pos } from "../model";
+import { isTextLane } from "./projection";
 import type { ViewState } from "./state";
 
 export const indexOf = (s: ViewState, line: Line) => s.lines.findIndex((l) => l.line === line);
 
-export const toModel = (s: ViewState, { path: [vln, vl], offset }: Point): Pos => ({
-  line: indexOf(s, s.sources[vln].line),
-  lane: s.sources[vln].lanes[vl],
-  offset,
-});
+/**
+ * Точка видимого → місце в моделі. Клітинкова доріжка — атомний вузол без
+ * тексту: точка в ній для текстових правил — це початок акордів того самого
+ * рядка (одразу під клітинковими доріжками).
+ */
+export function toModel(s: ViewState, { path: [vln, vl], offset }: Point): Pos {
+  const line = indexOf(s, s.sources[vln].line);
+  const lane = s.sources[vln].lanes[vl];
+  return isTextLane(lane) ? { line, lane, offset } : { line, lane: "chords", offset: 0 };
+}
 
 /** `null` — цієї доріжки людина не бачить. */
 export function toView(s: ViewState, { line, lane, offset }: Pos): Point | null {
