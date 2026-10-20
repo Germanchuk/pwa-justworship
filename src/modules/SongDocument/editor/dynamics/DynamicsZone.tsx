@@ -20,6 +20,8 @@ export function DynamicsZone({ ln }: { ln: number }) {
 }
 
 const EMPTY = "rgba(120, 95, 50, 0.07)";
+/** Одна ширина в усіх режимах. Не вужче за плитку тиші — інакше косих рисок не видно. */
+const STRIP_WIDTH = 8;
 
 /** Тиша — закреслена лінія: тонка вертикаль, яку перетинають косі риски. Плитка 8×16, повторюється вниз. */
 const silenceTile = (ink: string) =>
@@ -48,8 +50,7 @@ function Strip({ ln, layer }: { ln: number; layer: DynamicsLayer }) {
       onMouseDown={(e) => e.preventDefault()}
       className={`absolute select-none top-0 bottom-0 ${side === "left" ? "-left-2 md:left-0" : "-right-2 md:right-0"}`}
       style={{
-        // Тиші треба ширше: інакше косих рисок не видно.
-        width: ctx.stroke ? 10 : key === SILENCE ? 8 : 4,
+        width: STRIP_WIDTH,
         zIndex: 1,
         background: stripBackground(key),
         opacity: preview === undefined ? 1 : 0.75,
