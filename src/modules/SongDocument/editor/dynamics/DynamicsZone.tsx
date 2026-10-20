@@ -21,12 +21,15 @@ export function DynamicsZone({ ln }: { ln: number }) {
 
 const EMPTY = "rgba(120, 95, 50, 0.07)";
 
-/** Тиша — закреслена лінія: тонка риска посередині смужки, як риска закреслення. */
+/** Тиша — закреслена лінія: тонка вертикаль, яку перетинають косі риски. Плитка 8×16, повторюється вниз. */
+const silenceTile = (ink: string) =>
+  `url("data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='8' height='16'><g stroke='${ink}'><line x1='4' y1='0' x2='4' y2='16' stroke-width='2'/><line x1='0' y1='11' x2='8' y2='5' stroke-width='1.5'/></g></svg>`,
+  )}") center top / 8px 16px repeat-y`;
+
 const stripBackground = (key: DynamicsStepKey | null) => {
   if (!key) return EMPTY;
-  if (key !== SILENCE) return getDynamicsStepColor(key);
-  const ink = getDynamicsStepColor(key);
-  return `linear-gradient(to right, transparent calc(50% - 1px), ${ink} 0 calc(50% + 1px), transparent 0)`;
+  return key === SILENCE ? silenceTile(getDynamicsStepColor(key)) : getDynamicsStepColor(key);
 };
 
 function Strip({ ln, layer }: { ln: number; layer: DynamicsLayer }) {
@@ -45,7 +48,8 @@ function Strip({ ln, layer }: { ln: number; layer: DynamicsLayer }) {
       onMouseDown={(e) => e.preventDefault()}
       className={`absolute select-none top-0 bottom-0 ${side === "left" ? "-left-2 md:left-0" : "-right-2 md:right-0"}`}
       style={{
-        width: ctx.stroke ? 10 : 4,
+        // Тиші треба ширше: інакше косих рисок не видно.
+        width: ctx.stroke ? 10 : key === SILENCE ? 8 : 4,
         zIndex: 1,
         background: stripBackground(key),
         opacity: preview === undefined ? 1 : 0.75,
