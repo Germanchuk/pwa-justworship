@@ -5,6 +5,7 @@ import { transposeChordTextForCapo } from "#modules/SingleSong/components/SlateL
 import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/model";
 import { LaneType, layout, lineKind } from "../../model";
 import { useEditorCtx, useModelLine } from "../context";
+import { NoteCard } from "../notes/NoteCard";
 
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
 const INK: Record<LaneType, string> = { words: "#1e3a8a", chords: "#3b82f6" };
@@ -22,6 +23,8 @@ export function TextLane({ attributes, children, element, lane }: RenderElementP
   // Капо — лише показ (у читанні): транспонований рядок замість документного.
   const transposed = lane === "chords" && ctx.capo > 0 && !ctx.canEdit;
   const note = lane === "words" && kind === "note";
+  // Картки приміток — над тією доріжкою, до якої примітка.
+  const cards = ctx.notes.filter((n) => n.line === ln && n.lane === lane && n.status === "visible" && (n.note.body || ctx.canAnnotate));
   return (
     <div
       {...attributes}
@@ -37,21 +40,27 @@ export function TextLane({ attributes, children, element, lane }: RenderElementP
         fontWeight: lane === "chords" || note ? 700 : 500,
       }}
     >
+      {cards.map((c) => (
+        <NoteCard key={c.note.id} view={c} />
+      ))}
       {transposed && (
         <div contentEditable={false} className="select-none whitespace-pre">
           {transposeChordTextForCapo(text, ctx.songKey as SongKeyValue, ctx.capo) || " "}
         </div>
       )}
-      <div style={transposed ? { display: "none" } : undefined}>{children}</div>
-      {ctx.canEdit && text === "" && (kind !== "empty" || ctx.cursorLine === ln) && (
-        <span
-          contentEditable={false}
-          className="absolute left-4 top-0 italic text-sm font-normal select-none pointer-events-none"
-          style={{ color: HINT[lane].color }}
-        >
-          {HINT[lane].label}
-        </span>
-      )}
+      {/* Натяк — поверх тексту доріжки, а не карток над нею. */}
+      <div className="relative" style={transposed ? { display: "none" } : undefined}>
+        {children}
+        {ctx.canEdit && text === "" && (kind !== "empty" || ctx.cursorLine === ln) && (
+          <span
+            contentEditable={false}
+            className="absolute left-0 top-0 italic text-sm font-normal select-none pointer-events-none"
+            style={{ color: HINT[lane].color }}
+          >
+            {HINT[lane].label}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

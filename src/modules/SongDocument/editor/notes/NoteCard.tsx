@@ -10,7 +10,7 @@ export function NoteCard({ view }: { view: NoteView }) {
   return (
     <div
       contentEditable={false}
-      className="my-1 ml-4 mr-1 rounded border-l-4 px-2 py-0.5 text-sm select-none flex items-start gap-2"
+      className="my-1 mr-1 rounded border-l-4 px-2 py-0.5 text-sm font-normal select-none flex items-start gap-2"
       style={{ fontFamily: "Pangolin, cursive", background: cardBg(color), borderColor: cardBorder(color), color: "#3f2a06" }}
     >
       <span className="flex-1 whitespace-pre-wrap">{note.body || <i className="text-stone-400">підсвітка «{note.quote}»</i>}</span>
