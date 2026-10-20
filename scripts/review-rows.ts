@@ -23,7 +23,7 @@ const [exportPath, decisionsPath, freshPath] = process.argv.slice(2);
 if (!decisionsPath) throw new Error("usage: review-rows <export.json> <decisions.json> [fresh.json]");
 
 const LOOKALIKE: Record<string, string> = { А: "A", В: "B", С: "C", Е: "E", Н: "H", а: "a", с: "c", е: "e", м: "m", о: "o", х: "x", Х: "X" };
-const norm = (s: string) => s.replace(/[​ ﻿]/g, " ").replace(/[АВСЕНасемохХ]/g, (c) => LOOKALIKE[c]);
+const norm = (s: string) => s.replace(/[\u200b\u00a0\ufeff]/g, " ").replace(/[АВСЕНасемохХ]/g, (c) => LOOKALIKE[c]);
 const CHORD = /^\(?[A-H][#b♯♭]?(m|maj|min|dim|aug|sus|add|M|[0-9]|[#b+\-°ø/()`]|[A-H][#b]?)*\)?[.,]?$/;
 const BAR = /^(\||\.+|:|x\d+|\(x\d+\)|\d+x|-|_|!|\/|%|\|:|:\|)$/i;
 const isChordToken = (t: string) => CHORD.test(t) || BAR.test(t);
