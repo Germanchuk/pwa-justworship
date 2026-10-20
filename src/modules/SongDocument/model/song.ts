@@ -26,7 +26,7 @@ import * as Y from "yjs";
 import type { DynamicsStepKey } from "./dynamicsSteps";
 import { allLanes, isTextKind, newSlot, type LaneDef } from "./lanes";
 
-/** Текстові доріжки — ті, що правляться в Slate; порядок у рядку — `textLaneOrder`. */
+/** Текстові доріжки — ті, що правляться в Slate; у рядку завжди акорди над словами, найнижче (ADR-0008). */
 export type LaneType = "chords" | "words";
 export const LANES: readonly LaneType[] = ["chords", "words"];
 export type LineKind = "segment" | "empty" | "note";

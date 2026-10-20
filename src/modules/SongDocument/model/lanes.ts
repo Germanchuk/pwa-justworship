@@ -5,8 +5,9 @@
  *   lanes: Y.Map  id → Y.Map { kind, name, order, removed? }
  *
  * Слова (`words`) і акорди (`chords`) — завжди, рівно по одній, правляться в
- * Slate. Решта — клітинкові (`cells: Y.Map`), по скільки завгодно; їхня
- * механіка — згодом. Пісня без запису про `words`/`chords` бере типовий.
+ * Slate, і місце в них стале: слова — найнижча доріжка, акорди — над ними.
+ * У `lanes` їх немає. Решта — клітинкові (`cells: Y.Map`), по скільки
+ * завгодно, над акордами в порядку `order`; їхня механіка — згодом.
  */
 import * as Y from "yjs";
 import type { LaneType, Line, Song } from "./song";
@@ -26,39 +27,32 @@ export const KIND_NAMES: Record<LaneKind, string> = {
 };
 export const isTextKind = (kind: LaneKind): kind is LaneType => kind === "words" || kind === "chords";
 
+/** Слова й акорди — під усіма доданими: акорди другі знизу, слова найнижчі. */
 const BUILTIN: readonly LaneDef[] = [
-  { id: "chords", kind: "chords", name: KIND_NAMES.chords, order: 1, removed: false },
-  { id: "words", kind: "words", name: KIND_NAMES.words, order: 2, removed: false },
+  { id: "chords", kind: "chords", name: KIND_NAMES.chords, order: Infinity, removed: false },
+  { id: "words", kind: "words", name: KIND_NAMES.words, order: Infinity, removed: false },
 ];
 
 const lanesMap = (doc: Y.Doc) => doc.getMap<Y.Map<unknown>>("lanes");
 
-const defOf = (id: string, rec: Y.Map<unknown> | undefined, base?: LaneDef): LaneDef => ({
-  id,
-  kind: (rec?.get("kind") as LaneKind) ?? base!.kind,
-  name: (rec?.get("name") as string) ?? base?.name ?? "",
-  order: (rec?.get("order") as number) ?? base?.order ?? 0,
-  removed: rec?.get("removed") === true,
-});
-
 const byOrder = (a: LaneDef, b: LaneDef) => a.order - b.order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-/** Усі доріжки пісні, і прибрані теж (їхні слоти живуть у рядках), — у порядку пісні. */
-export function allLanes(doc: Y.Doc): LaneDef[] {
-  const map = lanesMap(doc);
-  const out = BUILTIN.map((b) => defOf(b.id, map.get(b.id), b));
-  map.forEach((rec, id) => {
-    if (id !== "words" && id !== "chords") out.push(defOf(id, rec));
+/** Додані доріжки, і прибрані теж (їхні слоти живуть у рядках), — у порядку пісні. */
+function addedLanes(doc: Y.Doc): LaneDef[] {
+  const out: LaneDef[] = [];
+  lanesMap(doc).forEach((rec, id) => {
+    const kind = rec.get("kind") as LaneKind;
+    if (isTextKind(kind)) return; // слова й акорди мають стале місце
+    out.push({ id, kind, name: (rec.get("name") as string) ?? "", order: (rec.get("order") as number) ?? 0, removed: rec.get("removed") === true });
   });
   return out.sort(byOrder);
 }
 
-/** Доріжки пісні, які зараз у ній є (без прибраних), — у порядку пісні. */
-export const songLanes = (doc: Y.Doc) => allLanes(doc).filter((l) => !l.removed);
+/** Усі доріжки пісні згори донизу, і прибрані теж. */
+export const allLanes = (doc: Y.Doc): LaneDef[] => [...addedLanes(doc), ...BUILTIN];
 
-/** Порядок текстових доріжок — у ньому їх показує видиме дерево й читає вставка. */
-export const textLaneOrder = (doc: Y.Doc): LaneType[] =>
-  allLanes(doc).flatMap((l) => (isTextKind(l.kind) ? [l.kind] : []));
+/** Доріжки пісні, які зараз у ній є (без прибраних), — згори донизу. */
+export const songLanes = (doc: Y.Doc) => allLanes(doc).filter((l) => !l.removed);
 
 /** Слот доріжки виду `kind` для рядка (`chords` — текст акордів; до вставки в документ Y.Map свого вмісту не віддає). */
 export function newSlot(kind: LaneKind, chords = ""): Y.Map<unknown> {
@@ -93,43 +87,36 @@ export function ensureSlots(song: Song, lines: readonly Line[]) {
 const newId = () => `l-${Math.random().toString(36).slice(2, 8)}`;
 
 /**
- * Додати доріжку виду `kind` — внизу списку, з порожнім слотом у кожному
- * рядку. Назва за замовчуванням — вид з номером («Таби 2»). Повертає id.
+ * Додати доріжку виду `kind` — найнижчою з доданих (одразу над акордами), з
+ * порожнім слотом у кожному рядку. Назва за замовчуванням — вид з номером («Таби 2»). Повертає id.
  * Викликати в транзакції.
  */
 export function addLane(song: Song, kind: CellKind, lines: readonly Line[], name?: string): string {
-  const all = allLanes(song.doc);
+  const added = addedLanes(song.doc);
   const id = newId();
-  const same = all.filter((l) => l.kind === kind).length;
+  const same = added.filter((l) => l.kind === kind).length;
   const rec = new Y.Map<unknown>();
   rec.set("kind", kind);
   rec.set("name", name ?? (same ? `${KIND_NAMES[kind]} ${same + 1}` : KIND_NAMES[kind]));
-  rec.set("order", Math.max(0, ...all.map((l) => l.order)) + 1);
+  rec.set("order", Math.max(0, ...added.map((l) => l.order)) + 1);
   lanesMap(song.doc).set(id, rec);
   lines.forEach((line) => line.set(id, newSlot(kind)));
   return id;
 }
 
-/** Запис доріжки в `lanes`; для слів і акордів створюється, коли їх уперше змінюють. */
+/** Запис доданої доріжки; слова й акорди не змінюються. */
 function recordOf(doc: Y.Doc, id: string): Y.Map<unknown> {
-  const map = lanesMap(doc);
-  const rec = map.get(id);
-  if (rec) return rec;
-  const base = BUILTIN.find((b) => b.id === id);
-  if (!base) throw new Error(`lanes: доріжки ${id} немає`);
-  const fresh = new Y.Map<unknown>();
-  fresh.set("kind", base.kind);
-  fresh.set("order", base.order);
-  map.set(id, fresh);
-  return fresh;
+  const rec = lanesMap(doc).get(id);
+  if (!rec || isTextKind(rec.get("kind") as LaneKind)) throw new Error(`lanes: доріжки ${id} немає серед доданих`);
+  return rec;
 }
 
 /**
- * Перетягнути доріжку на місце `to` у списку доріжок пісні (без прибраних):
+ * Перетягнути додану доріжку на місце `to` серед доданих (без прибраних):
  * `order` стає серединою між новими сусідами. Викликати в транзакції.
  */
 export function moveLane(doc: Y.Doc, id: string, to: number) {
-  const rest = songLanes(doc).filter((l) => l.id !== id);
+  const rest = addedLanes(doc).filter((l) => !l.removed && l.id !== id);
   const at = Math.max(0, Math.min(to, rest.length));
   const before = rest[at - 1]?.order;
   const after = rest[at]?.order;
@@ -140,10 +127,7 @@ export function moveLane(doc: Y.Doc, id: string, to: number) {
 
 export const renameLane = (doc: Y.Doc, id: string, name: string) => recordOf(doc, id).set("name", name);
 
-/** Прибрати доріжку з пісні: вміст у рядках лишається, її можна повернути. Слова й акорди — ні. */
-export function removeLane(doc: Y.Doc, id: string) {
-  if (id === "words" || id === "chords") throw new Error("lanes: слова й акорди не прибираються");
-  recordOf(doc, id).set("removed", true);
-}
+/** Прибрати додану доріжку з пісні: вміст у рядках лишається, її можна повернути. */
+export const removeLane = (doc: Y.Doc, id: string) => recordOf(doc, id).set("removed", true);
 
 export const restoreLane = (doc: Y.Doc, id: string) => recordOf(doc, id).delete("removed");

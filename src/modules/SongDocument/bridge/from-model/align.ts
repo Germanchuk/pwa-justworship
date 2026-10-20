@@ -34,14 +34,6 @@ export function alignLines(s: ViewState): Set<unknown> {
   next.forEach(({ l, lanes }, vln) => {
     if (vln >= pre && vln < next.length - suf) return;
     const had = (view.children[vln] as Element).children.map(laneTypeOf);
-    // Доріжки переставили (порядок пісні) — рядок збирається наново.
-    const kept = had.filter((lane) => lanes.includes(lane));
-    if (kept.join() !== lanes.filter((lane) => had.includes(lane)).join()) {
-      Transforms.removeNodes(view, { at: [vln] });
-      Transforms.insertNodes(view, viewNode(l, lanes), { at: [vln] });
-      lanes.forEach((lane) => mark(l, lane));
-      return;
-    }
     for (let i = had.length - 1; i >= 0; i--) {
       if (!lanes.includes(had[i])) Transforms.removeNodes(view, { at: [vln, i] });
     }

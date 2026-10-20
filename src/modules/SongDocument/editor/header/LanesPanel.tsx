@@ -1,6 +1,6 @@
 /**
- * Доріжки пісні (ADR-0008): порядок перетягуванням, назва, додати, прибрати й
- * повернути. Спільне для всіх — правиться лише в режимі правки; кожна дія — один
+ * Доріжки пісні (ADR-0008): додані — порядок перетягуванням, назва, додати,
+ * прибрати й повернути; слова й акорди — внизу, на сталому місці. Спільне для всіх — правиться лише в режимі правки; кожна дія — один
  * крок undo (`change`). Сховати доріжку собі — перемикачі в шапці.
  */
 import { useState } from "react";
@@ -26,7 +26,9 @@ type Props = { song: Song; change: (fn: () => void) => void; onClose: () => void
 export function LanesPanel({ song, change, onClose }: Props) {
   const { doc } = song;
   const all = allLanes(doc);
-  const lanes = all.filter((l) => !l.removed);
+  // Перетягуються лише додані: слова й акорди стоять внизу на сталому місці.
+  const lanes = all.filter((l) => !l.removed && !isTextKind(l.kind));
+  const fixed = all.filter((l) => isTextKind(l.kind));
   const removed = all.filter((l) => l.removed);
 
   const onDragEnd = ({ source, destination, draggableId }: DropResult) => {
@@ -47,24 +49,28 @@ export function LanesPanel({ song, change, onClose }: Props) {
                         <Bars2Icon className="w-5 h-5" />
                       </span>
                       <LaneName name={lane.name} onRename={(name) => change(() => renameLane(doc, lane.id, name))} />
-                      {!isTextKind(lane.kind) && lane.name !== KIND_NAMES[lane.kind] && (
+                      {lane.name !== KIND_NAMES[lane.kind] && (
                         <span className="text-xs text-stone-400">{KIND_NAMES[lane.kind]}</span>
                       )}
-                      {!isTextKind(lane.kind) && (
-                        <button
-                          type="button"
-                          className="text-stone-400 hover:text-red-600"
-                          aria-label={`Прибрати доріжку «${lane.name}»`}
-                          onClick={() => change(() => removeLane(doc, lane.id))}
-                        >
-                          <XMarkIcon className="w-4 h-4" />
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        className="text-stone-400 hover:text-red-600"
+                        aria-label={`Прибрати доріжку «${lane.name}»`}
+                        onClick={() => change(() => removeLane(doc, lane.id))}
+                      >
+                        <XMarkIcon className="w-4 h-4" />
+                      </button>
                     </li>
                   )}
                 </Draggable>
               ))}
               {drop.placeholder}
+              {fixed.map((lane) => (
+                <li key={lane.id} className="flex items-center gap-2 bg-stone-50 px-2 py-1.5 text-sm text-stone-500">
+                  <span className="w-5" />
+                  {lane.name}
+                </li>
+              ))}
             </ul>
           )}
         </Droppable>

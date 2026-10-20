@@ -23,13 +23,6 @@ export function observeModel(s: ViewState) {
       });
     });
   };
-  // Список доріжок (порядок, нові, прибрані) — лише склад видимого.
-  const lanes = s.song.doc.getMap("lanes");
-  const onLanes = () => quietly(s, () => alignLines(s));
   s.song.text.observeDeep(onChange);
-  lanes.observeDeep(onLanes);
-  return () => {
-    s.song.text.unobserveDeep(onChange);
-    lanes.unobserveDeep(onLanes);
-  };
+  return () => s.song.text.unobserveDeep(onChange);
 }
