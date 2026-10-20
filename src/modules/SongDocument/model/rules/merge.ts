@@ -1,4 +1,6 @@
 /** Склеювання рядків: Backspace на початку слів і Delete у їхньому кінці. */
+import * as Y from "yjs";
+import { appendCells } from "../cells";
 import { movableNotes, moveChordsNote, moveWordsNote } from "../notes/move";
 import { chordsOf, chordsString, layout, lineAt } from "../read";
 import type { Pos, Song } from "../song";
@@ -7,6 +9,7 @@ import type { Pos, Song } from "../song";
  * Склеїти рядок `ln` з попереднім — видалити його маркер: слова самі стають
  * словами попереднього. Непорожні акорди дописуються вирівняними під кінець
  * слів (це копія), примітки обох доріжок переїжджають у попередній рядок.
+ * Клітинкові доріжки дописуються після тактів попереднього (теж копія).
  * Динаміка — попереднього рядка (як і решта його полів).
  */
 export function mergeLine(song: Song, ln: number): Pos {
@@ -25,6 +28,10 @@ export function mergeLine(song: Song, ln: number): Pos {
     shift = chords.length + pad.length;
     chords.insert(chords.length, pad + tail);
   }
+  cur.line.forEach((slot, id) => {
+    const to = prev.line.get(id);
+    if (slot instanceof Y.Map && slot.has("cells") && to instanceof Y.Map) appendCells(slot, to);
+  });
   wordsNotes.forEach(({ note }) => moveWordsNote(cur.line, prev.line, note));
   chordsNotes.forEach((n) => moveChordsNote(cur.line, prev.line, n, shift));
   song.text.delete(cur.at, 1);

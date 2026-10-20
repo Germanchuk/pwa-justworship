@@ -1,6 +1,7 @@
 /** Модель пісні — що з неї бачать місток (`bridge`) і застосунок. Почни читати з `song.ts`. */
 export * from "./song";
 export * from "./lanes";
+export * from "./cells";
 export * from "./read";
 export * from "./write";
 export * from "./meta";

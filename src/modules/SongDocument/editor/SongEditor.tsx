@@ -71,6 +71,7 @@ function LoadedEditor({ song }: { song: Song }) {
     [song],
   );
   useEffect(() => () => lanes.destroy(), [lanes]);
+  if (import.meta.env.DEV) (window as unknown as { __lanes?: unknown }).__lanes = lanes;
   // Вибір доріжок → видиме дерево. Примітки й позначки цього рендера порахувались ще
   // зі старим вибором — тож одразу, до показу, рендеримо ще раз зі свіжим.
   const [, rerender] = useState(0);
@@ -100,6 +101,10 @@ function LoadedEditor({ song }: { song: Song }) {
     song.doc.on("afterTransaction", onTransaction);
     return () => song.doc.off("afterTransaction", onTransaction);
   }, [song, canEdit]);
+
+  // Курсор-крок у клітинковій доріжці живе поза Slate — перемальовуватись на його рух.
+  const [, cellMoved] = useState(0);
+  useEffect(() => lanes.cells.listen(() => cellMoved((n) => n + 1)), [lanes]);
 
   const [brush, setBrush] = useState<Brush>("calm");
   const stroke = useStroke(song, brush, lanes.paint);
@@ -211,6 +216,7 @@ function LoadedEditor({ song }: { song: Song }) {
             renderLeaf={Leaf}
             decorate={decorate}
             onContextMenu={(e) => e.preventDefault()}
+            onKeyDown={(e) => lanes.cells.key(e) && e.preventDefault()}
           />
         </Slate>
         {canAnnotate && me && (

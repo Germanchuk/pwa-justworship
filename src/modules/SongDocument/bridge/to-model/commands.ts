@@ -15,12 +15,13 @@ import {
   slashAllowed,
   splitLine,
 } from "../../model";
+import type { Cells } from "../cells";
 import type { History } from "../history";
 import { toModel, toView } from "../positions";
 import { isShown, isTextLane, laneOfNode } from "../projection";
 import { COMMAND, quietly, ViewState } from "../state";
 
-export function installCommands(s: ViewState, history: History) {
+export function installCommands(s: ViewState, history: History, cells: Cells) {
   const { song, view, undoManager } = s;
   const canEdit = (ln: number, lane: string) => isShown(s, ln, lane);
 
@@ -60,19 +61,22 @@ export function installCommands(s: ViewState, history: History) {
   const collapsed = (anchor: Pos, focus: Pos) => (Range.isExpanded(view.selection!) ? removeSelection(anchor, focus) : anchor);
 
   const { deleteBackward, deleteForward } = view;
+  // Курсор у клітинковій доріжці — друк, стирання й вставка йдуть у неї (за її синтаксисом).
   view.insertText = (text) => {
     const sel = view.selection;
-    if (!sel) return;
+    if (!sel || cells.type(text)) return;
     if (Range.isExpanded(sel)) return command((a, f) => insertText(song, collapsed(a, f), text));
     if (slashAllowed(song, toModel(s, sel.anchor), text)) Transforms.insertText(view, text);
   };
   view.insertBreak = () => command((a, f) => splitLine(song, collapsed(a, f)));
   view.deleteBackward = (unit) => {
+    if (cells.key({ key: "Backspace" })) return;
     const sel = view.selection;
     if (sel && Range.isCollapsed(sel) && sel.anchor.offset === 0) return command((a) => backspaceAtLaneStart(song, a));
     deleteBackward(unit);
   };
   view.deleteForward = (unit) => {
+    if (cells.key({ key: "Delete" })) return;
     const sel = view.selection;
     const atEnd = sel && Range.isCollapsed(sel) && sel.anchor.offset === Node.string(Node.get(view, sel.anchor.path)).length;
     if (atEnd) return command((a) => deleteAtLaneEnd(song, a));
@@ -81,6 +85,7 @@ export function installCommands(s: ViewState, history: History) {
   view.deleteFragment = () => command((a, f) => removeSelection(a, f));
   view.insertData = (data) => {
     const text = data.getData("text/plain");
+    if (text && cells.paste(text)) return;
     if (text) command((a, f) => insertPlainText(song, collapsed(a, f), text));
   };
 }

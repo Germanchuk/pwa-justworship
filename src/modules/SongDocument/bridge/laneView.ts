@@ -21,7 +21,8 @@
 import * as Y from "yjs";
 import { createEditor, Editor, Point, Range } from "slate";
 import type { LaneType, Pos, Song } from "../model";
-import { installCopy } from "./clipboard";
+import { cellText, installCells, type Cells } from "./cells";
+import { installCopy, selectedText } from "./clipboard";
 import { alignLines, rebuild } from "./from-model/align";
 import { observeModel } from "./from-model/observe";
 import { setupHistory } from "./history";
@@ -51,6 +52,10 @@ export type LaneView = {
   paint: Paint;
   /** Зміна поза Slate (доріжки пісні) — одна транзакція, один крок undo. */
   change: (fn: () => void) => void;
+  /** Курсор у клітинкових доріжках (таби, кахон, прямокутники). */
+  cells: Cells;
+  /** Текст виділеного, як його кладе в буфер копіювання (з клітинковими доріжками). */
+  copyText: () => string | null;
   undoManager: Y.UndoManager;
   destroy: () => void;
 };
@@ -71,8 +76,13 @@ export function createLaneView(song: Song, display: LaneDisplay, opts: { base?: 
   s.view.isVoid = (el) => (el as unknown as { type: string }).type === "cells" || isVoid(el);
   const history = setupHistory(s);
   interceptTyping(s, history);
-  installCommands(s, history);
-  installCopy(s);
+  const cells = installCells(s, history);
+  installCommands(s, history, cells);
+  const cellLines = (path: number[]) => {
+    const node = Editor.node(s.view, path)[0];
+    return cellText(s, s.sources[path[0]].line, laneOfNode(node));
+  };
+  installCopy(s, cellLines);
   const paint = installPaint(s, history);
   const unobserve = observeModel(s);
   rebuild(s);
@@ -101,6 +111,8 @@ export function createLaneView(song: Song, display: LaneDisplay, opts: { base?: 
       s.undoManager.stopCapturing();
       history.after();
     },
+    cells,
+    copyText: () => selectedText(s.view, cellLines),
     undoManager: s.undoManager,
     destroy: () => {
       unobserve();

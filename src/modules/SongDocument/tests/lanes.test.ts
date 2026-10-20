@@ -4,7 +4,6 @@ import { Element, Node, Transforms } from "slate";
 import { change, makePair } from "./harness";
 import { ALL, at, doc, setup } from "./testKit";
 import type { LaneDisplay, LaneView } from "../bridge/laneView";
-import { selectedText } from "../bridge/clipboard";
 import {
   addLane,
   allLanes,
@@ -164,14 +163,32 @@ describe("клітинкові доріжки — атомні вузли вид
     expect(rowsOf(A, tab)[0]).toBe("c:Am F | w:Ти святий");
   });
 
-  it("у клітинкову доріжку не надрукувати; виділення через неї — копіюється лише текст", () => {
+  it("курсор у доріжці: друк — за її синтаксисом, у слова й акорди нічого не йде; стрілки — по кроках і струнах", () => {
     const { net, A, tab } = withTab();
     at(A, 1, 0, 0);
+    A.view.insertText("3");
+    expect(A.cells.key({ key: "ArrowRight" })).toBe(true);
+    expect(A.cells.key({ key: "ArrowDown" })).toBe(true);
     A.view.insertText("x");
     expect(doc(net.B)).toEqual(["Am F / Ти святий", "C G / Господь", "F / Алилуя"]);
+    const cells = cellsOf(linesOf(net.B)[1], tab)!;
+    expect(cells.toJSON()).toEqual({ "1.1/1": "3", "1.2/2": "x" });
+    expect(A.cells.key({ key: "ArrowUp" })).toBe(true);
+    expect(A.cells.key({ key: "ArrowUp" })).toBe(false); // верхня струна — далі Slate
+    A.cells.key({ key: "Home" });
+    expect(A.cells.key({ key: "ArrowLeft" })).toBe(false); // перший крок — далі Slate
+  });
+
+  it("копіювання: доріжка — уся, своїм текстом; вставка в доріжку — розбирає текст", () => {
+    const { net, A, tab } = withTab();
+    change(net.A, () => cellsOf(linesOf(net.A)[1], tab)!.set("1.4/2", "1"));
     Transforms.select(A.view, { anchor: { path: [0, 2, 0], offset: 3 }, focus: { path: [1, 1, 0], offset: 1 } });
-    expect(selectedText(A.view)).toBe("святий\nC");
-    expect(rowsOf(A, tab)[1]).toBe("t | c:C G | w:Господь");
+    expect(A.copyText()).toBe(
+      ["святий", "e|--------|", "B|---1----|", "G|--------|", "D|--------|", "A|--------|", "E|--------|", "C"].join("\n"),
+    );
+    at(A, 2, 0, 0);
+    expect(A.cells.paste(["e|--------|", "B|--------|", "G|--------|", "D|--------|", "A|--------|", "E|3-------|"].join("\n"))).toBe(true);
+    expect(cellsOf(linesOf(net.B)[2], tab)!.toJSON()).toEqual({ "1.1/6": "3" });
   });
 
   it("видалення виділеного захоплює клітинки видимих доріжок у виділенні; рядок зі схованими клітинками лишається", () => {
