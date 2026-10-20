@@ -18,6 +18,16 @@ describe("динаміка — модель", () => {
     expect(colors(net.A)).toEqual(["loud", null, null]);
   });
 
+  it("тиша — нульовий крок: фарбується й стирається, як інші, і доходить до інших", () => {
+    const net = makePair(SEED);
+    paint(net.A, [0], "silence");
+    paint(net.A, [1], "silence", "Оля");
+    expect(colors(net.B)).toEqual(["silence", null, null]);
+    expect(colors(net.B, "Оля")).toEqual([null, "silence", null]);
+    paint(net.B, [0], null);
+    expect(colors(net.A)).toEqual([null, null, null]);
+  });
+
   it("порожній рядок і /примітку мазок не фарбує — фарбує лише відрізки", () => {
     const net = makePair([{ words: "/Приспів" }, { words: "Алилуя" }, { words: "" }, { words: "Слава" }]);
     paint(net.A, [0, 1, 2, 3], "loud");

@@ -1,5 +1,6 @@
 /** Пензель динаміки: колір або гумка. Чия фарба — задає смужка (ліва — для всіх, права — моя). */
-import { DYNAMICS_STEPS } from "../../model";
+import { DYNAMICS_STEPS, SILENCE } from "../../model";
+import { STRIKE_SWATCH_STYLE, StrikeGlyph } from "../StrikeGlyph";
 import type { Brush } from "./useStroke";
 
 type Props = {
@@ -20,9 +21,11 @@ export function DynamicsPalette({ brush, setBrush }: Props) {
           aria-label={step.label}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setBrush(step.key)}
-          className={`w-5 h-5 rounded-full ${ring(brush === step.key)}`}
-          style={{ background: step.color }}
-        />
+          className={`w-5 h-5 rounded-full text-[11px] flex items-center justify-center ${ring(brush === step.key)}`}
+          style={step.key === SILENCE ? STRIKE_SWATCH_STYLE : { background: step.color }}
+        >
+          {step.key === SILENCE && <StrikeGlyph />}
+        </button>
       ))}
       <button
         type="button"

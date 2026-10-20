@@ -14,7 +14,7 @@ import { layout, lineKind } from "./read";
 import type { Line, LineAt, Song } from "./song";
 
 export type { DynamicsStepKey } from "./dynamicsSteps";
-export { DYNAMICS_STEPS, getDynamicsStepColor } from "./dynamicsSteps";
+export { DYNAMICS_STEPS, getDynamicsStepColor, SILENCE } from "./dynamicsSteps";
 
 /** Чия динаміка: спільна (`null`) чи особиста людини з цим ніком. */
 export type DynamicsLayer = string | null;

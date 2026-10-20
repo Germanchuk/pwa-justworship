@@ -5,14 +5,10 @@
  */
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  COMMENT_PALETTE,
-  isStrike,
-  STRIKE_COLOR,
-  STRIKE_INK,
-} from "#modules/SingleSong/components/SlateLyricsPlayground/comments/colors";
+import { COMMENT_PALETTE, isStrike, STRIKE_COLOR } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/colors";
 import { useBandMembers } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/useBandMembers";
 import { addNote, Pos, Song } from "../../model";
+import { STRIKE_SWATCH_STYLE, StrikeGlyph } from "../StrikeGlyph";
 
 export type NoteTarget = { anchor: Pos; focus: Pos; quote: string };
 
@@ -67,9 +63,9 @@ export function NoteComposer({ song, me, audience: viewers, target, onClose }: P
               aria-label={isStrike(hex) ? "закреслення" : hex}
               onClick={() => setColor(hex)}
               className={`w-7 h-7 rounded-full flex items-center justify-center ${color === hex ? "ring-2 ring-offset-1 ring-stone-700" : ""}`}
-              style={{ background: isStrike(hex) ? "white" : hex, border: isStrike(hex) ? `2px solid ${STRIKE_INK}` : undefined }}
+              style={isStrike(hex) ? STRIKE_SWATCH_STYLE : { background: hex }}
             >
-              {isStrike(hex) && <span style={{ textDecoration: "line-through", color: STRIKE_INK }}>S</span>}
+              {isStrike(hex) && <StrikeGlyph />}
             </button>
           ))}
         </div>

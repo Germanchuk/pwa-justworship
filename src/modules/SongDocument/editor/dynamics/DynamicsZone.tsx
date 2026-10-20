@@ -3,7 +3,7 @@
  * телефоні притиснуті до краю екрана (виходять на поле `Container`, `p-2`),
  * на широкому — до краю колонки. У правці — веди по смужці пальцем, щоб фарбувати.
  */
-import { DynamicsLayer, getDynamicsStepColor, layout, lineKind, shownDynamics } from "../../model";
+import { DynamicsLayer, DynamicsStepKey, getDynamicsStepColor, layout, lineKind, shownDynamics, SILENCE } from "../../model";
 import { useEditorCtx } from "../context";
 
 export function DynamicsZone({ ln }: { ln: number }) {
@@ -18,6 +18,16 @@ export function DynamicsZone({ ln }: { ln: number }) {
     </>
   );
 }
+
+const EMPTY = "rgba(120, 95, 50, 0.07)";
+
+/** Тиша — закреслена лінія: тонка риска посередині смужки, як риска закреслення. */
+const stripBackground = (key: DynamicsStepKey | null) => {
+  if (!key) return EMPTY;
+  if (key !== SILENCE) return getDynamicsStepColor(key);
+  const ink = getDynamicsStepColor(key);
+  return `linear-gradient(to right, transparent calc(50% - 1px), ${ink} 0 calc(50% + 1px), transparent 0)`;
+};
 
 function Strip({ ln, layer }: { ln: number; layer: DynamicsLayer }) {
   const ctx = useEditorCtx();
@@ -37,7 +47,7 @@ function Strip({ ln, layer }: { ln: number; layer: DynamicsLayer }) {
       style={{
         width: ctx.stroke ? 10 : 4,
         zIndex: 1,
-        background: key ? getDynamicsStepColor(key) : "rgba(120, 95, 50, 0.07)",
+        background: stripBackground(key),
         opacity: preview === undefined ? 1 : 0.75,
         touchAction: ctx.stroke ? "none" : undefined,
         cursor: ctx.stroke ? "crosshair" : undefined,
