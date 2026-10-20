@@ -8,6 +8,10 @@ import { useEditorCtx, useModelLine } from "../context";
 
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
 const INK: Record<LaneType, string> = { words: "#1e3a8a", chords: "#3b82f6" };
+const HINT: Record<LaneType, { label: string; color: string }> = {
+  words: { label: "слова…", color: "rgba(30,58,138,0.4)" },
+  chords: { label: "акорди…", color: "rgba(59,130,246,0.45)" },
+};
 
 /** Доріжка є у видимому дереві — отже її видно (і в правці — можна правити). */
 export function TextLane({ attributes, children, element, lane }: RenderElementProps & { lane: LaneType }) {
@@ -38,13 +42,13 @@ export function TextLane({ attributes, children, element, lane }: RenderElementP
         </div>
       )}
       <div style={transposed ? { display: "none" } : undefined}>{children}</div>
-      {ctx.canEdit && lane === "chords" && text === "" && (kind !== "empty" || ctx.cursorLine === ln) && (
+      {ctx.canEdit && text === "" && (kind !== "empty" || ctx.cursorLine === ln) && (
         <span
           contentEditable={false}
           className="absolute left-4 top-0 italic text-sm font-normal select-none pointer-events-none"
-          style={{ color: "rgba(59,130,246,0.45)" }}
+          style={{ color: HINT[lane].color }}
         >
-          акорди…
+          {HINT[lane].label}
         </span>
       )}
     </div>

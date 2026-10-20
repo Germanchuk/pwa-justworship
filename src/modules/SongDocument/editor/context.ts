@@ -22,7 +22,7 @@ export type EditorCtx = {
   canAnnotate: boolean;
   /** Мазок динаміки — лише в правці; null — зона лише показує колір. */
   stroke: Stroke | null;
-  /** Рядок моделі з курсором — показати підказку «акорди…» на порожньому. */
+  /** Рядок моделі з курсором — показати натяки «акорди…» / «слова…» на порожньому. */
   cursorLine: number | null;
   onNoteDelete: (note: NoteView) => void;
 };
