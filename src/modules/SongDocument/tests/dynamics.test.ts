@@ -69,22 +69,23 @@ describe("динаміка — модель", () => {
 });
 
 describe("динаміка — особиста", () => {
-  it("особиста перекриває спільну лише для свого власника", () => {
+  it("особиста — окремий шар: спільну не чіпає, в інших людей порожня", () => {
     const net = makePair(SEED);
     paint(net.A, [0, 1], "loud");
     paint(net.B, [1], "calm", "Оля");
-    const shown = (nick: string | null) => layout(net.A).map((l) => shownDynamics(l, nick));
-    expect(shown("Оля")).toEqual(["loud", "calm", null]);
-    expect(shown("Герман")).toEqual(["loud", "loud", null]);
-    expect(colors(net.A)).toEqual(["loud", "loud", null]);
+    const shown = (layer: string | null) => layout(net.A).map((l) => shownDynamics(l, layer));
+    expect(shown("Оля")).toEqual([null, "calm", null]);
+    expect(shown("Герман")).toEqual([null, null, null]);
+    expect(shown(null)).toEqual(["loud", "loud", null]);
   });
 
-  it("гумка в особистому шарі стирає лише своє — спільне видно знову", () => {
+  it("гумка в особистому шарі стирає лише своє — спільне на місці", () => {
     const net = makePair(SEED);
     paint(net.A, [0], "loud");
     paint(net.A, [0], "calm", "Оля");
     paint(net.A, [0], null, "Оля");
-    expect(shownDynamics(layout(net.B)[0], "Оля")).toBe("loud");
+    expect(shownDynamics(layout(net.B)[0], "Оля")).toBe(null);
+    expect(shownDynamics(layout(net.B)[0])).toBe("loud");
   });
 
   it("Enter — особистий колір в обох частинах; склеювання — лишається колір першого", () => {

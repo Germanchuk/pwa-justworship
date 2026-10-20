@@ -64,8 +64,7 @@ function LoadedEditor({ song }: { song: Song }) {
   const view = lanes.view;
 
   const [brush, setBrush] = useState<Brush>("calm");
-  const [personalDyn, setPersonalDyn] = useState(false);
-  const stroke = useStroke(song, brush, personalDyn ? me : null, lanes.paint);
+  const stroke = useStroke(song, brush, lanes.paint);
   const [composing, setComposing] = useState<NoteTarget | null>(null);
   const [cursorLine, setCursorLine] = useState<number | null>(null);
   const editableRef = useRef<HTMLDivElement | null>(null);
@@ -157,7 +156,7 @@ function LoadedEditor({ song }: { song: Song }) {
         <SongHeader song={song} me={me} canEdit={canEdit} capoApplies={capoApplies} />
         {canEdit && (
           <div className="mb-2 pl-4">
-            <DynamicsPalette brush={brush} setBrush={setBrush} personal={personalDyn} setPersonal={setPersonalDyn} />
+            <DynamicsPalette brush={brush} setBrush={setBrush} />
           </div>
         )}
         <Slate

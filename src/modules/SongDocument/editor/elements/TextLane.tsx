@@ -25,7 +25,8 @@ export function TextLane({ attributes, children, element, lane }: RenderElementP
   return (
     <div
       {...attributes}
-      className="relative whitespace-pre-wrap"
+      // Праворуч — місце під смужку особистої динаміки (DynamicsZone).
+      className="relative whitespace-pre-wrap pr-2 md:pr-3"
       style={{
         paddingLeft: 16,
         fontSize: 16,

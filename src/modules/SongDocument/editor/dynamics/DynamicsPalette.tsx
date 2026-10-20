@@ -1,15 +1,13 @@
-/** Пензель динаміки: колір або гумка, і чия фарба — для всіх чи лише для мене. */
+/** Пензель динаміки: колір або гумка. Чия фарба — задає смужка (ліва — для всіх, права — моя). */
 import { DYNAMICS_STEPS } from "../../model";
 import type { Brush } from "./useStroke";
 
 type Props = {
   brush: Brush;
   setBrush: (b: Brush) => void;
-  personal: boolean;
-  setPersonal: (personal: boolean) => void;
 };
 
-export function DynamicsPalette({ brush, setBrush, personal, setPersonal }: Props) {
+export function DynamicsPalette({ brush, setBrush }: Props) {
   const ring = (on: boolean) => (on ? "ring-2 ring-offset-1 ring-stone-700" : "");
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -34,19 +32,6 @@ export function DynamicsPalette({ brush, setBrush, personal, setPersonal }: Prop
       >
         гумка
       </button>
-      <span className="ml-2 inline-flex rounded border overflow-hidden">
-        {[false, true].map((mine) => (
-          <button
-            key={String(mine)}
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setPersonal(mine)}
-            className={`px-1.5 py-0.5 ${personal === mine ? "bg-stone-700 text-white" : "bg-white"}`}
-          >
-            {mine ? "лише мені" : "для всіх"}
-          </button>
-        ))}
-      </span>
     </div>
   );
 }
