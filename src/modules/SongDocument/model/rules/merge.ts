@@ -64,6 +64,17 @@ export function removalNeedsConfirm(song: Song, at: Pos): string[] | null {
   return filled.length ? filled : null;
 }
 
+/**
+ * Склеювання двох **непорожніх** рядків (Backspace на початку слів рядка
+ * `ln`, Delete у кінці слів рядка `ln - 1`) — спершу попередження (`SONG-92`).
+ * Порожній рядок з будь-якого боку просто зникає — попереджати нема про що.
+ */
+export function mergeNeedsConfirm(song: Song, ln: number) {
+  const lines = layout(song);
+  if (ln <= 0 || ln >= lines.length) return false;
+  return lineKind(lines[ln - 1]) !== "empty" && lineKind(lines[ln]) !== "empty";
+}
+
 /** Прибрати рядок `ln` разом із доріжками (підтверджене видалення); курсор — у кінець слів попереднього. */
 export function removeLineAt(song: Song, ln: number): Pos {
   const prev = lineAt(song, ln - 1);

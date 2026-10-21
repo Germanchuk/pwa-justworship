@@ -9,7 +9,7 @@ import { change } from "./harness";
 import { linesOf, paintDynamics, removeLine } from "../model";
 import { LaneDisplay } from "../bridge/laneView";
 import { selectedText } from "../bridge/clipboard";
-import { ALL, at, CHORDS, doc, NONE, setup as setupWith, shown, WORDS, deleteSelection } from "./testKit";
+import { ALL, at, CHORDS, doc, NONE, setup as setupWith, shown, WORDS, deleteSelection, confirmed } from "./testKit";
 
 const SONG = [
   { words: "/Куплет" },
@@ -59,6 +59,7 @@ describe("правка, бачачи частину доріжок", () => {
     const { net, A } = setup(WORDS, ALL);
     at(A, 2, 0, 0);
     Editor.deleteBackward(A.view);
+    confirmed(A);
     expect(shown(A)[1]).toBe("w:Ти святий, ГосподьТвоє світло серед ночі");
     expect(doc(net.B)[1]).toBe("Am F       C   G  F    C      G     Am / Ти святий, ГосподьТвоє світло серед ночі");
   });

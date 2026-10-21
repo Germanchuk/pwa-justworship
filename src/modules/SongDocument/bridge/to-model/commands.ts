@@ -13,6 +13,7 @@ import {
   Line,
   linesOf,
   Pos,
+  mergeNeedsConfirm,
   removalNeedsConfirm,
   removeLineAt,
   slashAllowed,
@@ -28,11 +29,13 @@ import { COMMAND, quietly, ViewState } from "../state";
  * Попередження перед видаленням рядків (`SONG-90`, `SONG-91`): перша дія лише
  * попереджає, друга (той самий Backspace чи Delete, або «Видалити») — видаляє.
  *  - `line` — Backspace на початку порожніх слів рядка з вмістом доріжок;
- *  - `range` — виділення через кілька рядків: Backspace, Delete, друк, вставка, Enter.
+ *  - `range` — виділення через кілька рядків: Backspace, Delete, друк, вставка, Enter;
+ *  - `merge` — склеювання двох непорожніх рядків: Backspace на початку слів чи Delete у кінці.
  */
 export type Pending =
   | { kind: "line"; line: Line; lanes: string[] }
-  | { kind: "range"; range: Range; rows: number };
+  | { kind: "range"; range: Range; rows: number }
+  | { kind: "merge"; at: Range; forward: boolean };
 
 export type Removal = {
   /** Що видалиться наступною такою самою дією; `null` — попередження немає. */
@@ -93,6 +96,7 @@ export function installCommands(s: ViewState, history: History, cells: Cells): R
     const was = pending;
     arm(null);
     if (was?.kind === "range") return command((a, f) => removeSelection(a, f));
+    if (was?.kind === "merge") return command((a) => (was.forward ? deleteAtLaneEnd(song, a) : backspaceAtLaneStart(song, a)));
     const ln = was ? linesOf(song).indexOf(was.line) : -1;
     if (ln > 0) command(() => removeLineAt(song, ln));
   };
@@ -114,7 +118,16 @@ export function installCommands(s: ViewState, history: History, cells: Cells): R
       const here = sel && Range.isCollapsed(sel) && sel.anchor.offset === 0 ? s.sources[sel.anchor.path[0]]?.line : null;
       if (here !== pending.line) arm(null);
     } else if (pending?.kind === "range" && !(sel && Range.equals(sel, pending.range))) arm(null);
+    else if (pending?.kind === "merge" && !(sel && Range.equals(sel, pending.at))) arm(null);
     onChange(options);
+  };
+
+  /** Backspace на початку / Delete у кінці слів: склеїти — двох непорожніх лише вдруге (`SONG-92`). */
+  const merge = (sel: Range, forward: boolean, ln: number) => {
+    const run = () => command((a) => (forward ? deleteAtLaneEnd(song, a) : backspaceAtLaneStart(song, a)));
+    if (ln < 0 || !mergeNeedsConfirm(song, ln)) return run();
+    if (pending?.kind === "merge" && pending.forward === forward && Range.equals(pending.at, sel)) return confirm();
+    arm({ kind: "merge", at: sel, forward });
   };
 
   const { deleteBackward, deleteForward } = view;
@@ -132,7 +145,7 @@ export function installCommands(s: ViewState, history: History, cells: Cells): R
     if (sel && Range.isCollapsed(sel) && sel.anchor.offset === 0) {
       const at = toModel(s, sel.anchor);
       const lanes = removalNeedsConfirm(song, at);
-      if (!lanes) return command((a) => backspaceAtLaneStart(song, a));
+      if (!lanes) return merge(sel, false, at.lane === "words" ? at.line : -1);
       const line = linesOf(song)[at.line];
       return pending?.kind === "line" && pending.line === line ? confirm() : arm({ kind: "line", line, lanes });
     }
@@ -142,7 +155,10 @@ export function installCommands(s: ViewState, history: History, cells: Cells): R
     if (cells.key({ key: "Delete" })) return;
     const sel = view.selection;
     const atEnd = sel && Range.isCollapsed(sel) && sel.anchor.offset === Node.string(Node.get(view, sel.anchor.path)).length;
-    if (atEnd) return command((a) => deleteAtLaneEnd(song, a));
+    if (atEnd) {
+      const at = toModel(s, sel.anchor);
+      return merge(sel, true, at.lane === "words" ? at.line + 1 : -1);
+    }
     deleteForward(unit);
   };
   // Backspace / Delete / вирізання виділеного. Через кілька рядків — спершу попередження, той самий жест удруге — видалити.

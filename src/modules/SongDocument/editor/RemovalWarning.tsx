@@ -1,6 +1,7 @@
 /**
- * Попередження перед видаленням рядків: рядка з вмістом доріжок (`SONG-90`) чи
- * виділення через кілька рядків (`SONG-91`). Друга така сама дія — видаляє.
+ * Попередження перед видаленням рядків: рядка з вмістом доріжок (`SONG-90`),
+ * виділення через кілька рядків (`SONG-91`) чи склеюванням двох рядків
+ * (`SONG-92`). Друга така сама дія — виконує.
  * Кнопки — для телефона, де Backspace на порожньому рядку натиснути двічі незручно.
  */
 import { allLanes, KIND_NAMES } from "../model";
@@ -17,9 +18,14 @@ export function RemovalWarning() {
         У рядку є: {pending.lanes.map((id) => all.find((l) => l.id === id)?.name ?? KIND_NAMES.chords).join(", ")}. Ще раз{" "}
         <b>Backspace</b> — видалити рядок.
       </>
-    ) : (
+    ) : pending.kind === "range" ? (
       <>
         Виділення захоплює {pending.rows} {rowsWord(pending.rows)}. Ще раз <b>Backspace</b> чи <b>Delete</b> — видалити.
+      </>
+    ) : (
+      <>
+        Цей рядок склеїться з {pending.forward ? "наступним" : "попереднім"}. Ще раз{" "}
+        <b>{pending.forward ? "Delete" : "Backspace"}</b> — склеїти.
       </>
     );
   const keep = (e: React.MouseEvent) => e.preventDefault(); // фокус лишається в редакторі
@@ -30,7 +36,7 @@ export function RemovalWarning() {
     >
       <span className="flex-1 min-w-[12rem]">{what}</span>
       <button type="button" className="font-semibold text-red-300" onMouseDown={keep} onClick={lanes.removal.confirm}>
-        Видалити
+        {pending.kind === "merge" ? "Склеїти" : "Видалити"}
       </button>
       <button type="button" className="text-stone-300" onMouseDown={keep} onClick={lanes.removal.cancel}>
         Скасувати

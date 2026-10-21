@@ -39,3 +39,8 @@ export function deleteSelection(h: LaneView) {
   Editor.deleteFragment(h.view);
   if (h.removal.pending()?.kind === "range") h.removal.confirm();
 }
+
+/** Підтвердити попередження, якщо воно є (людина вдруге тисне ту саму клавішу). */
+export function confirmed(h: LaneView) {
+  if (h.removal.pending()) h.removal.confirm();
+}

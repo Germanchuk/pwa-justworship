@@ -7,7 +7,7 @@ import { Editor, Transforms } from "slate";
 import { change } from "./harness";
 import { LaneView } from "../bridge/laneView";
 import { layout, lineKind, removeLine } from "../model";
-import { at, CHORDS, doc, rows, setup, WORDS, deleteSelection } from "./testKit";
+import { at, CHORDS, doc, rows, setup, WORDS, deleteSelection, confirmed } from "./testKit";
 
 const SONG = [
   //       0123456789012345678
@@ -23,6 +23,7 @@ const enter = (h: LaneView, ln: number, offset: number) => {
 const backspace = (h: LaneView, ln: number, lane = 1) => {
   at(h, ln, lane, 0);
   Editor.deleteBackward(h.view);
+  confirmed(h); // склеювання двох непорожніх — з підтвердженням (SONG-92)
 };
 const type = (h: LaneView, ln: number, lane: number, offset: number, text: string) => {
   at(h, ln, lane, offset);

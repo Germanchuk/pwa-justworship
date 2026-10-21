@@ -427,7 +427,9 @@ describe("видалення рядка з вмістом доріжок — д�
       ["C", "Господь"],
     ]);
     at(A, 1, 1, 0);
-    A.view.deleteBackward("character"); // непорожні слова — склеювання
+    A.view.deleteBackward("character"); // непорожні слова — склеювання, спершу попередження
+    expect(A.removal.pending()).toMatchObject({ kind: "merge", forward: false });
+    A.view.deleteBackward("character");
     expect(A.removal.pending()).toBe(null);
     expect(layout(net.B).map((l) => l.words)).toEqual(["Ти святийГосподь"]);
   });
@@ -469,5 +471,45 @@ describe("виділення через кілька рядків — видал
     expect(A.removal.pending()).toBe(null);
     Editor.deleteFragment(A.view);
     expect(words(net.B)).toEqual(["Ти святий", "світло", "Господь"]);
+  });
+});
+
+describe("склеювання двох непорожніх рядків — з підтвердженням", () => {
+  const SONG = [{ words: "Ти святий" }, { words: "Господь" }, { words: "" }, { words: "Алилуя" }];
+  const words = (song: Song) => layout(song).map((l) => l.words);
+
+  it("Backspace на початку слів: перший — попередження, другий — склеює; Delete у кінці — так само з наступним", () => {
+    const { net, A } = setup(SONG, ALL, ALL);
+    at(A, 1, 1, 0);
+    A.view.deleteBackward("character");
+    expect(A.removal.pending()).toMatchObject({ kind: "merge", forward: false });
+    expect(words(net.B)).toEqual(["Ти святий", "Господь", "", "Алилуя"]);
+    A.view.deleteBackward("character");
+    expect(words(net.B)).toEqual(["Ти святийГосподь", "", "Алилуя"]);
+
+    const { net: n2, A: A2 } = setup(SONG, ALL, ALL);
+    at(A2, 0, 1, 9);
+    A2.view.deleteForward("character");
+    expect(A2.removal.pending()).toMatchObject({ kind: "merge", forward: true });
+    A2.removal.confirm();
+    expect(words(n2.B)).toEqual(["Ти святийГосподь", "", "Алилуя"]);
+  });
+
+  it("порожній рядок з будь-якого боку — без попередження: він просто зникає", () => {
+    const { net, A } = setup(SONG, ALL, ALL);
+    at(A, 3, 1, 0); // над «Алилуя» порожній — рядок піднімається
+    A.view.deleteBackward("character");
+    expect(A.removal.pending()).toBe(null);
+    expect(words(net.B)).toEqual(["Ти святий", "Господь", "Алилуя"]);
+  });
+
+  it("курсор пішов — попередження знято, склеювання не сталося", async () => {
+    const { net, A } = setup(SONG, ALL, ALL);
+    at(A, 1, 1, 0);
+    A.view.deleteBackward("character");
+    at(A, 1, 1, 3);
+    await tick();
+    expect(A.removal.pending()).toBe(null);
+    expect(words(net.B)).toEqual(["Ти святий", "Господь", "", "Алилуя"]);
   });
 });
