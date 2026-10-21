@@ -29,7 +29,7 @@ import { setupHistory } from "./history";
 import { indexOf, toModel, toView } from "./positions";
 import { isCellsNode, isShown, LaneDisplay, laneOfNode } from "./projection";
 import { COMMAND, quietly, TYPING, ViewState } from "./state";
-import { installCommands } from "./to-model/commands";
+import { installCommands, type Removal } from "./to-model/commands";
 import { installPaint, Paint } from "./to-model/paint";
 import { interceptTyping } from "./to-model/typing";
 
@@ -54,6 +54,8 @@ export type LaneView = {
   change: (fn: () => void) => void;
   /** Курсор у клітинкових доріжках (таби, кахон, прямокутники). */
   cells: Cells;
+  /** Попередження перед видаленням рядка з вмістом доріжок. */
+  removal: Removal;
   /** Текст виділеного, як його кладе в буфер копіювання (з клітинковими доріжками). */
   copyText: () => string | null;
   undoManager: Y.UndoManager;
@@ -77,7 +79,7 @@ export function createLaneView(song: Song, display: LaneDisplay, opts: { base?: 
   const history = setupHistory(s);
   interceptTyping(s, history);
   const cells = installCells(s, history);
-  installCommands(s, history, cells);
+  const removal = installCommands(s, history, cells);
   const cellLines = (path: number[]) => {
     const node = Editor.node(s.view, path)[0];
     return cellText(s, s.sources[path[0]].line, laneOfNode(node));
@@ -112,6 +114,7 @@ export function createLaneView(song: Song, display: LaneDisplay, opts: { base?: 
       history.after();
     },
     cells,
+    removal,
     copyText: () => selectedText(s.view, cellLines),
     undoManager: s.undoManager,
     destroy: () => {

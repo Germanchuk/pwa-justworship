@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { Element, Node, Transforms } from "slate";
 import { change, makePair } from "./harness";
-import { ALL, at, doc, rows, setup } from "./testKit";
+import { ALL, at, doc, rows, setup, tick } from "./testKit";
 import type { LaneDisplay, LaneView } from "../bridge/laneView";
 import {
   addLane,
@@ -381,5 +381,54 @@ describe("Backspace під порожнім рядком — рядок підн
     expect(linesOf(net.B)).toHaveLength(1);
     expect(cellsOf(linesOf(net.B)[0], tab)!.toJSON()).toEqual({ "1.1/6": "3" });
     expect(layout(net.B).map((l) => [chordsString(l.line), l.words])).toEqual([["Am F", "Ти святий"]]);
+  });
+});
+
+describe("видалення рядка з вмістом доріжок — двома Backspace", () => {
+  const SONG = [{ words: "Ти святий" }, { words: "", chords: "Am F" }, { words: "Господь" }];
+
+  it("перший Backspace на початку порожніх слів лише попереджає, другий — видаляє рядок; курсор — у кінець попереднього", () => {
+    const { net, A } = setup(SONG, ALL, ALL);
+    at(A, 1, 1, 0);
+    A.view.deleteBackward("character");
+    expect(A.removal.pending()?.lanes).toEqual(["chords"]);
+    expect(layout(net.B)).toHaveLength(3);
+    A.view.deleteBackward("character");
+    expect(A.removal.pending()).toBe(null);
+    expect(layout(net.B).map((l) => [chordsString(l.line), l.words])).toEqual([
+      ["", "Ти святий"],
+      ["", "Господь"],
+    ]);
+    expect(A.view.selection?.anchor).toEqual({ path: [0, 1, 0], offset: 9 });
+    A.undoManager.undo();
+    expect(layout(net.B).map((l) => chordsString(l.line))).toEqual(["", "Am F", ""]);
+  });
+
+  it("курсор пішов з рядка — попередження знято; підтвердження кнопкою теж видаляє", async () => {
+    const { net, A } = setup(SONG, ALL, ALL);
+    at(A, 1, 1, 0);
+    A.view.deleteBackward("character");
+    at(A, 2, 0, 3);
+    await tick();
+    expect(A.removal.pending()).toBe(null);
+    at(A, 1, 1, 0);
+    A.view.deleteBackward("character");
+    A.removal.confirm();
+    expect(layout(net.B)).toHaveLength(2);
+  });
+
+  it("непорожні слова — склеювання, як і раніше; порожній рядок — прибирається одразу", () => {
+    const { net, A } = setup([{ words: "Ти святий" }, { words: "" }, { words: "Господь", chords: "C" }], ALL, ALL);
+    at(A, 2, 1, 0);
+    A.view.deleteBackward("character"); // над ним порожній — рядок піднімається
+    expect(A.removal.pending()).toBe(null);
+    expect(layout(net.B).map((l) => [chordsString(l.line), l.words])).toEqual([
+      ["", "Ти святий"],
+      ["C", "Господь"],
+    ]);
+    at(A, 1, 1, 0);
+    A.view.deleteBackward("character"); // непорожні слова — склеювання
+    expect(A.removal.pending()).toBe(null);
+    expect(layout(net.B).map((l) => l.words)).toEqual(["Ти святийГосподь"]);
   });
 });

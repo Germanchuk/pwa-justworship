@@ -2,7 +2,8 @@
 import * as Y from "yjs";
 import { appendCells } from "../cells";
 import { movableNotes, moveLaneNote, moveWordsNote } from "../notes/move";
-import { laneText, layout, lineAt, lineKind, textSlotsOf } from "../read";
+import { filledLanes, laneText, layout, lineAt, lineKind, textSlotsOf } from "../read";
+import { removeLine } from "../write";
 import type { Pos, Song } from "../song";
 
 /**
@@ -46,6 +47,27 @@ export function mergeLine(song: Song, ln: number): Pos {
   });
   wordsNotes.forEach(({ note }) => moveWordsNote(cur.line, prev.line, note));
   song.text.delete(cur.at, 1);
+  return { line: ln - 1, lane: "words", offset: prev.words.length };
+}
+
+/**
+ * Backspace на початку **порожніх** слів рядка, у якого в інших доріжках є
+ * вміст (акорди, таби, вигуки), прибирає рядок разом із цим вмістом — тож
+ * спершу попередження (`SONG-90`). Повертає id доріжок із вмістом або `null`,
+ * коли попереджати не треба.
+ */
+export function removalNeedsConfirm(song: Song, at: Pos): string[] | null {
+  if (at.lane !== "words" || at.offset !== 0 || at.line === 0) return null;
+  const l = lineAt(song, at.line);
+  if (l.words) return null;
+  const filled = filledLanes(l.line);
+  return filled.length ? filled : null;
+}
+
+/** Прибрати рядок `ln` разом із доріжками (підтверджене видалення); курсор — у кінець слів попереднього. */
+export function removeLineAt(song: Song, ln: number): Pos {
+  const prev = lineAt(song, ln - 1);
+  removeLine(song, ln);
   return { line: ln - 1, lane: "words", offset: prev.words.length };
 }
 

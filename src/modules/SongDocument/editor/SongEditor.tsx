@@ -34,6 +34,7 @@ import { Leaf } from "./elements/Leaf";
 import { renderElement } from "./elements/renderElement";
 import { SongHeader } from "./header/SongHeader";
 import { NoteComposer, type NoteTarget } from "./notes/NoteComposer";
+import { RemovalWarning } from "./RemovalWarning";
 import { useColumnsRelayout } from "./layout/useColumnsRelayout";
 import { useFillViewportHeight } from "./layout/useFillViewportHeight";
 import { useDocVersion, useLinesDoc } from "./useLinesDoc";
@@ -105,6 +106,7 @@ function LoadedEditor({ song }: { song: Song }) {
   // Курсор-крок у клітинковій доріжці живе поза Slate — перемальовуватись на його рух.
   const [, cellMoved] = useState(0);
   useEffect(() => lanes.cells.listen(() => cellMoved((n) => n + 1)), [lanes]);
+  useEffect(() => lanes.removal.listen(() => cellMoved((n) => n + 1)), [lanes]);
 
   const [brush, setBrush] = useState<Brush>("calm");
   const stroke = useStroke(song, brush, lanes.paint);
@@ -216,7 +218,10 @@ function LoadedEditor({ song }: { song: Song }) {
             renderLeaf={Leaf}
             decorate={decorate}
             onContextMenu={(e) => e.preventDefault()}
-            onKeyDown={(e) => lanes.cells.key(e) && e.preventDefault()}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") lanes.removal.cancel();
+              if (lanes.cells.key(e)) e.preventDefault();
+            }}
           />
         </Slate>
         {canAnnotate && me && (
@@ -229,6 +234,7 @@ function LoadedEditor({ song }: { song: Song }) {
             + Примітка
           </button>
         )}
+        {canEdit && <RemovalWarning />}
         {composing && me && <NoteComposer song={song} me={me} audience={viewers} target={composing} onClose={() => setComposing(null)} />}
       </div>
     </Ctx.Provider>

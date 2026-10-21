@@ -57,18 +57,18 @@ export const laneString = (song: Song, ln: number, lane: LaneType) => laneOf(lin
 /** Вид рядка — з вмісту: `/…` — структурна примітка, нічого в жодній доріжці — порожній, решта — відрізок. */
 export function lineKind(l: LineAt): LineKind {
   if (l.words.startsWith("/")) return "note";
-  if (!l.words && !hasContent(l.line)) return "empty";
+  if (!l.words && !filledLanes(l.line).length) return "empty";
   return "segment";
 }
 
-/** Чи є щось у доріжках рядка, крім слів: текст акордів чи доданих текстових, клітинки. */
-function hasContent(line: Line) {
-  let any = false;
-  line.forEach((slot) => {
-    if (any || !(slot instanceof Y.Map)) return;
+/** id доріжок рядка, крім слів, у яких щось є: текст акордів чи доданих текстових, клітинки. */
+export function filledLanes(line: Line): string[] {
+  const out: string[] = [];
+  line.forEach((slot, id) => {
+    if (!(slot instanceof Y.Map)) return;
     const text = slot.get("text");
     const cells = slot.get("cells");
-    any = (text instanceof Y.Text && text.length > 0) || (cells instanceof Y.Map && cells.size > 0);
+    if ((text instanceof Y.Text && text.length > 0) || (cells instanceof Y.Map && cells.size > 0)) out.push(id);
   });
-  return any;
+  return out;
 }

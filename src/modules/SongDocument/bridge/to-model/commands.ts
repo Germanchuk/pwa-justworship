@@ -10,8 +10,11 @@ import {
   deleteRange,
   insertPlainText,
   insertText,
+  Line,
   linesOf,
   Pos,
+  removalNeedsConfirm,
+  removeLineAt,
   slashAllowed,
   splitLine,
 } from "../../model";
@@ -21,7 +24,19 @@ import { toModel, toView } from "../positions";
 import { isCellsNode, isShown, laneOfNode } from "../projection";
 import { COMMAND, quietly, ViewState } from "../state";
 
-export function installCommands(s: ViewState, history: History, cells: Cells) {
+/**
+ * Попередження перед видаленням рядка з вмістом доріжок (`SONG-90`): перший
+ * Backspace на початку порожніх слів лише попереджає, другий — видаляє.
+ */
+export type Removal = {
+  /** Рядок, який видалиться наступним Backspace, і його доріжки з вмістом; `null` — попередження немає. */
+  pending: () => { line: Line; lanes: string[] } | null;
+  confirm: () => void;
+  cancel: () => void;
+  listen: (fn: () => void) => () => void;
+};
+
+export function installCommands(s: ViewState, history: History, cells: Cells): Removal {
   const { song, view, undoManager } = s;
   const canEdit = (ln: number, lane: string) => isShown(s, ln, lane);
 
@@ -60,6 +75,31 @@ export function installCommands(s: ViewState, history: History, cells: Cells) {
   /** Спершу стерти виділене (якщо є), потім правило в точці, що лишилась. */
   const collapsed = (anchor: Pos, focus: Pos) => (Range.isExpanded(view.selection!) ? removeSelection(anchor, focus) : anchor);
 
+  let pending: { line: Line; lanes: string[] } | null = null;
+  const listeners = new Set<() => void>();
+  const arm = (next: typeof pending) => {
+    if (pending === next) return;
+    pending = next;
+    listeners.forEach((fn) => fn());
+  };
+  /** Видалити рядок, про який попередили; курсор — у кінець слів попереднього. */
+  const confirm = () => {
+    const target = pending?.line;
+    arm(null);
+    const ln = target ? linesOf(song).indexOf(target) : -1;
+    if (ln > 0) command(() => removeLineAt(song, ln));
+  };
+  // Курсор пішов з початку того рядка (друк, стрілки, клік) — попередження знімається.
+  const { onChange } = view;
+  view.onChange = (options) => {
+    const sel = view.selection;
+    if (pending) {
+      const here = sel && Range.isCollapsed(sel) && sel.anchor.offset === 0 ? s.sources[sel.anchor.path[0]]?.line : null;
+      if (here !== pending.line) arm(null);
+    }
+    onChange(options);
+  };
+
   const { deleteBackward, deleteForward } = view;
   // Курсор у клітинковій доріжці — друк, стирання й вставка йдуть у неї (за її синтаксисом).
   view.insertText = (text) => {
@@ -72,7 +112,13 @@ export function installCommands(s: ViewState, history: History, cells: Cells) {
   view.deleteBackward = (unit) => {
     if (cells.key({ key: "Backspace" })) return;
     const sel = view.selection;
-    if (sel && Range.isCollapsed(sel) && sel.anchor.offset === 0) return command((a) => backspaceAtLaneStart(song, a));
+    if (sel && Range.isCollapsed(sel) && sel.anchor.offset === 0) {
+      const at = toModel(s, sel.anchor);
+      const lanes = removalNeedsConfirm(song, at);
+      if (!lanes) return command((a) => backspaceAtLaneStart(song, a));
+      const line = linesOf(song)[at.line];
+      return pending?.line === line ? confirm() : arm({ line, lanes });
+    }
     deleteBackward(unit);
   };
   view.deleteForward = (unit) => {
@@ -87,5 +133,15 @@ export function installCommands(s: ViewState, history: History, cells: Cells) {
     const text = data.getData("text/plain");
     if (text && cells.paste(text)) return;
     if (text) command((a, f) => insertPlainText(song, collapsed(a, f), text));
+  };
+
+  return {
+    pending: () => pending,
+    confirm,
+    cancel: () => arm(null),
+    listen: (fn) => {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
   };
 }
