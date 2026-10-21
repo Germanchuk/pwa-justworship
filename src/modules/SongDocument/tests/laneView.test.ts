@@ -9,7 +9,7 @@ import { change } from "./harness";
 import { linesOf, paintDynamics, removeLine } from "../model";
 import { LaneDisplay } from "../bridge/laneView";
 import { selectedText } from "../bridge/clipboard";
-import { ALL, at, CHORDS, doc, NONE, setup as setupWith, shown, WORDS } from "./testKit";
+import { ALL, at, CHORDS, doc, NONE, setup as setupWith, shown, WORDS, deleteSelection } from "./testKit";
 
 const SONG = [
   { words: "/Куплет" },
@@ -66,7 +66,7 @@ describe("правка, бачачи частину доріжок", () => {
   it("лише слова: виділив через два рядки й стер — сховане не стерто, рядки склеєні", () => {
     const { net, A } = setup(WORDS, ALL);
     Transforms.select(A.view, { anchor: { path: [1, 0, 0], offset: 3 }, focus: { path: [2, 0, 0], offset: 5 } });
-    Editor.deleteFragment(A.view);
+    deleteSelection(A);
     expect(shown(A)[1]).toBe("w:Ти світло серед ночі");
     expect(doc(net.B)[1]).toBe("Am F       C   G F    C      G     Am / Ти світло серед ночі");
   });

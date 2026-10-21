@@ -1,8 +1,8 @@
 /** Доріжки пісні (ADR-0008): список доріжок, слот у кожному рядку, порядок, вставка за порядком. */
 import { describe, expect, it } from "vitest";
-import { Element, Node, Transforms } from "slate";
+import { Editor, Element, Node, Transforms } from "slate";
 import { change, makePair } from "./harness";
-import { ALL, at, doc, rows, setup, tick } from "./testKit";
+import { ALL, at, doc, rows, setup, tick, deleteSelection } from "./testKit";
 import type { LaneDisplay, LaneView } from "../bridge/laneView";
 import {
   addLane,
@@ -203,14 +203,14 @@ describe("клітинкові доріжки — атомні вузли вид
     change(net.A, () => lines.forEach((line, i) => cellsOf(line, tab)!.set("1.1/1", String(i))));
     // від «святий» (рядок 0, слова) до «Г|осподь» (рядок 1, слова): таби рядка 1 — у виділенні
     Transforms.select(A.view, { anchor: { path: [0, 2, 0], offset: 3 }, focus: { path: [1, 2, 0], offset: 1 } });
-    A.view.deleteFragment();
+    deleteSelection(A);
     expect(layout(net.B).map((l) => l.words)).toEqual(["Ти осподь", "Алилуя"]);
     expect(linesOf(net.B).map((line) => cellsOf(line, tab)!.get("1.1/1"))).toEqual(["0", "2"]);
 
     // B не бачить табів: рядок, у якому вони є, з його виділення не зникає і не склеюється
     B.setDisplay({ ...ALL, hidden: [tab] });
     Transforms.select(B.view, { anchor: { path: [0, 1, 0], offset: 0 }, focus: { path: [1, 1, 0], offset: 3 } });
-    B.view.deleteFragment();
+    deleteSelection(B);
     expect(layout(net.A).map((l) => l.words)).toEqual(["", "луя"]);
     expect(cellsOf(linesOf(net.A)[1], tab)!.get("1.1/1")).toBe("2");
   });
@@ -285,7 +285,7 @@ describe("додана текстова доріжка (вигуки) — пра
     change(net.A, () => linesOf(net.A).forEach((line, i) => laneText(line, id)!.insert(0, `в${i}`)));
     // від «святий» (рядок 0, слова) до «Го|сподь» (рядок 1, слова): вигуки й акорди рядка 1 — у виділенні
     Transforms.select(A.view, { anchor: { path: [0, 2, 0], offset: 3 }, focus: { path: [1, 2, 0], offset: 2 } });
-    A.view.deleteFragment();
+    deleteSelection(A);
     expect(layout(net.B).map((l) => l.words)).toEqual(["Ти сподь"]);
     expect(vocalsOf(net.B, id)).toEqual(["в0"]);
   });
@@ -391,7 +391,7 @@ describe("видалення рядка з вмістом доріжок — д�
     const { net, A } = setup(SONG, ALL, ALL);
     at(A, 1, 1, 0);
     A.view.deleteBackward("character");
-    expect(A.removal.pending()?.lanes).toEqual(["chords"]);
+    expect(A.removal.pending()).toMatchObject({ kind: "line", lanes: ["chords"] });
     expect(layout(net.B)).toHaveLength(3);
     A.view.deleteBackward("character");
     expect(A.removal.pending()).toBe(null);
@@ -430,5 +430,44 @@ describe("видалення рядка з вмістом доріжок — д�
     A.view.deleteBackward("character"); // непорожні слова — склеювання
     expect(A.removal.pending()).toBe(null);
     expect(layout(net.B).map((l) => l.words)).toEqual(["Ти святийГосподь"]);
+  });
+});
+
+describe("виділення через кілька рядків — видаляється лише з підтвердженням", () => {
+  const SONG = [{ words: "Ти святий" }, { words: "Твоє світло" }, { words: "Господь" }];
+  const words = (song: Song) => layout(song).map((l) => l.words);
+  const select = (h: LaneView) =>
+    Transforms.select(h.view, { anchor: { path: [0, 1, 0], offset: 3 }, focus: { path: [2, 1, 0], offset: 2 } });
+
+  it("Delete удруге — видаляє; перший раз — лише попередження з кількістю рядків", () => {
+    const { net, A } = setup(SONG, ALL, ALL);
+    select(A);
+    Editor.deleteFragment(A.view);
+    expect(A.removal.pending()).toMatchObject({ kind: "range", rows: 3 });
+    expect(words(net.B)).toEqual(["Ти святий", "Твоє світло", "Господь"]);
+    Editor.deleteFragment(A.view);
+    expect(A.removal.pending()).toBe(null);
+    expect(words(net.B)).toEqual(["Ти сподь"]);
+  });
+
+  it("друк, Enter і вставка поверх такого виділення теж спершу попереджають і нічого не міняють", () => {
+    const { net, A } = setup(SONG, ALL, ALL);
+    select(A);
+    A.view.insertText("x");
+    A.view.insertBreak();
+    A.view.insertData({ getData: () => "вставка" } as unknown as DataTransfer);
+    expect(A.removal.pending()).toMatchObject({ kind: "range" });
+    expect(words(net.B)).toEqual(["Ти святий", "Твоє світло", "Господь"]);
+  });
+
+  it("змінив виділення — попередження знято; виділення в одному рядку стирається одразу", async () => {
+    const { net, A } = setup(SONG, ALL, ALL);
+    select(A);
+    Editor.deleteFragment(A.view);
+    Transforms.select(A.view, { anchor: { path: [1, 1, 0], offset: 0 }, focus: { path: [1, 1, 0], offset: 5 } });
+    await tick();
+    expect(A.removal.pending()).toBe(null);
+    Editor.deleteFragment(A.view);
+    expect(words(net.B)).toEqual(["Ти святий", "світло", "Господь"]);
   });
 });

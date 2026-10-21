@@ -7,7 +7,7 @@ import { Editor, Transforms } from "slate";
 import { change } from "./harness";
 import { LaneView } from "../bridge/laneView";
 import { layout, lineKind, removeLine } from "../model";
-import { at, CHORDS, doc, rows, setup, WORDS } from "./testKit";
+import { at, CHORDS, doc, rows, setup, WORDS, deleteSelection } from "./testKit";
 
 const SONG = [
   //       0123456789012345678
@@ -94,7 +94,7 @@ describe("порожній рядок, /примітка, видалення к�
   it("виділили від середини слів #0 до середини слів #1 і стерли — як у звичайному тексті", () => {
     const { net, A } = setup(SONG);
     Transforms.select(A.view, { anchor: { path: [0, 1, 0], offset: 3 }, focus: { path: [1, 1, 0], offset: 5 } });
-    Editor.deleteFragment(A.view);
+    deleteSelection(A);
     expect(rows(net.B)).toEqual([{ chords: "Am F       C   G", words: "Ти світло серед ночі", dynamics: "calm" as const }]);
   });
 });
@@ -103,7 +103,7 @@ describe("сховане не стирається («що бачу, те й п�
   it("бачу лише слова: виділив від слів #0 до слів #1 і стер — акорди #1 цілі й переїхали в склеєний рядок", () => {
     const { net, A } = setup(SONG, WORDS);
     Transforms.select(A.view, { anchor: { path: [0, 0, 0], offset: 3 }, focus: { path: [1, 0, 0], offset: 5 } });
-    Editor.deleteFragment(A.view);
+    deleteSelection(A);
     expect(rows(net.B)).toEqual([
       { chords: "Am F       C   G F    C      G     Am", words: "Ти світло серед ночі", dynamics: "calm" as const },
     ]);
@@ -112,7 +112,7 @@ describe("сховане не стирається («що бачу, те й п�
   it("бачу лише акорди: виділив від акордів #0 до акордів #1 і стер — слова цілі, рядки не склеюються", () => {
     const { net, A } = setup(SONG, CHORDS);
     Transforms.select(A.view, { anchor: { path: [0, 0, 0], offset: 3 }, focus: { path: [1, 0, 0], offset: 5 } });
-    Editor.deleteFragment(A.view);
+    deleteSelection(A);
     expect(doc(net.B)).toEqual(["Am  / Ти святий, Господь", "C      G     Am / Твоє світло серед ночі"]);
   });
 });

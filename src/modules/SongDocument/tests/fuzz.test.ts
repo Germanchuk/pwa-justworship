@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { Editor, Node, Point, Transforms } from "slate";
 import { createLaneView, LaneDisplay, LaneView } from "../bridge/laneView";
 import { layout } from "../model";
-import { ALL, CHORDS, doc, NONE, setup, shown, WORDS } from "./testKit";
+import { ALL, CHORDS, doc, NONE, setup, shown, WORDS, deleteSelection } from "./testKit";
 
 const SONG = [
   { words: "/Куплет" },
@@ -67,7 +67,7 @@ function act(h: LaneView, r: () => number, withUndo: boolean) {
   if (roll < 0.8) {
     const focus = randomPoint(h, r)!;
     Transforms.select(h.view, { anchor, focus });
-    Editor.deleteFragment(h.view);
+    deleteSelection(h);
     return `стерти ${JSON.stringify(anchor)}…${JSON.stringify(focus)}`;
   }
   if (roll < 0.86) {
