@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { Element, Node, Transforms } from "slate";
 import { change, makePair } from "./harness";
-import { ALL, at, doc, setup } from "./testKit";
+import { ALL, at, doc, rows, setup } from "./testKit";
 import type { LaneDisplay, LaneView } from "../bridge/laneView";
 import {
   addLane,
@@ -288,5 +288,98 @@ describe("додана текстова доріжка (вигуки) — пра
     A.view.deleteFragment();
     expect(layout(net.B).map((l) => l.words)).toEqual(["Ти сподь"]);
     expect(vocalsOf(net.B, id)).toEqual(["в0"]);
+  });
+});
+
+describe("Enter на початку слів — увесь рядок їде вниз", () => {
+  const SONG = [
+    { words: "Ти святий", chords: "Am F", dynamics: "loud" as const },
+    { words: "Господь", chords: "C G" },
+  ];
+
+  it("над рядком — порожній; таби, акорди, вигуки, примітка й динаміка лишаються з рядком; курсор — на його початку", () => {
+    const { net, A } = setup(SONG, ALL, ALL);
+    let tab = "";
+    let vocals = "";
+    change(net.A, () => {
+      tab = addLane(net.A, "tab", linesOf(net.A));
+      vocals = addLane(net.A, "text", linesOf(net.A));
+    });
+    const moved = linesOf(net.A)[0];
+    change(net.A, () => {
+      cellsOf(moved, tab)!.set("1.1/6", "3");
+      laneText(moved, vocals)!.insert(0, "Ей!");
+      addNote(net.A, 0, "chords", 0, 2, { id: "n", author: "Оля", visibleFor: [ALL_SEE], color: "#F5C518", body: "тихо" });
+    });
+    at(A, 0, 3, 0); // рядок 0: таби, вигуки, акорди, слова — курсор на початку слів
+    A.view.insertBreak();
+
+    expect(layout(net.B).map((l) => [chordsString(l.line), l.words])).toEqual([
+      ["", ""],
+      ["Am F", "Ти святий"],
+      ["C G", "Господь"],
+    ]);
+    expect(linesOf(net.B)[1]).toBe(linesOf(net.B).find((l) => cellsOf(l, tab)?.get("1.1/6") === "3"));
+    expect(laneText(linesOf(net.B)[1], vocals)!.toString()).toBe("Ей!");
+    expect(resolveNotes(net.B, [], () => true).map((n) => `${n.lane}@${n.line}`)).toEqual(["chords@1"]);
+    expect(rows(net.B).map((r) => r.dynamics)).toEqual(["loud", "loud", null]);
+    expect(A.view.selection?.anchor).toEqual({ path: [1, 3, 0], offset: 0 });
+  });
+
+  it("слів немає (лише акорди) — Enter, як і раніше, додає рядок нижче", () => {
+    const { net, A } = setup([{ words: "", chords: "Am F" }, { words: "Господь" }], ALL, ALL);
+    at(A, 0, 1, 0);
+    A.view.insertBreak();
+    expect(layout(net.B).map((l) => [chordsString(l.line), l.words])).toEqual([
+      ["Am F", ""],
+      ["", ""],
+      ["", "Господь"],
+    ]);
+  });
+
+  it("поки один тисне Enter на початку рядка, інший пише в його акорди — набране лишається з рядком", () => {
+    const { net, A, B } = setup(SONG, ALL, ALL);
+    net.unlink();
+    at(A, 0, 1, 0);
+    A.view.insertBreak();
+    at(B, 0, 0, 4);
+    B.view.insertText(" C");
+    net.link();
+    expect(layout(net.A).map((l) => [chordsString(l.line), l.words])).toEqual([
+      ["", ""],
+      ["Am F C", "Ти святий"],
+      ["C G", "Господь"],
+    ]);
+  });
+});
+
+describe("Backspace під порожнім рядком — рядок піднімається цілком", () => {
+  const withTab = (seed: { words: string; chords?: string }[]) => {
+    const ctx = setup(seed, ALL, ALL);
+    let tab = "";
+    change(ctx.net.A, () => (tab = addLane(ctx.net.A, "tab", linesOf(ctx.net.A))));
+    change(ctx.net.A, () => cellsOf(linesOf(ctx.net.A)[seed.length - 1], tab)!.set("1.1/6", "3"));
+    return { ...ctx, tab };
+  };
+
+  it("посеред пісні: Enter на початку слів і одразу Backspace — той самий рядок, таби на місці", () => {
+    const { net, A, tab } = withTab([{ words: "Алилуя" }, { words: "Ти святий", chords: "Am F" }]);
+    const line = linesOf(net.A)[1];
+    at(A, 1, 2, 0);
+    A.view.insertBreak();
+    A.view.deleteBackward("character");
+    expect(linesOf(net.A)[1]).toBe(line);
+    expect(cellsOf(linesOf(net.B)[1], tab)!.toJSON()).toEqual({ "1.1/6": "3" });
+    expect(layout(net.B).map((l) => [chordsString(l.line), l.words])).toEqual([["", "Алилуя"], ["Am F", "Ти святий"]]);
+  });
+
+  it("перший рядок не прибирається — склеювання, але вміст той самий, без зайвого такту", () => {
+    const { net, A, tab } = withTab([{ words: "Ти святий", chords: "Am F" }]);
+    at(A, 0, 2, 0);
+    A.view.insertBreak();
+    A.view.deleteBackward("character");
+    expect(linesOf(net.B)).toHaveLength(1);
+    expect(cellsOf(linesOf(net.B)[0], tab)!.toJSON()).toEqual({ "1.1/6": "3" });
+    expect(layout(net.B).map((l) => [chordsString(l.line), l.words])).toEqual([["Am F", "Ти святий"]]);
   });
 });

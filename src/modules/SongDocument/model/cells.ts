@@ -220,8 +220,9 @@ export function appendCells(from: Y.Map<unknown>, to: Y.Map<unknown>) {
   const src = from.get("cells") as Y.Map<string>;
   const extra = Number(from.get("bars")) > 1;
   if (!src?.size && !extra) return;
-  const shift = barsOf(to);
   const dst = to.get("cells") as Y.Map<string>;
+  // Порожня доріжка з одним тактом — дописуємо з її початку, без зайвого порожнього такту.
+  const shift = !dst.size && barsOf(to) === 1 ? 0 : barsOf(to);
   src.forEach((value, key) => {
     const k = parseKey(key)!;
     dst.set(`${k.bar + shift}.${k.step}${key.includes("/") ? `/${k.string}` : ""}`, value);

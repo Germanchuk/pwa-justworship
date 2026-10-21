@@ -2,7 +2,7 @@
 import * as Y from "yjs";
 import { appendCells } from "../cells";
 import { movableNotes, moveLaneNote, moveWordsNote } from "../notes/move";
-import { laneText, layout, lineAt, textSlotsOf } from "../read";
+import { laneText, layout, lineAt, lineKind, textSlotsOf } from "../read";
 import type { Pos, Song } from "../song";
 
 /**
@@ -16,6 +16,13 @@ import type { Pos, Song } from "../song";
 export function mergeLine(song: Song, ln: number): Pos {
   const prev = lineAt(song, ln - 1);
   const cur = lineAt(song, ln);
+  // Попередній рядок порожній — прибрати лише його маркер: рядок піднімається
+  // цілком, нічого не копіюючи (обернене до Enter на початку слів). Крім рядка
+  // №0: те, що в нього в цю мить друкують, лишилось би перед першим маркером.
+  if (ln - 1 > 0 && lineKind(prev) === "empty") {
+    song.text.delete(prev.at, 1);
+    return { line: ln - 1, lane: "words", offset: 0 };
+  }
   // До правок: позиції в текстах `cur` ще живі.
   const wordsNotes = movableNotes(song, ln, "words");
   const lanes = textSlotsOf(cur.line).filter((id) => laneText(prev.line, id));
