@@ -5,16 +5,21 @@
  */
 import * as Y from "yjs";
 import type { Point } from "slate";
-import { chordsOf, laneOf, Line, lineOfIndex, Pos } from "../model";
+import { isTextSlot, laneOf, laneText, Line, lineOfIndex, Pos, textSlotsOf } from "../model";
 import type { ViewState } from "./state";
 
 export const indexOf = (s: ViewState, line: Line) => s.lines.findIndex((l) => l.line === line);
 
-export const toModel = (s: ViewState, { path: [vln, vl], offset }: Point): Pos => ({
-  line: indexOf(s, s.sources[vln].line),
-  lane: s.sources[vln].lanes[vl],
-  offset,
-});
+/**
+ * Точка видимого → місце в моделі. Клітинкова доріжка — атомний вузол без
+ * тексту: точка в ній для текстових правил — це початок акордів того самого
+ * рядка (одразу під клітинковими доріжками).
+ */
+export function toModel(s: ViewState, { path: [vln, vl], offset }: Point): Pos {
+  const line = indexOf(s, s.sources[vln].line);
+  const lane = s.sources[vln].lanes[vl];
+  return isTextSlot(s.sources[vln].line, lane) ? { line, lane, offset } : { line, lane: "chords", offset: 0 };
+}
 
 /** `null` — цієї доріжки людина не бачить. */
 export function toView(s: ViewState, { line, lane, offset }: Pos): Point | null {
@@ -33,7 +38,7 @@ export function toRelative(s: ViewState, { line, lane, offset }: Pos): Y.Relativ
   const assoc = offset === laneOf(l, lane).length ? -1 : 0;
   return lane === "words"
     ? Y.createRelativePositionFromTypeIndex(s.song.text, l.at + 1 + offset, assoc)
-    : Y.createRelativePositionFromTypeIndex(chordsOf(l.line), offset, assoc);
+    : Y.createRelativePositionFromTypeIndex(laneText(l.line, lane)!, offset, assoc);
 }
 
 /** Відносна позиція Yjs → точка у видимому; `null` — місця вже немає або його не видно. */
@@ -44,6 +49,9 @@ export function fromRelative(s: ViewState, rel: Y.RelativePosition): Point | nul
     const ln = lineOfIndex(s.lines, abs.index);
     return ln < 0 ? null : toView(s, { line: ln, lane: "words", offset: abs.index - s.lines[ln].at - 1 });
   }
-  const ln = s.lines.findIndex((l) => chordsOf(l.line) === abs.type);
-  return ln < 0 ? null : toView(s, { line: ln, lane: "chords", offset: abs.index });
+  for (let ln = 0; ln < s.lines.length; ln++) {
+    const lane = textSlotsOf(s.lines[ln].line).find((id) => laneText(s.lines[ln].line, id) === abs.type);
+    if (lane) return toView(s, { line: ln, lane, offset: abs.index });
+  }
+  return null;
 }

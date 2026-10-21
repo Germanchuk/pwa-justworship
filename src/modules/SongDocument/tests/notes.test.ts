@@ -7,8 +7,8 @@ import { describe, expect, it } from "vitest";
 import { Editor } from "slate";
 import { change } from "./harness";
 import { LaneView } from "../bridge/laneView";
-import { addNote, ALL, LaneType, linesOf, notesOf, removeNote, resolveNotes, Song } from "../model";
-import { at, setup } from "./testKit";
+import { addNote, ALL, LaneType, linesOf, moveNoteTo, noteCounts, notesOf, removeNote, resolveNotes, Song, updateNote } from "../model";
+import { at, setup, confirmed } from "./testKit";
 
 const SONG = [
   //       0123456789012345678
@@ -35,6 +35,7 @@ const enter = (h: LaneView, ln: number, offset: number) => {
 const backspace = (h: LaneView, ln: number) => {
   at(h, ln, 1, 0);
   Editor.deleteBackward(h.view);
+  confirmed(h); // склеювання двох непорожніх — з підтвердженням (SONG-92)
 };
 const type = (h: LaneView, ln: number, lane: number, offset: number, text: string) => {
   at(h, ln, lane, offset);
@@ -179,5 +180,46 @@ describe("видалення звужує адресатів (NOTE-25, NOTE-32)"
     change(net.A, () => removeNote(linesOf(net.A)[0], "words", owned(net.A).get("своя")!, ["Оля"]));
     change(net.A, () => removeNote(linesOf(net.A)[0], "words", owned(net.A).get("усім")!, ["Оля"]));
     expect(owned(net.B).size).toBe(0);
+  });
+});
+
+describe("меню позначки (NOTE-4, NOTE-37, NOTE-42, NOTE-43)", () => {
+  it("колір, текст і адресати міняються в тому самому записі", () => {
+    const { net } = setup(SONG);
+    note(net.A, 0, "words", 0, 2, "п", ["Оля"]);
+    change(net.A, () => updateNote(linesOf(net.A)[0], "words", "п", { color: "strike", body: "тихо", visibleFor: ["Оля", "Вова"] }));
+    const got = notesOf(linesOf(net.B)[0], "words").get("п")!;
+    expect([got.color, got.body, got.visibleFor, got.author, got.quote]).toEqual(["strike", "тихо", ["Оля", "Вова"], "Оля", "Ти"]);
+  });
+
+  it("нова область — та сама примітка на іншому рядку й доріжці", () => {
+    const { net } = setup(SONG);
+    note(net.A, 0, "words", 0, 2, "п", ["Оля"]);
+    change(net.A, () => moveNoteTo(net.A, linesOf(net.A)[0], "words", "п", 1, "chords", 5, 6));
+    expect(notes(net.B, ["Оля"])).toEqual([{ id: "п", status: "visible", at: "chords@1:5-6" }]);
+    const got = notesOf(linesOf(net.B)[1], "chords").get("п")!;
+    expect([got.body, got.author, got.visibleFor, got.quote]).toEqual(["п", "Оля", ["Оля"], "C"]);
+    expect(notesOf(linesOf(net.B)[0], "words").has("п")).toBe(false);
+  });
+});
+
+describe("чужі примітки й числа у виборі очей (NOTE-15, NOTE-45)", () => {
+  it("others — ще й чужі, позначені foreign", () => {
+    const { net } = setup(SONG);
+    note(net.A, 0, "words", 0, 2, "моя", ["Вова"]);
+    note(net.A, 0, "words", 3, 9, "чужа", ["Оля"]);
+    const got = resolveNotes(net.A, ["Вова"], () => true, { others: true }).map((n) => [n.note.id, !!n.foreign]);
+    expect(got).toEqual([["моя", false], ["чужа", true]]);
+    expect(resolveNotes(net.A, ["Вова"], () => true).map((n) => n.note.id)).toEqual(["моя"]);
+  });
+
+  it("разом із відміченими і (особисто); публічні не рахуються", () => {
+    const { net } = setup(SONG);
+    note(net.A, 0, "words", 0, 2, "спільна", ["Оля", "Вова"]);
+    note(net.A, 0, "words", 3, 9, "Олі", ["Оля"]);
+    note(net.A, 1, "words", 0, 4, "усім");
+    expect(noteCounts(net.A, ["Вова"], "Вова")).toEqual({ together: 1, own: 1 });
+    expect(noteCounts(net.A, ["Вова"], "Оля")).toEqual({ together: 1, own: 2 });
+    expect(noteCounts(net.A, ["Вова"], "Петро")).toEqual({ together: 0, own: 0 });
   });
 });

@@ -1,8 +1,8 @@
 import React, {useEffect} from "react";
 
 import DronePlayer from "../../services/DronePlayer/DronePlayer";
-import {useCanAnnotate, useCanPlay} from "../../mode";
-import {NotesAudienceSelect} from "#modules/SongDocument/editor/notes/NotesAudienceSelect";
+import {useCanPlay} from "../../mode";
+import {ViewingAsTile} from "#modules/SongDocument/editor/notes/NotesAudienceSelect";
 import {ModeSwitch} from "./ModeSwitch/ModeSwitch";
 import {PlaybackControls} from "./PlaybackControls";
 import {SongActions} from "./SongActions";
@@ -20,12 +20,11 @@ import {useSongMenuOpen} from "./menuOpen";
  *
  *   відкрито: [📖]
  *             [✏️]   ← той самий перемикач, розгорнутий
- *             [🗒]
  *
- *             [⋯]    ← дії з піснею (нативний список)
- *             [⏻]    ← кнопки режиму: дрон у читанні, адресат у
- *                      примітках, у редагуванні нічого
+ *             [⋯]    ← дії з піснею (меню з підменю)
+ *             [⏻]    ← кнопки режиму: дрон у читанні, у редагуванні нічого
  *
+ *             [В]    ← дивлюсь очима інших — видно й при закритому меню
  *             [🖍]   ← слот: палітра / меню позначки (`SongMenuSlot`)
  *
  * Меню закривається ЛИШЕ своєю кнопкою (`APP-28`): вибір режиму, дія чи тап
@@ -51,20 +50,12 @@ export const SongControls = () => {
       <ModeSwitch expanded={open} />
       {open && <SongActions />}
       {open && <ModeActions />}
+      <ViewingAsTile />
 
       <SongMenuSlot />
     </div>
   );
 };
 
-/**
- * Кнопки поточного режиму — плитки під «⋯»: дрон (`PLAY-2`) у читанні,
- * адресат приміток у примітках, у редагуванні нічого.
- */
-const ModeActions = () => {
-  const canPlay = useCanPlay();
-  const canAnnotate = useCanAnnotate();
-  if (canPlay) return <PlaybackControls />;
-  if (canAnnotate) return <NotesAudienceSelect />;
-  return null;
-};
+/** Кнопки поточного режиму — плитки під «⋯»: дрон (`PLAY-2`) у читанні, у редагуванні нічого. */
+const ModeActions = () => (useCanPlay() ? <PlaybackControls /> : null);

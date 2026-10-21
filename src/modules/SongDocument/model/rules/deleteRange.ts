@@ -1,19 +1,22 @@
 /** Видалення виділеного — через кілька доріжок і рядків. */
-import { laneString } from "../read";
-import { CanEdit, LANES, LaneType, Pos, Song } from "../song";
+import { allLanes, filledCells, isTextKind } from "../lanes";
+import { laneString, lineAt } from "../read";
+import { CanEdit, LaneType, Pos, Song } from "../song";
 import { eraseIn, removeLine } from "../write";
 import { mergeLine } from "./merge";
 
-const order = (a: Pos, b: Pos) =>
-  a.line - b.line || LANES.indexOf(a.lane) - LANES.indexOf(b.lane) || a.offset - b.offset;
 
 /**
  * Стерти діапазон — як у звичайному тексті, у порядку документа: стирається
  * все між кінцями, рядки між ними зникають, а якщо обидва кінці в словах —
  * останній рядок вливається в перший. Чого учасник не бачить, те не
- * стирається; рядок зі схованим вмістом не зникає й не склеюється.
+ * стирається; рядок зі схованим вмістом (і схованими клітинками) не зникає й не
+ * склеюється. Клітинки видимих доріжок у виділенні стирає місток (`commands.ts`).
  */
 export function deleteRange(song: Song, a: Pos, b: Pos, canEdit: CanEdit): Pos {
+  // Текстові доріжки рядка згори донизу: додані текстові, акорди, слова (і прибрані — їх не видно, тож не стираються).
+  const LANES = allLanes(song.doc).flatMap((l) => (isTextKind(l.kind) ? [l.id] : []));
+  const order = (x: Pos, y: Pos) => x.line - y.line || LANES.indexOf(x.lane) - LANES.indexOf(y.lane) || x.offset - y.offset;
   const [start, end] = order(a, b) <= 0 ? [a, b] : [b, a];
   const length = (ln: number, lane: LaneType) => laneString(song, ln, lane).length;
   const erase = (ln: number, lane: LaneType, from: number, to: number) => {
@@ -22,6 +25,8 @@ export function deleteRange(song: Song, a: Pos, b: Pos, canEdit: CanEdit): Pos {
   const eraseLane = (ln: number, lane: LaneType) => erase(ln, lane, 0, length(ln, lane));
   const between = (from: number, to: number) => LANES.slice(from, to);
   const lanePos = (lane: LaneType) => LANES.indexOf(lane);
+  // Склеювання й видалення рядка відкидають його клітинки — схованих не чіпаємо.
+  const hiddenCells = (ln: number) => filledCells(lineAt(song, ln).line).some((id) => !canEdit(ln, id));
 
   if (start.line === end.line && start.lane === end.lane) {
     erase(start.line, start.lane, start.offset, end.offset);
@@ -29,13 +34,13 @@ export function deleteRange(song: Song, a: Pos, b: Pos, canEdit: CanEdit): Pos {
   }
   let merge =
     start.line !== end.line && start.lane === "words" && end.lane === "words" &&
-    canEdit(start.line, "words") && canEdit(end.line, "words");
+    canEdit(start.line, "words") && canEdit(end.line, "words") && !hiddenCells(end.line);
 
   // Від кінця до початку, щоб номери ще не стертого лишались чинними.
   erase(end.line, end.lane, 0, end.offset);
   between(start.line === end.line ? lanePos(start.lane) + 1 : 0, lanePos(end.lane)).forEach((l) => eraseLane(end.line, l));
   for (let ln = end.line - 1; ln > start.line; ln--) {
-    if (LANES.some((l) => !canEdit(ln, l) && length(ln, l))) {
+    if (LANES.some((l) => !canEdit(ln, l) && length(ln, l)) || hiddenCells(ln)) {
       LANES.forEach((l) => eraseLane(ln, l));
       merge = false;
     } else removeLine(song, ln);

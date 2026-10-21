@@ -1,4 +1,4 @@
-import { BookOpen, Pencil, StickyNote } from "lucide-react";
+import { BookOpen, Pencil } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -9,7 +9,6 @@ import { MENU_GROUP, MENU_GROUP_ITEM } from "../tile";
 export const MODES: { key: SongMode; label: string; Icon: typeof BookOpen }[] = [
   { key: "read", label: "Читання — програвання акордів", Icon: BookOpen },
   { key: "edit", label: "Редагування пісні", Icon: Pencil },
-  { key: "notes", label: "Примітки — виділення й коментарі", Icon: StickyNote },
 ];
 
 /**
@@ -21,7 +20,7 @@ export const MODES: { key: SongMode; label: string; Icon: typeof BookOpen }[] = 
  * Стоїть у правому верхньому куті ЗАВЖДИ (`MODE-2`, `APP-26`): у закритому меню
  * — лише іконка поточного режиму, у відкритому решта режимів виїжджає й
  * плашка стає повним перемикачем. Одна скляна плашка показує, що це ОДИН
- * перемикач, а не три окремі кнопки; за шириною вона збігається з рештою
+ * перемикач, а не окремі кнопки; за шириною вона збігається з рештою
  * кнопок меню (`MENU_TILE`, 52px).
  *
  * Згортання — рядок сітки `1fr → 0fr`: висоту кнопки знати не треба, а

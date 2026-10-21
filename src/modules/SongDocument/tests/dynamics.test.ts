@@ -18,6 +18,16 @@ describe("динаміка — модель", () => {
     expect(colors(net.A)).toEqual(["loud", null, null]);
   });
 
+  it("тиша — нульовий крок: фарбується й стирається, як інші, і доходить до інших", () => {
+    const net = makePair(SEED);
+    paint(net.A, [0], "silence");
+    paint(net.A, [1], "silence", "Оля");
+    expect(colors(net.B)).toEqual(["silence", null, null]);
+    expect(colors(net.B, "Оля")).toEqual([null, "silence", null]);
+    paint(net.B, [0], null);
+    expect(colors(net.A)).toEqual([null, null, null]);
+  });
+
   it("порожній рядок і /примітку мазок не фарбує — фарбує лише відрізки", () => {
     const net = makePair([{ words: "/Приспів" }, { words: "Алилуя" }, { words: "" }, { words: "Слава" }]);
     paint(net.A, [0, 1, 2, 3], "loud");
@@ -69,22 +79,23 @@ describe("динаміка — модель", () => {
 });
 
 describe("динаміка — особиста", () => {
-  it("особиста перекриває спільну лише для свого власника", () => {
+  it("особиста — окремий шар: спільну не чіпає, в інших людей порожня", () => {
     const net = makePair(SEED);
     paint(net.A, [0, 1], "loud");
     paint(net.B, [1], "calm", "Оля");
-    const shown = (nick: string | null) => layout(net.A).map((l) => shownDynamics(l, nick));
-    expect(shown("Оля")).toEqual(["loud", "calm", null]);
-    expect(shown("Герман")).toEqual(["loud", "loud", null]);
-    expect(colors(net.A)).toEqual(["loud", "loud", null]);
+    const shown = (layer: string | null) => layout(net.A).map((l) => shownDynamics(l, layer));
+    expect(shown("Оля")).toEqual([null, "calm", null]);
+    expect(shown("Герман")).toEqual([null, null, null]);
+    expect(shown(null)).toEqual(["loud", "loud", null]);
   });
 
-  it("гумка в особистому шарі стирає лише своє — спільне видно знову", () => {
+  it("гумка в особистому шарі стирає лише своє — спільне на місці", () => {
     const net = makePair(SEED);
     paint(net.A, [0], "loud");
     paint(net.A, [0], "calm", "Оля");
     paint(net.A, [0], null, "Оля");
-    expect(shownDynamics(layout(net.B)[0], "Оля")).toBe("loud");
+    expect(shownDynamics(layout(net.B)[0], "Оля")).toBe(null);
+    expect(shownDynamics(layout(net.B)[0])).toBe("loud");
   });
 
   it("Enter — особистий колір в обох частинах; склеювання — лишається колір першого", () => {

@@ -1,5 +1,5 @@
 /** Спільне для тестів ядра: два учасники, у кожного своє видиме дерево. */
-import { Element, Node, Transforms } from "slate";
+import { Editor, Element, Node, Transforms } from "slate";
 import { docLines, makePair } from "./harness";
 import { createLaneView, LaneDisplay, LaneView } from "../bridge/laneView";
 import { chordsString, dynamicsOf, layout, LineInit, Song } from "../model";
@@ -33,3 +33,14 @@ export const at = (h: LaneView, ln: number, lane: number, offset: number) =>
 
 /** Тік між діями — як між справжніми подіями введення. */
 export const tick = () => new Promise((r) => setTimeout(r, 0));
+
+/** Стерти виділене; через кілька рядків — ще й підтвердити попередження (`SONG-91`), як людина вдруге тисне Delete. */
+export function deleteSelection(h: LaneView) {
+  Editor.deleteFragment(h.view);
+  if (h.removal.pending()?.kind === "range") h.removal.confirm();
+}
+
+/** Підтвердити попередження, якщо воно є (людина вдруге тисне ту саму клавішу). */
+export function confirmed(h: LaneView) {
+  if (h.removal.pending()) h.removal.confirm();
+}

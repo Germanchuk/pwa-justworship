@@ -21,14 +21,15 @@
 import * as Y from "yjs";
 import { createEditor, Editor, Point, Range } from "slate";
 import type { LaneType, Pos, Song } from "../model";
-import { installCopy } from "./clipboard";
+import { cellText, installCells, type Cells } from "./cells";
+import { installCopy, selectedText } from "./clipboard";
 import { alignLines, rebuild } from "./from-model/align";
 import { observeModel } from "./from-model/observe";
 import { setupHistory } from "./history";
 import { indexOf, toModel, toView } from "./positions";
-import { isShown, LaneDisplay } from "./projection";
+import { isCellsNode, isShown, LaneDisplay, laneOfNode } from "./projection";
 import { COMMAND, quietly, TYPING, ViewState } from "./state";
-import { installCommands } from "./to-model/commands";
+import { installCommands, type Removal } from "./to-model/commands";
 import { installPaint, Paint } from "./to-model/paint";
 import { interceptTyping } from "./to-model/typing";
 
@@ -49,6 +50,14 @@ export type LaneView = {
   modelPieces: (r: Range) => { anchor: Pos; focus: Pos }[];
   /** Пофарбувати рядки динамікою (`null` — стерти) — один крок undo. */
   paint: Paint;
+  /** Зміна поза Slate (доріжки пісні) — одна транзакція, один крок undo. */
+  change: (fn: () => void) => void;
+  /** Курсор у клітинкових доріжках (таби, кахон, прямокутники). */
+  cells: Cells;
+  /** Попередження перед видаленням рядка з вмістом доріжок. */
+  removal: Removal;
+  /** Текст виділеного, як його кладе в буфер копіювання (з клітинковими доріжками). */
+  copyText: () => string | null;
   undoManager: Y.UndoManager;
   destroy: () => void;
 };
@@ -61,12 +70,21 @@ export function createLaneView(song: Song, display: LaneDisplay, opts: { base?: 
     lines: [],
     sources: [],
     syncing: false,
-    undoManager: new Y.UndoManager(song.text, { trackedOrigins: new Set([TYPING, COMMAND]) }),
+    // Список доріжок — теж у undo: додав чи переставив доріжку — скасував.
+    undoManager: new Y.UndoManager([song.text, song.doc.getMap("lanes")], { trackedOrigins: new Set([TYPING, COMMAND]) }),
   };
+  // Клітинкова доріжка — атомний вузол: курсор переходить через неї, виділення її захоплює, друкувати в неї не можна.
+  const { isVoid } = s.view;
+  s.view.isVoid = (el) => (el as unknown as { type: string }).type === "cells" || isVoid(el);
   const history = setupHistory(s);
   interceptTyping(s, history);
-  installCommands(s, history);
-  installCopy(s);
+  const cells = installCells(s, history);
+  const removal = installCommands(s, history, cells);
+  const cellLines = (path: number[]) => {
+    const node = Editor.node(s.view, path)[0];
+    return cellText(s, s.sources[path[0]].line, laneOfNode(node));
+  };
+  installCopy(s, cellLines);
   const paint = installPaint(s, history);
   const unobserve = observeModel(s);
   rebuild(s);
@@ -82,12 +100,22 @@ export function createLaneView(song: Song, display: LaneDisplay, opts: { base?: 
     toModel: (p) => toModel(s, p),
     toView: (p) => toView(s, p),
     modelPieces: (r) =>
-      Array.from(Editor.nodes(s.view, { at: r, match: (_, path) => path.length === 2 }), ([, path]) =>
+      Array.from(Editor.nodes(s.view, { at: r, match: (n, path) => path.length === 2 && !isCellsNode(n) }), ([, path]) =>
         Range.intersection(r, Editor.range(s.view, path)),
       )
         .filter((piece): piece is Range => !!piece && Range.isExpanded(piece))
         .map((piece) => ({ anchor: toModel(s, piece.anchor), focus: toModel(s, piece.focus) })),
     paint,
+    change: (fn) => {
+      history.before();
+      s.undoManager.stopCapturing();
+      s.song.doc.transact(fn, COMMAND);
+      s.undoManager.stopCapturing();
+      history.after();
+    },
+    cells,
+    removal,
+    copyText: () => selectedText(s.view, cellLines),
     undoManager: s.undoManager,
     destroy: () => {
       unobserve();

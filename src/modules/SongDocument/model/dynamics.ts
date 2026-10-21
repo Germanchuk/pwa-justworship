@@ -1,8 +1,7 @@
 /**
- * Динаміка рядка — колір зони ліворуч від рядка. Два шари:
- *  - спільна (`dynamics`) — одне значення в маркері, однакове для всіх;
- *  - особиста (`dynamicsBy`, нік → колір) — бачить лише її власник, і вона
- *    перекриває спільну на цьому рядку.
+ * Динаміка рядка — колір смужки біля рядка. Два шари, кожен на своїй смужці:
+ *  - спільна (`dynamics`, ліворуч) — одне значення в маркері, однакове для всіх;
+ *  - особиста (`dynamicsBy`, нік → колір, праворуч) — бачить лише її власник.
  * Двоє одночасно фарбують той самий рядок — лишається один колір, однаковий
  * в обох копіях; різні рядки й різні люди одне одному не заважають.
  *
@@ -15,7 +14,7 @@ import { layout, lineKind } from "./read";
 import type { Line, LineAt, Song } from "./song";
 
 export type { DynamicsStepKey } from "./dynamicsSteps";
-export { DYNAMICS_STEPS, getDynamicsStepColor } from "./dynamicsSteps";
+export { DYNAMICS_STEPS, getDynamicsStepColor, SILENCE } from "./dynamicsSteps";
 
 /** Чия динаміка: спільна (`null`) чи особиста людини з цим ніком. */
 export type DynamicsLayer = string | null;
@@ -34,11 +33,9 @@ export const personalDynamicsOf = (line: Line): Record<string, DynamicsStepKey> 
     DynamicsStepKey
   >;
 
-/** Колір, який бачить `nick`: свій, а якщо немає — спільний. Лише у відрізка. */
-export const shownDynamics = (l: LineAt, nick: string | null): DynamicsStepKey | null => {
-  if (lineKind(l) !== "segment") return null;
-  return (nick !== null && dynamicsOf(l.line, nick)) || dynamicsOf(l.line);
-};
+/** Колір смужки шару `layer`, який видно. Лише у відрізка. */
+export const shownDynamics = (l: LineAt, layer: DynamicsLayer = null): DynamicsStepKey | null =>
+  lineKind(l) === "segment" ? dynamicsOf(l.line, layer) : null;
 
 /**
  * Пофарбувати рядки в шарі `layer` (`null` у `key` — стерти). Пропускає

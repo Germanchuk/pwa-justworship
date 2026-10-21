@@ -4,7 +4,6 @@ import {
   setSong,
   setNotesAudience,
 } from './songSlice';
-import { useCanAnnotate } from '../mode';
 
 export const useSong = () => useSelector((state: any) => state.song.song);
 export const useStatus = () => useSelector((state: any) => state.song.status);
@@ -38,9 +37,9 @@ export const useSetNotesAudience = () => {
  * правди для всієї системи приміток (`isVisibleToAll`, картки, FAB, втрачені
  * коментарі).
  *
- * У режимі приміток це відмічені в дропдауні учасники (за замовчуванням я
- * сам), у решті режимів — завжди я один: поза режимом приміток чужі примітки
- * не показуються незалежно від того, що лишилось вибраним (`NOTE-22`).
+ * Це відмічені в «⋯ → Показ → Від іншого користувача» учасники, за
+ * замовчуванням я сам — у будь-якому режимі (окремого режиму приміток з
+ * 2026-10-21 немає).
  *
  * `useMemo` тут не косметика: масив іде в deps `NoteHeadsProvider`, і новий
  * масив на кожен рендер перераховував би розкладку карток по всій пісні.
@@ -48,10 +47,8 @@ export const useSetNotesAudience = () => {
 export const useNotesViewers = (): string[] => {
   const me = useSelector((state: any) => state.user?.username as string | undefined);
   const audience = useNotesAudience();
-  const canAnnotate = useCanAnnotate();
   return useMemo(() => {
     const mine = me ? [me] : [];
-    if (!canAnnotate) return mine;
     return audience.length > 0 ? audience : mine;
-  }, [canAnnotate, audience, me]);
+  }, [audience, me]);
 };

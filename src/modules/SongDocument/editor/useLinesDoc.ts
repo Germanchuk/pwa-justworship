@@ -75,9 +75,10 @@ export function useLinesDoc(songId: string | number): { song: Song; synced: bool
 }
 
 /** Перемальовуватись на будь-яку зміну документа (шапка, примітки, особисте). */
-export function useDocVersion(doc: Y.Doc): number {
+export function useDocVersion(doc: Y.Doc | null): number {
   const [version, setVersion] = useState(0);
   useEffect(() => {
+    if (!doc) return;
     const bump = () => setVersion((v) => v + 1);
     doc.on("update", bump);
     return () => doc.off("update", bump);

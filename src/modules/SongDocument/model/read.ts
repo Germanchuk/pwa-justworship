@@ -1,5 +1,6 @@
 /** Читання моделі: рядки по порядку і що в кожному з них. */
 import * as Y from "yjs";
+
 import { LaneType, Line, LineAt, LineKind, Song } from "./song";
 
 /** Рядки пісні по порядку. */
@@ -35,14 +36,39 @@ export function lineOfIndex(lines: readonly LineAt[], index: number) {
 }
 
 export const laneMap = (line: Line, lane: LaneType) => line.get(lane) as Y.Map<unknown>;
-export const chordsOf = (line: Line) => laneMap(line, "chords").get("text") as Y.Text;
+/** Текст доріжки рядка (акорди чи додана текстова); `undefined` — це не текстова доріжка або слота ще немає. */
+export const laneText = (line: Line, lane: LaneType) => {
+  const text = (line.get(lane) as Y.Map<unknown> | undefined)?.get?.("text");
+  return text instanceof Y.Text ? text : undefined;
+};
+export const chordsOf = (line: Line) => laneText(line, "chords")!;
 export const chordsString = (line: Line) => chordsOf(line)?.toString() ?? "";
-export const laneOf = (l: LineAt, lane: LaneType) => (lane === "words" ? l.words : chordsString(l.line));
+/** Чи це текстова доріжка рядка (слова — завжди; решта — коли в слоті текст). */
+export const isTextSlot = (line: Line, lane: LaneType) => lane === "words" || !!laneText(line, lane);
+/** id текстових доріжок рядка, крім слів (акорди й додані текстові). */
+export function textSlotsOf(line: Line): string[] {
+  const out: string[] = [];
+  line.forEach((_, id) => laneText(line, id) && out.push(id));
+  return out;
+}
+export const laneOf = (l: LineAt, lane: LaneType) => (lane === "words" ? l.words : laneText(l.line, lane)?.toString() ?? "");
 export const laneString = (song: Song, ln: number, lane: LaneType) => laneOf(lineAt(song, ln), lane);
 
-/** Вид рядка — з вмісту: `/…` — структурна примітка, нічого — порожній, решта — відрізок. */
+/** Вид рядка — з вмісту: `/…` — структурна примітка, нічого в жодній доріжці — порожній, решта — відрізок. */
 export function lineKind(l: LineAt): LineKind {
   if (l.words.startsWith("/")) return "note";
-  if (!l.words && !chordsString(l.line)) return "empty";
+  if (!l.words && !filledLanes(l.line).length) return "empty";
   return "segment";
+}
+
+/** id доріжок рядка, крім слів, у яких щось є: текст акордів чи доданих текстових, клітинки. */
+export function filledLanes(line: Line): string[] {
+  const out: string[] = [];
+  line.forEach((slot, id) => {
+    if (!(slot instanceof Y.Map)) return;
+    const text = slot.get("text");
+    const cells = slot.get("cells");
+    if ((text instanceof Y.Text && text.length > 0) || (cells instanceof Y.Map && cells.size > 0)) out.push(id);
+  });
+  return out;
 }
