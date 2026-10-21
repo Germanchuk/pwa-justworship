@@ -12,7 +12,7 @@
  * останнього: дописане по краях у позначку не входить.
  */
 import * as Y from "yjs";
-import { chordsOf, laneMap, laneOf, layout, lineOfIndex } from "../read";
+import { laneMap, laneOf, laneText, layout, lineOfIndex } from "../read";
 import type { LaneType, Line, LineAt, Song } from "../song";
 
 /** Кому видно примітку: `ALL` — усім, інакше ніки (автор і адресати). */
@@ -49,7 +49,7 @@ export const rel = (type: Y.AbstractType<unknown>, index: number, assoc: number)
 /** Позначка на символах `from…to` доріжки рядка `ln`. */
 export function noteRange(song: Song, ln: number, lane: LaneType, from: number, to: number): NoteRange {
   const l = layout(song)[ln];
-  const [type, base] = lane === "words" ? [song.text, l.at + 1] : [chordsOf(l.line), 0];
+  const [type, base] = lane === "words" ? [song.text, l.at + 1] : [laneText(l.line, lane)!, 0];
   return { anchor: rel(type, base + from, 0), focus: rel(type, base + to, -1), quote: laneOf(l, lane).slice(from, to) };
 }
 
@@ -66,9 +66,9 @@ export function resolveRange(song: Song, lines: readonly LineAt[], owner: number
   const a = at(range.anchor);
   const f = at(range.focus);
   if (!a || !f) return null;
-  if (lane === "chords") {
-    const chords = chordsOf(lines[owner].line);
-    if (a.type !== chords || f.type !== chords) return null;
+  if (lane !== "words") {
+    const text = laneText(lines[owner].line, lane);
+    if (!text || a.type !== text || f.type !== text) return null;
     return f.index > a.index ? { line: owner, from: a.index, to: f.index } : null;
   }
   if (a.type !== song.text || f.type !== song.text) return null;

@@ -1,12 +1,10 @@
 /** Видалення виділеного — через кілька доріжок і рядків. */
-import { filledCells } from "../lanes";
+import { allLanes, filledCells, isTextKind } from "../lanes";
 import { laneString, lineAt } from "../read";
-import { CanEdit, LANES, LaneType, Pos, Song } from "../song";
+import { CanEdit, LaneType, Pos, Song } from "../song";
 import { eraseIn, removeLine } from "../write";
 import { mergeLine } from "./merge";
 
-const order = (a: Pos, b: Pos) =>
-  a.line - b.line || LANES.indexOf(a.lane) - LANES.indexOf(b.lane) || a.offset - b.offset;
 
 /**
  * Стерти діапазон — як у звичайному тексті, у порядку документа: стирається
@@ -16,6 +14,9 @@ const order = (a: Pos, b: Pos) =>
  * склеюється. Клітинки видимих доріжок у виділенні стирає місток (`commands.ts`).
  */
 export function deleteRange(song: Song, a: Pos, b: Pos, canEdit: CanEdit): Pos {
+  // Текстові доріжки рядка згори донизу: додані текстові, акорди, слова (і прибрані — їх не видно, тож не стираються).
+  const LANES = allLanes(song.doc).flatMap((l) => (isTextKind(l.kind) ? [l.id] : []));
+  const order = (x: Pos, y: Pos) => x.line - y.line || LANES.indexOf(x.lane) - LANES.indexOf(y.lane) || x.offset - y.offset;
   const [start, end] = order(a, b) <= 0 ? [a, b] : [b, a];
   const length = (ln: number, lane: LaneType) => laneString(song, ln, lane).length;
   const erase = (ln: number, lane: LaneType, from: number, to: number) => {

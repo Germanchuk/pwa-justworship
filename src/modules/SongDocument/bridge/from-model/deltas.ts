@@ -1,7 +1,7 @@
 /** Точні правки тексту з подій Yjs — у видиме дерево, без вгадування різниці. */
 import * as Y from "yjs";
 import { Node, Path } from "slate";
-import { chordsOf, Line, LineAt } from "../../model";
+import { laneText, Line, LineAt } from "../../model";
 import type { ViewState } from "../state";
 
 type Delta = Y.YTextEvent["delta"];
@@ -11,10 +11,15 @@ const insertAt = (s: ViewState, path: Path, offset: number, text: string) =>
 const removeAt = (s: ViewState, path: Path, offset: number, length: number) =>
   s.view.apply({ type: "remove_text", path, offset, text: Node.string(Node.get(s.view, path)).slice(offset, offset + length) });
 
-/** Дельта рядка акордів — у видиме як є. */
-export function applyChordsDelta(s: ViewState, target: Y.Text, delta: Delta) {
-  const vln = s.sources.findIndex((src) => chordsOf(src.line) === target);
-  const vl = vln < 0 ? -1 : s.sources[vln].lanes.indexOf("chords");
+/** Дельта тексту доріжки рядка (акорди, додана текстова) — у видиме як є. */
+export function applyLaneDelta(s: ViewState, target: Y.Text, delta: Delta) {
+  let vln = -1;
+  let vl = -1;
+  s.sources.some(({ line, lanes }, i) => {
+    const at = lanes.findIndex((lane) => lane !== "words" && laneText(line, lane) === target);
+    if (at >= 0) [vln, vl] = [i, at];
+    return at >= 0;
+  });
   if (vl < 0) return; // доріжку цей учасник не бачить
   const path: Path = [vln, vl, 0];
   let offset = 0;

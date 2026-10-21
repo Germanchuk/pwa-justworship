@@ -18,7 +18,7 @@ import {
 import type { Cells } from "../cells";
 import type { History } from "../history";
 import { toModel, toView } from "../positions";
-import { isShown, isTextLane, laneOfNode } from "../projection";
+import { isCellsNode, isShown, laneOfNode } from "../projection";
 import { COMMAND, quietly, ViewState } from "../state";
 
 export function installCommands(s: ViewState, history: History, cells: Cells) {
@@ -32,7 +32,7 @@ export function installCommands(s: ViewState, history: History, cells: Cells) {
    */
   const removeSelection = (anchor: Pos, focus: Pos) => {
     const cells = Array.from(
-      Editor.nodes(view, { at: view.selection!, match: (n, path) => path.length === 2 && !isTextLane(laneOfNode(n)) }),
+      Editor.nodes(view, { at: view.selection!, match: (n, path) => path.length === 2 && isCellsNode(n) }),
       ([n, path]) => ({ line: s.sources[path[0]].line, id: laneOfNode(n) }),
     );
     const at = deleteRange(song, anchor, focus, canEdit);

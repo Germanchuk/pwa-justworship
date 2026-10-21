@@ -27,7 +27,7 @@ import { alignLines, rebuild } from "./from-model/align";
 import { observeModel } from "./from-model/observe";
 import { setupHistory } from "./history";
 import { indexOf, toModel, toView } from "./positions";
-import { isShown, isTextLane, LaneDisplay, laneOfNode } from "./projection";
+import { isCellsNode, isShown, LaneDisplay, laneOfNode } from "./projection";
 import { COMMAND, quietly, TYPING, ViewState } from "./state";
 import { installCommands } from "./to-model/commands";
 import { installPaint, Paint } from "./to-model/paint";
@@ -98,7 +98,7 @@ export function createLaneView(song: Song, display: LaneDisplay, opts: { base?: 
     toModel: (p) => toModel(s, p),
     toView: (p) => toView(s, p),
     modelPieces: (r) =>
-      Array.from(Editor.nodes(s.view, { at: r, match: (n, path) => path.length === 2 && isTextLane(laneOfNode(n)) }), ([, path]) =>
+      Array.from(Editor.nodes(s.view, { at: r, match: (n, path) => path.length === 2 && !isCellsNode(n) }), ([, path]) =>
         Range.intersection(r, Editor.range(s.view, path)),
       )
         .filter((piece): piece is Range => !!piece && Range.isExpanded(piece))

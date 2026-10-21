@@ -6,7 +6,7 @@ import * as Y from "yjs";
 import { layout } from "../../model";
 import { quietly, TYPING, ViewState } from "../state";
 import { alignLines } from "./align";
-import { applyChordsDelta, applyWordsDelta } from "./deltas";
+import { applyLaneDelta, applyWordsDelta } from "./deltas";
 
 /** Підписатися на модель; повертає відписку. */
 export function observeModel(s: ViewState) {
@@ -19,7 +19,7 @@ export function observeModel(s: ViewState) {
       events.forEach((e) => {
         if (!(e instanceof Y.YTextEvent)) return; // кахон, примітки — не в дереві Slate
         if (e.target === s.song.text) applyWordsDelta(s, e.delta, before, fresh);
-        else if (!fresh.has(e.target)) applyChordsDelta(s, e.target, e.delta);
+        else if (!fresh.has(e.target)) applyLaneDelta(s, e.target as Y.Text, e.delta);
       });
     });
   };

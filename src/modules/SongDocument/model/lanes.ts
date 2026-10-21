@@ -10,10 +10,11 @@
  * завгодно, над акордами в порядку `order`; їхня механіка — згодом.
  */
 import * as Y from "yjs";
-import type { LaneType, Line, Song } from "./song";
+import type { Line, Song } from "./song";
 
-export type LaneKind = LaneType | "blocks" | "tab" | "cajon";
-export type CellKind = Exclude<LaneKind, LaneType>;
+/** `text` — додана текстова доріжка (вигуки, бек-вокал): правиться як акорди, текстом у Slate. */
+export type LaneKind = "words" | "chords" | "text" | "blocks" | "tab" | "cajon";
+export type CellKind = "blocks" | "tab" | "cajon";
 export type LaneDef = { id: string; kind: LaneKind; name: string; order: number; removed: boolean };
 
 /** Види, які можна додати в пісню (слова й акорди є завжди). */
@@ -21,11 +22,15 @@ export const CELL_KINDS: readonly CellKind[] = ["blocks", "tab", "cajon"];
 export const KIND_NAMES: Record<LaneKind, string> = {
   words: "Слова",
   chords: "Акорди",
+  text: "Вигуки",
   blocks: "Прямокутники",
   tab: "Таби",
   cajon: "Кахон",
 };
-export const isTextKind = (kind: LaneKind): kind is LaneType => kind === "words" || kind === "chords";
+/** Текстові доріжки правляться в Slate: слова, акорди й додані `text`. */
+export const isTextKind = (kind: LaneKind) => kind === "words" || kind === "chords" || kind === "text";
+/** Слова й акорди — стале місце внизу, не перетягуються й не прибираються. */
+export const isBuiltinKind = (kind: LaneKind) => kind === "words" || kind === "chords";
 
 /** Слова й акорди — під усіма доданими: акорди другі знизу, слова найнижчі. */
 const BUILTIN: readonly LaneDef[] = [
@@ -42,7 +47,7 @@ function addedLanes(doc: Y.Doc): LaneDef[] {
   const out: LaneDef[] = [];
   lanesMap(doc).forEach((rec, id) => {
     const kind = rec.get("kind") as LaneKind;
-    if (isTextKind(kind)) return; // слова й акорди мають стале місце
+    if (isBuiltinKind(kind)) return; // слова й акорди мають стале місце
     out.push({ id, kind, name: (rec.get("name") as string) ?? "", order: (rec.get("order") as number) ?? 0, removed: rec.get("removed") === true });
   });
   return out.sort(byOrder);
@@ -57,7 +62,7 @@ export const songLanes = (doc: Y.Doc) => allLanes(doc).filter((l) => !l.removed)
 /** Слот доріжки виду `kind` для рядка (`chords` — текст акордів; до вставки в документ Y.Map свого вмісту не віддає). */
 export function newSlot(kind: LaneKind, chords = ""): Y.Map<unknown> {
   const slot = new Y.Map<unknown>();
-  if (kind === "chords") slot.set("text", new Y.Text(chords));
+  if (kind === "chords" || kind === "text") slot.set("text", new Y.Text(chords));
   else if (kind !== "words") slot.set("cells", new Y.Map());
   slot.set("notes", new Y.Map());
   return slot;
@@ -97,7 +102,7 @@ const newId = () => `l-${Math.random().toString(36).slice(2, 8)}`;
  * порожнім слотом у кожному рядку. Назва за замовчуванням — вид з номером («Таби 2»). Повертає id.
  * Викликати в транзакції.
  */
-export function addLane(song: Song, kind: CellKind, lines: readonly Line[], name?: string): string {
+export function addLane(song: Song, kind: CellKind | "text", lines: readonly Line[], name?: string): string {
   const added = addedLanes(song.doc);
   const id = newId();
   const same = added.filter((l) => l.kind === kind).length;
@@ -113,7 +118,7 @@ export function addLane(song: Song, kind: CellKind, lines: readonly Line[], name
 /** Запис доданої доріжки; слова й акорди не змінюються. */
 function recordOf(doc: Y.Doc, id: string): Y.Map<unknown> {
   const rec = lanesMap(doc).get(id);
-  if (!rec || isTextKind(rec.get("kind") as LaneKind)) throw new Error(`lanes: доріжки ${id} немає серед доданих`);
+  if (!rec || isBuiltinKind(rec.get("kind") as LaneKind)) throw new Error(`lanes: доріжки ${id} немає серед доданих`);
   return rec;
 }
 

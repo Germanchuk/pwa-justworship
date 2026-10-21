@@ -80,7 +80,8 @@ export function groupLines(lines: string[], order: readonly { id: string; kind: 
  */
 export function insertPlainText(song: Song, at: Pos, pasted: string): Pos {
   const parts = pasted.split(/\r?\n/);
-  if (at.lane === "chords") return insertText(song, at, parts.join(" ")) ?? at;
+  // У будь-яку доріжку, крім слів (акорди, вигуки), — одним рядком через пробіл.
+  if (at.lane !== "words") return insertText(song, at, parts.join(" ")) ?? at;
   const order = songLanes(song.doc).map(({ id, kind }) => ({ id, kind }));
   const steps = stepsPerBar(readMeta(song.doc).timeSignature);
   return groupLines(parts, order, steps).reduce<Pos>((pos, { chords, words, cells }, i) => {

@@ -78,6 +78,13 @@ export function LanesPanel({ song, change, onClose }: Props) {
 
       <div className="mt-3 text-xs text-stone-500">Додати доріжку</div>
       <div className="mt-1 flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          className="rounded border px-2 py-1 text-sm hover:bg-stone-50"
+          onClick={() => change(() => addLane(song, "text", linesOf(song)))}
+        >
+          + Слова (вигуки)
+        </button>
         {CELL_KINDS.map((kind) => (
           <button
             key={kind}
@@ -106,7 +113,7 @@ export function LanesPanel({ song, change, onClose }: Props) {
         </>
       )}
 
-      <div className="mt-2 text-xs text-stone-400">Механіка прямокутників, табів і кахона — згодом; зараз доріжка лише з'являється в кожному рядку.</div>
+      <div className="mt-2 text-xs text-stone-400">Вигуки — текстом, як акорди. Прямокутники, таби й кахон — прототип.</div>
       <div className="flex justify-end mt-3">
         <button type="button" className="px-3 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50" onClick={onClose}>
           Готово

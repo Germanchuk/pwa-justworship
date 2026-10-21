@@ -118,7 +118,7 @@ export function SongHeader({ song, me, canEdit, capoApplies, change }: Props) {
         {me && (
           <span className="display-toggles">
             {songLanes(doc).map(({ id: lane, kind, name: label }) => {
-              const Icon = kind === "words" || kind === "chords" ? LANE_ICONS[kind] : Squares2X2Icon;
+              const Icon = kind === "words" || kind === "chords" ? LANE_ICONS[kind] : kind === "text" ? LANE_ICONS.words : Squares2X2Icon;
               return (
               <span key={lane} className="song-meta-line">
                 <span

@@ -1,39 +1,43 @@
 /** Склеювання рядків: Backspace на початку слів і Delete у їхньому кінці. */
 import * as Y from "yjs";
 import { appendCells } from "../cells";
-import { movableNotes, moveChordsNote, moveWordsNote } from "../notes/move";
-import { chordsOf, chordsString, layout, lineAt } from "../read";
+import { movableNotes, moveLaneNote, moveWordsNote } from "../notes/move";
+import { laneText, layout, lineAt, textSlotsOf } from "../read";
 import type { Pos, Song } from "../song";
 
 /**
  * Склеїти рядок `ln` з попереднім — видалити його маркер: слова самі стають
- * словами попереднього. Непорожні акорди дописуються вирівняними під кінець
- * слів (це копія), примітки обох доріжок переїжджають у попередній рядок.
- * Клітинкові доріжки дописуються після тактів попереднього (теж копія).
- * Динаміка — попереднього рядка (як і решта його полів).
+ * словами попереднього. Непорожні акорди й додані текстові доріжки
+ * дописуються вирівняними під кінець слів (це копія), примітки всіх доріжок
+ * переїжджають у попередній рядок. Клітинкові доріжки дописуються після
+ * тактів попереднього (теж копія). Динаміка — попереднього рядка (як і решта
+ * його полів).
  */
 export function mergeLine(song: Song, ln: number): Pos {
   const prev = lineAt(song, ln - 1);
   const cur = lineAt(song, ln);
-  const chords = chordsOf(prev.line);
-  const tail = chordsString(cur.line);
-  // До правок: позиції в акордах `cur` ще живі.
+  // До правок: позиції в текстах `cur` ще живі.
   const wordsNotes = movableNotes(song, ln, "words");
-  const chordsNotes = movableNotes(song, ln, "chords");
+  const lanes = textSlotsOf(cur.line).filter((id) => laneText(prev.line, id));
+  const laneNotes = lanes.map((id) => movableNotes(song, ln, id));
 
-  let shift = chords.length;
-  if (tail.trim()) {
-    const wordsLen = prev.words.length;
-    const pad = chords.length < wordsLen ? " ".repeat(wordsLen - chords.length) : chords.length ? " " : "";
-    shift = chords.length + pad.length;
-    chords.insert(chords.length, pad + tail);
-  }
+  lanes.forEach((id, i) => {
+    const text = laneText(prev.line, id)!;
+    const tail = laneText(cur.line, id)!.toString();
+    let shift = text.length;
+    if (tail.trim()) {
+      const wordsLen = prev.words.length;
+      const pad = text.length < wordsLen ? " ".repeat(wordsLen - text.length) : text.length ? " " : "";
+      shift = text.length + pad.length;
+      text.insert(text.length, pad + tail);
+    }
+    laneNotes[i].forEach((n) => moveLaneNote(cur.line, prev.line, id, n, shift));
+  });
   cur.line.forEach((slot, id) => {
     const to = prev.line.get(id);
     if (slot instanceof Y.Map && slot.has("cells") && to instanceof Y.Map) appendCells(slot, to);
   });
   wordsNotes.forEach(({ note }) => moveWordsNote(cur.line, prev.line, note));
-  chordsNotes.forEach((n) => moveChordsNote(cur.line, prev.line, n, shift));
   song.text.delete(cur.at, 1);
   return { line: ln - 1, lane: "words", offset: prev.words.length };
 }

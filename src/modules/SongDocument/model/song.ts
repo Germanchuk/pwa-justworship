@@ -24,10 +24,13 @@
  */
 import * as Y from "yjs";
 import type { DynamicsStepKey } from "./dynamicsSteps";
-import { allLanes, isTextKind, newSlot, type LaneDef } from "./lanes";
+import { allLanes, isBuiltinKind, newSlot, type LaneDef } from "./lanes";
 
-/** Текстові доріжки — ті, що правляться в Slate; у рядку завжди акорди над словами, найнижче (ADR-0008). */
-export type LaneType = "chords" | "words";
+/**
+ * Текстова доріжка рядка — її id: `words`, `chords` або id доданої текстової
+ * (`lanes.ts`). Слова й акорди завжди внизу рядка: акорди над словами (ADR-0008).
+ */
+export type LaneType = string;
 export const LANES: readonly LaneType[] = ["chords", "words"];
 export type LineKind = "segment" | "empty" | "note";
 
@@ -61,7 +64,7 @@ export function newLine({ chords = "", dynamics, dynamicsBy = {} }: Omit<LineIni
   const line = new Y.Map<unknown>();
   line.set("chords", newSlot("chords", chords));
   line.set("words", newSlot("words"));
-  lanes.forEach((lane) => isTextKind(lane.kind) || line.set(lane.id, newSlot(lane.kind)));
+  lanes.forEach((lane) => isBuiltinKind(lane.kind) || line.set(lane.id, newSlot(lane.kind)));
   line.set("dynamicsBy", new Y.Map<string>(Object.entries(dynamicsBy)));
   if (dynamics) line.set("dynamics", dynamics);
   return line;

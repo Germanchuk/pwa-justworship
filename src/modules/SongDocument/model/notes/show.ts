@@ -1,6 +1,6 @@
 /** Примітки для показу: над яким рядком картка, що зараз позначено, чи видно. */
-import { layout } from "../read";
-import { LANES, LaneType, Line, Song } from "../song";
+import { layout, textSlotsOf } from "../read";
+import type { LaneType, Line, Song } from "../song";
 import { Audience, canSee, NoteRecord, notesOf, resolveRange, TextAt } from "./marks";
 
 export type NoteView = {
@@ -21,7 +21,7 @@ export type NoteView = {
 export function resolveNotes(song: Song, audience: Audience, isShown: (line: number, lane: LaneType) => boolean): NoteView[] {
   const lines = layout(song);
   return lines.flatMap((l, owner) =>
-    LANES.flatMap((lane) =>
+    [...textSlotsOf(l.line), "words"].flatMap((lane) =>
       Array.from(notesOf(l.line, lane).values())
         .filter((note) => canSee(note, audience))
         .map((note): NoteView => {

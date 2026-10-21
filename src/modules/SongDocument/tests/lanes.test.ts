@@ -7,8 +7,14 @@ import type { LaneDisplay, LaneView } from "../bridge/laneView";
 import {
   addLane,
   allLanes,
+  addNote,
+  ALL as ALL_SEE,
   cellsOf,
   chordsString,
+  laneText,
+  mergeLine,
+  resolveNotes,
+  Song,
   ensureSlots,
   insertPlainText,
   layout,
@@ -220,5 +226,67 @@ describe("клітинкові доріжки — атомні вузли вид
     expect(order()).toEqual([cajon, tab, "chords", "words"]);
     A.undoManager.undo();
     expect(order()).toEqual([tab, cajon, "chords", "words"]);
+  });
+});
+
+describe("додана текстова доріжка (вигуки) — правиться як акорди", () => {
+  const SONG = [
+    { words: "Ти святий", chords: "Am F" },
+    { words: "Господь", chords: "C G" },
+  ];
+  const vocalsOf = (song: Song, id: string) => linesOf(song).map((line) => laneText(line, id)?.toString());
+  const rows = (h: LaneView) =>
+    h.view.children.map((l) =>
+      (l as Element).children.map((c) => `${(c as unknown as { type: string }).type}:${Node.string(c)}`).join(" | "),
+    );
+  const withVocals = (b: LaneDisplay = ALL) => {
+    const ctx = setup(SONG, ALL, b);
+    let id = "";
+    ctx.A.change(() => (id = addLane(ctx.net.A, "text", linesOf(ctx.net.A))));
+    return { ...ctx, id };
+  };
+
+  it("стоїть над акордами, назва — «Вигуки»; друк іде в її текст і доходить до інших", () => {
+    const { net, A, B, id } = withVocals();
+    expect(songLanes(net.B.doc).map((l) => l.name)).toEqual(["Вигуки", "Акорди", "Слова"]);
+    expect(rows(B)[0]).toBe("text: | chords:Am F | words:Ти святий");
+    at(A, 0, 0, 0);
+    A.view.insertText("Ей!");
+    expect(vocalsOf(net.B, id)).toEqual(["Ей!", ""]);
+    expect(rows(B)[0]).toBe("text:Ей! | chords:Am F | words:Ти святий");
+  });
+
+  it("Enter — вигуки лишаються першій частині; склеювання — дописуються вирівняними під кінець слів", () => {
+    const { net, A, id } = withVocals();
+    change(net.A, () => laneText(linesOf(net.A)[1], id)!.insert(0, "О-о"));
+    change(net.A, () => mergeLine(net.A, 1));
+    expect(layout(net.B).map((l) => l.words)).toEqual(["Ти святийГосподь"]);
+    expect(vocalsOf(net.B, id)).toEqual(["         О-о"]);
+    at(A, 0, 2, 3);
+    A.view.insertBreak();
+    expect(vocalsOf(net.B, id)).toEqual(["         О-о", ""]);
+  });
+
+  it("примітка на вигуках — над своєю доріжкою; сховав доріжку — сховалась і примітка", () => {
+    const { net, B, id } = withVocals();
+    change(net.A, () => laneText(linesOf(net.A)[0], id)!.insert(0, "Ей!"));
+    change(net.A, () =>
+      addNote(net.A, 0, id, 0, 3, { id: "n", author: "Оля", visibleFor: [ALL_SEE], color: "#F5C518", body: "голосно" }),
+    );
+    const seen = (h: LaneView) => resolveNotes(net.B, [], h.isShown).map((n) => `${n.lane === id ? "вигуки" : n.lane}:${n.status}`);
+    expect(seen(B)).toEqual(["вигуки:visible"]);
+    B.setDisplay({ ...ALL, hidden: [id] });
+    expect(seen(B)).toEqual(["вигуки:hidden"]);
+    expect(rows(B)[0]).toBe("chords:Am F | words:Ти святий");
+  });
+
+  it("видалення через рядки стирає вигуки, що потрапили у виділення", () => {
+    const { net, A, id } = withVocals();
+    change(net.A, () => linesOf(net.A).forEach((line, i) => laneText(line, id)!.insert(0, `в${i}`)));
+    // від «святий» (рядок 0, слова) до «Го|сподь» (рядок 1, слова): вигуки й акорди рядка 1 — у виділенні
+    Transforms.select(A.view, { anchor: { path: [0, 2, 0], offset: 3 }, focus: { path: [1, 2, 0], offset: 2 } });
+    A.view.deleteFragment();
+    expect(layout(net.B).map((l) => l.words)).toEqual(["Ти сподь"]);
+    expect(vocalsOf(net.B, id)).toEqual(["в0"]);
   });
 });

@@ -1,5 +1,5 @@
 /** Перенесення записів приміток між рядками — при Enter і склеюванні. */
-import { chordsOf, layout } from "../read";
+import { laneText, layout } from "../read";
 import type { LaneType, Line, Song } from "../song";
 import { NoteRecord, notesOf, rel, resolveRange, TextAt } from "./marks";
 
@@ -21,16 +21,16 @@ export function moveWordsNote(from: Line, to: Line, note: NoteRecord) {
 }
 
 /**
- * Перенести примітку акордів у рядок акордів `to`, зсунуту на `shift`
- * (акорди `from` дописані туди з цього місця). Позначене, що вже зникло, —
- * примітка лишається з тим самим записом (її покажуть як втрачену).
- * Викликати, поки маркер `from` ще в документі.
+ * Перенести примітку текстової доріжки `lane` (акорди, додана) у ту саму
+ * доріжку рядка `to`, зсунуту на `shift` (текст `from` дописаний туди з цього
+ * місця). Позначене, що вже зникло, — примітка лишається з тим самим записом
+ * (її покажуть як втрачену). Викликати, поки маркер `from` ще в документі.
  */
-export function moveChordsNote(from: Line, to: Line, { note, at }: MovableNote, shift: number) {
-  const chords = chordsOf(to);
-  notesOf(from, "chords").delete(note.id);
-  notesOf(to, "chords").set(
+export function moveLaneNote(from: Line, to: Line, lane: LaneType, { note, at }: MovableNote, shift: number) {
+  const text = laneText(to, lane)!;
+  notesOf(from, lane).delete(note.id);
+  notesOf(to, lane).set(
     note.id,
-    at ? { ...note, anchor: rel(chords, at.from + shift, 0), focus: rel(chords, at.to + shift, -1) } : note,
+    at ? { ...note, anchor: rel(text, at.from + shift, 0), focus: rel(text, at.to + shift, -1) } : note,
   );
 }

@@ -22,7 +22,7 @@ import {
   writeParsed,
 } from "../model";
 import type { History } from "./history";
-import { isTextLane, laneOfNode } from "./projection";
+import { isCellsNode, laneOfNode } from "./projection";
 import { COMMAND, TYPING, ViewState } from "./state";
 
 export type CellCursor = { line: Line; lane: string; kind: CellKind; at: CellAt; prev: string | null };
@@ -68,7 +68,7 @@ export function installCells(s: ViewState, history: History): Cells {
     const node = path && path.length === 2 && Editor.hasPath(view, path) ? Editor.node(view, path)[0] : null;
     const lane = node ? laneOfNode(node) : null;
     const src = path ? s.sources[path[0]] : null;
-    const kind = lane && !isTextLane(lane) ? kindOf(s, lane) : undefined;
+    const kind = node && isCellsNode(node) && lane ? kindOf(s, lane) : undefined;
     if (!src || !lane || !kind || isTextKind(kind)) {
       if (cursor) {
         cursor = null;
