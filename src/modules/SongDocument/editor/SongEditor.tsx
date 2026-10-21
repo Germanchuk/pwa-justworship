@@ -3,8 +3,9 @@
  * дерево Slate поверх неї — лише ті доріжки, які людина вибрала бачити.
  *
  * Режим — зі шляху (`SingleSong/mode.tsx`): читання — без contentEditable,
- * капо діє; правка — вміст, шапка й динаміка; примітки — виділення й картки.
- * Особистий вибір доріжок діє в усіх режимах (ADR-0006).
+ * капо діє; правка — вміст і шапка. Примітки (виділення → палітра) і
+ * динаміка (поки відкрита її панель) — в обох режимах. Особистий вибір
+ * доріжок діє в усіх режимах (ADR-0006).
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createEditor, Editor, Node, NodeEntry, Range, Text, Transforms } from "slate";
@@ -21,19 +22,21 @@ import {
   readCapo,
   readHiddenLanes,
   readMeta,
-  removeNote,
   resolveNotes,
   Song,
-  type NoteView,
+  updateNote,
 } from "../model";
 import { createLaneView, type LaneDisplay } from "../bridge/laneView";
 import { Ctx, type EditorCtx } from "./context";
+import { setActiveSong } from "./activeSong";
 import { DynamicsPalette } from "./dynamics/DynamicsPalette";
+import { setDynamicsPanel, useDynamicsPanel } from "./dynamics/panel";
 import { useStroke, type Brush } from "./dynamics/useStroke";
-import { Leaf } from "./elements/Leaf";
+import { FOREIGN_KEY, Leaf, NOTE_KEY } from "./elements/Leaf";
 import { renderElement } from "./elements/renderElement";
 import { SongHeader } from "./header/SongHeader";
-import { NoteComposer, type NoteTarget } from "./notes/NoteComposer";
+import { LostNotes } from "./notes/LostNotes";
+import { NotesTools } from "./notes/NotesTools";
 import { RemovalWarning } from "./RemovalWarning";
 import { useColumnsRelayout } from "./layout/useColumnsRelayout";
 import { useFillViewportHeight } from "./layout/useFillViewportHeight";
@@ -108,9 +111,20 @@ function LoadedEditor({ song }: { song: Song }) {
   useEffect(() => lanes.cells.listen(() => cellMoved((n) => n + 1)), [lanes]);
   useEffect(() => lanes.removal.listen(() => cellMoved((n) => n + 1)), [lanes]);
 
+  // Пісня — для меню поза редактором; панель динаміки нової пісні — закрита.
+  useEffect(() => {
+    setActiveSong(song);
+    return () => {
+      setActiveSong(null);
+      setDynamicsPanel(false);
+    };
+  }, [song]);
+
   const [brush, setBrush] = useState<Brush>("calm");
   const stroke = useStroke(song, brush, lanes.paint);
-  const [composing, setComposing] = useState<NoteTarget | null>(null);
+  const painting = useDynamicsPanel();
+  // Примітки без тексту, яким щойно «додали нотатку» — їхня картка порожня, але показана.
+  const [drafts, setDrafts] = useState<string[]>([]);
   const [cursorLine, setCursorLine] = useState<number | null>(null);
   const editableRef = useRef<HTMLDivElement | null>(null);
   useFillViewportHeight(editableRef);
@@ -119,9 +133,10 @@ function LoadedEditor({ song }: { song: Song }) {
   const meta = readMeta(song.doc);
   const capo = me ? readCapo(song.doc, me) : { fret: 0, off: false };
   const activeCapo = capoApplies && !capo.off ? capo.fret : 0;
-  // Чиїми очима: поза режимом приміток — своїми, у примітках — вибраних у меню.
+  // Чиїми очима — вибраних у «⋯ → Показ → Від іншого користувача» (за замовчуванням своїми).
+  // У правці — ще й чужі, сірим (`NOTE-15`): правка зачепить чужий якір.
   const viewers = useNotesViewers();
-  const notes = resolveNotes(song, viewers, lanes.isShown);
+  const notes = resolveNotes(song, viewers, lanes.isShown, { others: canEdit });
 
   // Дрон грає ЦЮ пісню: тональність і темп — з документа на кожне «увімкнути».
   useEffect(() => {
@@ -144,7 +159,8 @@ function LoadedEditor({ song }: { song: Song }) {
     if (n.status !== "visible" || !n.at) return [];
     const anchor = lanes.toView({ line: n.at.line, lane: n.lane, offset: n.at.from });
     const focus = lanes.toView({ line: n.at.line, lane: n.lane, offset: n.at.to });
-    return anchor && focus ? [{ anchor, focus, noteColor: n.note.color }] : [];
+    const mark = n.foreign ? { [FOREIGN_KEY + n.note.id]: true } : { [NOTE_KEY + n.note.id]: n.note.color };
+    return anchor && focus ? [{ anchor, focus, mark }] : [];
   });
   const rangesKey = JSON.stringify(ranges);
   const decorate = useCallback(
@@ -156,7 +172,7 @@ function LoadedEditor({ song }: { song: Song }) {
         ...slash,
         ...ranges.flatMap((r) => {
           const piece = Range.intersection(r, Editor.range(view, path));
-          return piece && !Range.isCollapsed(piece) ? [{ ...piece, noteColor: r.noteColor }] : [];
+          return piece && !Range.isCollapsed(piece) ? [{ ...piece, ...r.mark }] : [];
         }),
       ];
     },
@@ -164,46 +180,28 @@ function LoadedEditor({ song }: { song: Song }) {
     [rangesKey, view],
   );
 
-  /** Виділене в браузері → одна доріжка одного рядка для нової примітки. */
-  const startNote = () => {
-    const dom = window.getSelection();
-    const range = dom && dom.rangeCount ? ReactEditor.toSlateRange(view, dom, { exactMatch: false, suppressThrow: true }) : null;
-    const pieces = range ? lanes.modelPieces(range) : [];
-    if (pieces.length !== 1) {
-      window.alert(pieces.length ? "Примітка — в одному рядку й одній доріжці: виділіть лише слова або лише акорди одного рядка." : "Спершу виділіть текст.");
-      return;
-    }
-    const [piece] = pieces;
-    // Текст доріжки у видимому — той самий, що в моделі.
-    const laneText = Node.string(Node.get(view, Range.start(range!).path.slice(0, 2)));
-    const [from, to] = [piece.anchor.offset, piece.focus.offset].sort((a, b) => a - b);
-    setComposing({ ...piece, quote: laneText.slice(from, to) });
-  };
-
   const ctx: EditorCtx = {
     song,
     lanes,
     me,
     notes,
+    drafts,
     capo: activeCapo,
     songKey: meta.key,
     canEdit,
     canAnnotate,
-    stroke: canEdit ? stroke : null,
+    stroke: painting ? stroke : null,
     cursorLine,
     viewers,
-    onNoteDelete: (n: NoteView) => song.doc.transact(() => removeNote(n.holder, n.lane, n.note, viewers)),
+    onNoteBody: (n, body) => song.doc.transact(() => updateNote(n.holder, n.lane, n.note.id, { body })),
+    onNoteBlur: (n) => setDrafts((d) => d.filter((id) => id !== n.note.id)),
   };
 
   return (
     <Ctx.Provider value={ctx}>
       <div data-song-editor className="relative">
         <SongHeader song={song} me={me} canEdit={canEdit} capoApplies={capoApplies} change={lanes.change} />
-        {canEdit && (
-          <div className="mb-2 pl-4">
-            <DynamicsPalette brush={brush} setBrush={setBrush} />
-          </div>
-        )}
+        <LostNotes song={song} notes={notes} />
         <Slate
           editor={view}
           initialValue={view.children}
@@ -219,23 +217,25 @@ function LoadedEditor({ song }: { song: Song }) {
             decorate={decorate}
             onContextMenu={(e) => e.preventDefault()}
             onKeyDown={(e) => {
+              if (!ReactEditor.hasEditableTarget(view, e.target)) return; // поле картки примітки
               if (e.key === "Escape") lanes.removal.cancel();
               if (lanes.cells.key(e)) e.preventDefault();
             }}
           />
         </Slate>
         {canAnnotate && me && (
-          <button
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={startNote}
-            className="fixed bottom-6 right-6 z-40 rounded-full bg-amber-500 text-white shadow-lg px-4 py-3 text-sm font-semibold"
-          >
-            + Примітка
-          </button>
+          <NotesTools
+            song={song}
+            lanes={lanes}
+            me={me}
+            viewers={viewers}
+            notes={notes}
+            addDraft={(id) => setDrafts((d) => [...d, id])}
+            dropDraft={(id) => setDrafts((d) => d.filter((x) => x !== id))}
+          />
         )}
+        {painting && <DynamicsPalette brush={brush} setBrush={setBrush} />}
         {canEdit && <RemovalWarning />}
-        {composing && me && <NoteComposer song={song} me={me} audience={viewers} target={composing} onClose={() => setComposing(null)} />}
       </div>
     </Ctx.Provider>
   );

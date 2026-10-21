@@ -6,10 +6,13 @@
  */
 import { allLanes, KIND_NAMES } from "../model";
 import { useEditorCtx } from "./context";
+import { DYNAMICS_PANEL_BOTTOM } from "./dynamics/DynamicsPalette";
+import { useDynamicsPanel } from "./dynamics/panel";
 
 export function RemovalWarning() {
   const { lanes, song } = useEditorCtx();
   const pending = lanes.removal.pending();
+  const panel = useDynamicsPanel();
   if (!pending) return null;
   const all = allLanes(song.doc);
   const what =
@@ -32,6 +35,8 @@ export function RemovalWarning() {
   return (
     <div
       role="alert"
+      // Відкрита панель динаміки стоїть там само — попередження над нею.
+      style={panel ? { bottom: `calc(${DYNAMICS_PANEL_BOTTOM} + 6.5rem)` } : undefined}
       className="fixed left-1/2 -translate-x-1/2 bottom-24 z-50 w-[min(92vw,26rem)] rounded-lg bg-stone-800 text-white text-sm shadow-lg px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1"
     >
       <span className="flex-1 min-w-[12rem]">{what}</span>

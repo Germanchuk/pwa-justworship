@@ -29,7 +29,10 @@ export function TextLane({ attributes, children, element, lane }: RenderElementP
   const transposed = lane === "chords" && ctx.capo > 0 && !ctx.canEdit;
   const note = lane === "words" && kind === "note";
   // Картки приміток — над тією доріжкою, до якої примітка.
-  const cards = ctx.notes.filter((n) => n.line === ln && n.lane === lane && n.status === "visible" && (n.note.body || ctx.canAnnotate));
+  // Картка — коли в примітки є текст або його саме пишуть; без тексту — лише підсвітка.
+  const cards = ctx.notes.filter(
+    (n) => n.line === ln && n.lane === lane && n.status === "visible" && !n.foreign && (n.note.body || ctx.drafts.includes(n.note.id)),
+  );
   return (
     <div
       {...attributes}

@@ -106,3 +106,23 @@ export function removeNote(line: Line, lane: LaneType, note: NoteRecord, audienc
 /** Скільки людей бачить примітку поза `audience` — «+N» на картці (`NOTE-31`); публічна — 0. */
 export const othersSeeing = (note: NoteRecord, audience: Audience) =>
   note.visibleFor.includes(ALL) ? 0 : note.visibleFor.filter((nick) => !audience.includes(nick)).length;
+
+/** Змінити поля запису примітки: колір, текст, адресати (`NOTE-4`, `NOTE-37`, `NOTE-42`). Викликати в транзакції. */
+export function updateNote(line: Line, lane: LaneType, id: string, patch: Partial<Pick<NoteRecord, "color" | "body" | "visibleFor">>) {
+  const notes = notesOf(line, lane);
+  const note = notes.get(id);
+  if (note) notes.set(id, { ...note, ...patch });
+}
+
+/**
+ * Нова область примітки (`NOTE-43`): та сама примітка — колір, адресати, автор,
+ * текст — на символах `from…to` доріжки рядка `ln`. Запис переїжджає в цей
+ * рядок і доріжку. Викликати в транзакції.
+ */
+export function moveNoteTo(song: Song, holder: Line, lane: LaneType, id: string, ln: number, toLane: LaneType, from: number, to: number) {
+  const note = notesOf(holder, lane).get(id);
+  if (!note) return;
+  notesOf(holder, lane).delete(id);
+  const { id: key, author, visibleFor, color, body } = note;
+  addNote(song, ln, toLane, from, to, { id: key, author, visibleFor, color, body });
+}
