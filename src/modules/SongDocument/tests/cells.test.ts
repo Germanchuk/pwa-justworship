@@ -18,6 +18,7 @@ import {
   renderCells,
   Song,
   stepsPerBar,
+  stepsPerBeat,
   typeCell,
   upgradeGrid,
   writeMeta,
@@ -60,6 +61,10 @@ function withLane(kind: CellKind, seed = [{ words: "Ти святий" }, { word
 describe("сітка", () => {
   it("крок — шістнадцята: 4/4 → 16, 3/4 → 12, 6/8 → 12, 12/8 → 24", () => {
     expect(["4/4", "3/4", "6/8", "12/8", "2/2"].map(stepsPerBar)).toEqual([16, 12, 12, 24, 16]);
+  });
+
+  it("доля для смуг: одиниця знаменника, у 6/8, 9/8, 12/8 — три вісімки", () => {
+    expect(["4/4", "3/4", "2/2", "6/8", "12/8", "7/8"].map(stepsPerBeat)).toEqual([4, 4, 8, 6, 6, 2]);
   });
 
   it("за замовчуванням один такт; додати — скільки завгодно; прибрати можна лише порожній останній", () => {

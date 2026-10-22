@@ -6,7 +6,7 @@
 import * as Y from "yjs";
 import type { ReactNode } from "react";
 import { RenderElementProps, ReactEditor, useSlateStatic } from "slate-react";
-import { addBar, allLanes, barsOf, layout, cellKey, CellAt, CellKind, readMeta, removeBar, stepsPerBar, TAB_STRINGS } from "../../model";
+import { addBar, allLanes, barsOf, layout, cellKey, CellAt, CellKind, readMeta, removeBar, stepsPerBar, stepsPerBeat, TAB_STRINGS } from "../../model";
 import { useEditorCtx, useModelLine } from "../context";
 
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
@@ -20,6 +20,10 @@ const INK: Record<CellKind, string> = { tab: "#57534e", cajon: "#92400e", blocks
 const TAB_STEP_PX = 10;
 const TAB_ROW_PX = 17;
 const DASH = "linear-gradient(currentColor, currentColor) center / calc(100% - 2px) 1px no-repeat";
+/** Фон кольором — шаром, щоб лягати під риску й під прямокутник. */
+const fill = (color: string) => `linear-gradient(${color}, ${color})`;
+/** Кожна друга доля такту трохи темніша — як смуги в FL Studio. */
+const BEAT_TINT = "rgba(120, 95, 50, 0.09)";
 
 export function CellLane({ attributes, children, element }: RenderElementProps) {
   const ctx = useEditorCtx();
@@ -38,7 +42,9 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
     );
   }
 
-  const steps = stepsPerBar(readMeta(ctx.song.doc).timeSignature);
+  const { timeSignature } = readMeta(ctx.song.doc);
+  const steps = stepsPerBar(timeSignature);
+  const beat = stepsPerBeat(timeSignature);
   const bars = barsOf(slot);
   const cells = slot.get("cells") as Y.Map<string>;
   const read = (at: CellAt) => cells.get(cellKey(kind, steps, at));
@@ -51,17 +57,21 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
     ReactEditor.focus(editor);
     ctx.lanes.cells.place(ReactEditor.findPath(editor, element), at);
   };
-  const stepSpan = (at: CellAt, content: ReactNode, style: React.CSSProperties = {}) => (
-    <span
-      key={`${at.step}/${at.string}`}
-      onMouseDown={place(at)}
-      className={ctx.canEdit ? "cursor-pointer" : undefined}
-            // Курсор — тінню всередині, а не фоном: фон кроку табів — його риска.
-      style={{ ...style, ...(here && here.step === at.step && here.string === at.string ? { boxShadow: "inset 0 0 0 99px rgba(59,130,246,0.3)", outline: "1px solid #3b82f6" } : {}) }}
-    >
-      {content}
-    </span>
-  );
+  const stepSpan = (at: CellAt, content: ReactNode, style: React.CSSProperties = {}) => {
+    const tinted = Math.floor((at.step % steps) / beat) % 2 === 1;
+    const background = [style.background, tinted && fill(BEAT_TINT)].filter(Boolean).join(", ") || undefined;
+    return (
+      <span
+        key={`${at.step}/${at.string}`}
+        onMouseDown={place(at)}
+        className={ctx.canEdit ? "cursor-pointer" : undefined}
+        // Курсор — тінню всередині, а не фоном: фон кроку — риска й смуга долі.
+        style={{ ...style, background, ...(here && here.step === at.step && here.string === at.string ? { boxShadow: "inset 0 0 0 99px rgba(59,130,246,0.3)", outline: "1px solid #3b82f6" } : {}) }}
+      >
+        {content}
+      </span>
+    );
+  };
   const allSteps = (fn: (step: number) => ReactNode): ReactNode[] => [
     ...Array.from({ length: bars }, (_, b) => [
       <span key={`bar${b}`} className="text-stone-400">|</span>,
@@ -114,7 +124,7 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
               minWidth: "1ch",
               textAlign: "left",
               color: inBlock ? INK.blocks : "#a8a29e",
-              background: inBlock ? "rgba(59,130,246,0.12)" : undefined,
+              background: inBlock ? fill("rgba(59,130,246,0.12)") : undefined,
               borderTop: inBlock ? "1px solid rgba(30,64,175,0.4)" : undefined,
               borderBottom: inBlock ? "1px solid rgba(30,64,175,0.4)" : undefined,
               borderLeft: start ? "1px solid rgba(30,64,175,0.6)" : undefined,

@@ -30,6 +30,18 @@ export function stepsPerBar(timeSignature: string) {
   return n > 0 && d > 0 ? Math.max(1, Math.round((n * GRID) / d)) : GRID;
 }
 
+/**
+ * Кроків у долі — смуги на екрані, як у FL Studio: доля — одиниця
+ * знаменника (`4/4` — 4 кроки), а в складних розмірах (`6/8`, `9/8`, `12/8`)
+ * — три вісімки (6 кроків).
+ */
+export function stepsPerBeat(timeSignature: string) {
+  const [n, d] = timeSignature.split("/").map(Number);
+  if (!(n > 0 && d > 0)) return GRID / 4;
+  const unit = GRID / d;
+  return Math.max(1, Math.round(d === 8 && n % 3 === 0 && n > 3 ? unit * 3 : unit));
+}
+
 /** Слот клітинкової доріжки на іншій сітці — його клітинки треба перерахувати. */
 export const staleGrid = (slot: Y.Map<unknown>) => slot.has("cells") && slot.get("grid") !== GRID;
 
