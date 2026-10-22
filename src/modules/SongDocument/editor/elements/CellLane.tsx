@@ -6,11 +6,19 @@
 import * as Y from "yjs";
 import type { ReactNode } from "react";
 import { RenderElementProps, ReactEditor, useSlateStatic } from "slate-react";
-import { addBar, allLanes, barsOf, layout, cellKey, CellAt, CellKind, readMeta, removeBar, stepsPerBar, TAB_STRINGS, tabWidths } from "../../model";
+import { addBar, allLanes, barsOf, layout, cellKey, CellAt, CellKind, readMeta, removeBar, stepsPerBar, TAB_STRINGS } from "../../model";
 import { useEditorCtx, useModelLine } from "../context";
 
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
 const INK: Record<CellKind, string> = { tab: "#57534e", cajon: "#92400e", blocks: "#1e40af" };
+/**
+ * Крок табів на екрані — комірка сталої ширини: риска або лад до 24. Ширину
+ * тримає CSS, а не символи, тож «12» не розсуває колонку й порожні кроки
+ * сусідніх струн лишаються однією рискою. Текстом (буфер) — як `renderCells`.
+ */
+const TAB_STEP_PX = 10;
+const TAB_ROW_PX = 17;
+const DASH = "linear-gradient(currentColor, currentColor) center / calc(100% - 2px) 1px no-repeat";
 
 export function CellLane({ attributes, children, element }: RenderElementProps) {
   const ctx = useEditorCtx();
@@ -47,7 +55,8 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
       key={`${at.step}/${at.string}`}
       onMouseDown={place(at)}
       className={ctx.canEdit ? "cursor-pointer" : undefined}
-      style={{ ...style, ...(here && here.step === at.step && here.string === at.string ? { background: "rgba(59,130,246,0.3)", outline: "1px solid #3b82f6" } : {}) }}
+            // Курсор — тінню всередині, а не фоном: фон кроку табів — його риска.
+      style={{ ...style, ...(here && here.step === at.step && here.string === at.string ? { boxShadow: "inset 0 0 0 99px rgba(59,130,246,0.3)", outline: "1px solid #3b82f6" } : {}) }}
     >
       {content}
     </span>
@@ -62,12 +71,23 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
 
   let body: ReactNode;
   if (kind === "tab") {
-    // Порожній крок — один «-»; крок із двозначним ладом — два символи на всіх струнах (як у тексті табів).
-    const widths = tabWidths((k) => cells.get(k), bars, steps);
     body = TAB_STRINGS.map((name, string) => (
-      <div key={name} className="whitespace-pre">
+      <div key={name} className="whitespace-pre flex items-center" style={{ lineHeight: `${TAB_ROW_PX}px` }}>
         <span className="text-stone-400">{name}</span>
-        {allSteps((step) => stepSpan({ step, string }, (read({ step, string }) ?? "").padEnd(widths[step], "-")))}
+        {allSteps((step) => {
+          const v = read({ step, string });
+          return stepSpan({ step, string }, v ?? "", {
+            display: "inline-block",
+            width: TAB_STEP_PX,
+            height: TAB_ROW_PX,
+            textAlign: "center",
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: v && v.length > 1 ? "-0.7px" : undefined,
+            color: v ? INK.tab : "#a8a29e",
+            background: v ? undefined : DASH,
+          });
+        })}
       </div>
     ));
   } else if (kind === "cajon") {
