@@ -245,7 +245,7 @@ type RenderRef = RenderElementProps["element"];
 
 /**
  * Кнопка довжини рядка — перед рядком прямокутників, у полі ліворуч; на ній
- * сама довжина коротко («2», «1+3/8»). Тап —
+ * сама довжина коротко («2», «1.3» — такт і 3/8). Тап —
  * меню з довжиною словами і «− 1/8 / + 1/8» (меню не закривається між
  * тапами). Довжина спільна для всіх доріжок рядка; укоротив — записане за
  * кінцем сховане, а не стерте.
@@ -254,10 +254,10 @@ function LengthMenu({ line, timeSignature }: { line: Line; timeSignature: string
   const ctx = useEditorCtx();
   const length = lineLength(line, timeSignature);
   const label = lengthLabel(length, timeSignature);
-  // На кнопці — коротко: тактів і вісімки неповного («1+3/8»), щоб влізло в поле ліворуч.
+  // На кнопці — коротко: «такти.вісімки» неповного («2.3» — 2 такти й 3/8; «2» — рівно два).
   const per = eighthsPerBar(timeSignature);
   const [full, rest] = [Math.floor(length / per), length % per];
-  const short = full && rest ? `${full}+${rest}/8` : full ? `${full}` : `${rest}/8`;
+  const short = rest ? `${full}.${rest}` : `${full}`;
   const set = (eighths: number) => ctx.lanes.change(() => setLineLength(line, eighths));
   return (
     <DropdownMenu>
