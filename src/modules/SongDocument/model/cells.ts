@@ -11,11 +11,8 @@
  * комірки). Прямокутники поки записані на шістнадцятих і масштабу не мають.
  *
  * Слот пам'ятає свою сітку (`grid` — кроків у цілій ноті): записане на іншій
- * (вісімки, шістнадцяті, 192 тіки) перераховує `upgradeGrid`.
- *
- * **Довжина — властивість рядка** (`lineLength`, у вісімках), спільна для
- * всіх його доріжок: такти й, можливо, неповний останній. Що за межею —
- * сховане, але не стерте (тимчасове рішення 2026-10-23, заради гнучкості). Ключ клітинки — «такт.тік»
+ * (вісімки, шістнадцяті, 192 тіки) перераховує `upgradeGrid`. Доріжка в рядку — `bars`
+ * тактів (за замовчуванням один, додаються). Ключ клітинки — «такт.тік»
  * (прямокутники — «такт.крок»), для табів і кахона ще «/лінія» — струна чи
  * вид удару (усе з 1).
  *
@@ -29,7 +26,6 @@
  */
 import * as Y from "yjs";
 import type { CellKind } from "./lanes";
-import type { Line } from "./song";
 
 export const TAB_STRINGS = ["e", "B", "G", "D", "A", "E"] as const;
 /** Лінії кахона згори донизу: бас, тон, гост. */
@@ -57,12 +53,6 @@ const meter = (timeSignature: string) => {
   const [n, d] = timeSignature.split("/").map(Number);
   return n > 0 && d > 0 ? [n, d] : [4, 4];
 };
-
-/** Вісімок у такті — одиниця довжини рядка. */
-export function eighthsPerBar(timeSignature: string) {
-  const [n, d] = meter(timeSignature);
-  return Math.max(1, Math.round((n * 8) / d));
-}
 
 /** Шістнадцятих у такті розміру `4/4`, `6/8`… */
 export function stepsPerBar(timeSignature: string) {
@@ -151,8 +141,7 @@ export type Shown = Placed & { all: Placed[] };
  * `«комірка від початку рядка/лінія»`). Кілька в одній — усі в `all`
  * (показ кладе їх одна на одну), а найближча — для тексту.
  */
-export function placeCells(kind: CellKind, entries: Iterable<[string, string]>, bars: Bars, scale: Scale): Map<string, Shown> {
-  const sizes = sizesOf(bars, scale);
+export function placeCells(kind: CellKind, entries: Iterable<[string, string]>, bars: number, scale: Scale): Map<string, Shown> {
   const out = new Map<string, Shown>();
   for (const [key, value] of entries) {
     const k = parseKey(key);
@@ -162,7 +151,7 @@ export function placeCells(kind: CellKind, entries: Iterable<[string, string]>, 
     const off = Math.abs(exact - cell);
     let bar = k.bar - 1;
     if (cell >= scale.cells) [bar, cell] = [bar + 1, 0]; // найближча — перша комірка наступного такту
-    if (bar >= sizes.length || cell >= sizes[bar]) continue; // за межею рядка — сховане
+    if (bar >= bars) continue;
     const at = `${bar * scale.cells + cell}/${kind === "blocks" ? 0 : k.string - 1}`;
     const was = out.get(at);
     const all = [...(was?.all ?? []), { value, off }];
@@ -190,7 +179,7 @@ function parseKey(key: string) {
   return m ? { bar: Number(m[1]), step: Number(m[2]), string: m[3] ? Number(m[3]) : 1 } : null;
 }
 
-/** Скільки тактів займає доріжка: записане в слоті (до 2026-10-23), але не менше, ніж займають клітинки. */
+/** Скільки тактів у доріжці рядка: записане в слоті, але не менше, ніж займають клітинки. */
 export function barsOf(slot: Y.Map<unknown> | undefined) {
   const cells = slot?.get("cells") as Y.Map<string> | undefined;
   let most = Number(slot?.get("bars")) || 1;
@@ -198,94 +187,25 @@ export function barsOf(slot: Y.Map<unknown> | undefined) {
   return most;
 }
 
-const cellSlots = (line: Line) =>
-  Array.from(line.values()).filter((v): v is Y.Map<unknown> => v instanceof Y.Map && v.has("cells"));
-
-/**
- * Довжина рядка у вісімках, спільна для всіх його клітинкових доріжок.
- * Записана на маркері (`length`); поки не записана — найдовша з доріжок
- * рядка, цілими тактами, хоч один.
- */
-export function lineLength(line: Line, timeSignature: string): number {
-  const stored = Number(line.get("length"));
-  if (stored > 0) return stored;
-  return Math.max(1, ...cellSlots(line).map(barsOf)) * eighthsPerBar(timeSignature);
-}
-
-/** Чи довжину рядка ще не задавали і в його доріжках нічого немає. */
-export const blankLength = (line: Line) => !line.has("length") && cellSlots(line).every((slot) => !(slot.get("cells") as Y.Map<string>).size);
-
-/** Чи є в доріжках рядка вміст за його кінцем (сховане, не стерте). */
-export function hiddenPastEnd(line: Line, timeSignature: string): boolean {
-  const length = lineLength(line, timeSignature);
-  const [n, d] = meter(timeSignature);
-  return cellSlots(line).some((slot) => {
-    const grid = Number(slot.get("grid")) || TICKS;
-    const perBar = Math.max(1, Math.round((n * grid) / d));
-    const end = (length * grid) / 8;
-    return Array.from((slot.get("cells") as Y.Map<string>).keys()).some((key) => {
-      const k = parseKey(key);
-      return !!k && (k.bar - 1) * perBar + (k.step - 1) >= end;
-    });
-  });
-}
-
-/** Довжина рядка словами: «2 такти + 3/8». */
-export function lengthLabel(eighths: number, timeSignature: string): string {
-  const per = eighthsPerBar(timeSignature);
-  const [full, rest] = [Math.floor(eighths / per), eighths % per];
-  const [d, dd] = [full % 10, full % 100];
-  const word = d === 1 && dd !== 11 ? "такт" : d >= 2 && d <= 4 && (dd < 12 || dd > 14) ? "такти" : "тактів";
-  return [full ? `${full} ${word}` : "", rest ? `${rest}/8` : ""].filter(Boolean).join(" + ");
-}
-
-/** Задати довжину рядка у вісімках (не менше однієї). Викликати в транзакції. */
-export const setLineLength = (line: Line, eighths: number) => line.set("length", Math.max(1, Math.round(eighths)));
-
-/** Подовжити рядок до `eighths`, якщо він коротший (вставка такту з буфера). Викликати в транзакції. */
-export function growLine(line: Line, eighths: number, timeSignature: string) {
-  if (lineLength(line, timeSignature) < eighths) setLineLength(line, eighths);
-}
-
-/**
- * Такти рядка в комірках масштабу: повні — `scale.cells`, неповний останній
- * — стільки, скільки влазить у його вісімки.
- */
-export function barSizes(length: number, timeSignature: string, scale: Scale): number[] {
-  const per = eighthsPerBar(timeSignature);
-  const sizes = Array.from({ length: Math.floor(length / per) }, () => scale.cells);
-  const rest = length % per;
-  if (rest) sizes.push(Math.max(1, Math.ceil((rest * scale.grid) / 8 / scale.tick)));
-  return sizes.length ? sizes : [scale.cells];
-}
-
-/** Комірка за останньою в рядку (індекси — «такт · комірок у такті + комірка»). */
-export const endOf = (sizes: readonly number[], scale: Scale) => (sizes.length - 1) * scale.cells + sizes[sizes.length - 1];
-
-/** Такти: числом — стільки повних, масивом — розміри кожного (`barSizes`). */
-type Bars = number | readonly number[];
-const sizesOf = (bars: Bars, scale: Scale) => (typeof bars === "number" ? Array.from({ length: bars }, () => scale.cells) : bars);
-
 /**
  * Доріжка текстом у масштабі — рядки, як їх показує редактор і кладе в буфер
  * (подія не на долі — у найближчій комірці).
  */
-export function renderCells(kind: CellKind, entries: Iterable<[string, string]>, bars: Bars, scale: Scale): string[] {
+export function renderCells(kind: CellKind, entries: Iterable<[string, string]>, bars: number, scale: Scale): string[] {
   const steps = scale.cells;
-  const sizes = sizesOf(bars, scale);
-  const placed = placeCells(kind, entries, sizes, scale);
+  const placed = placeCells(kind, entries, bars, scale);
   const at = (bar: number, s: number, string = 0) => placed.get(`${(bar - 1) * steps + s}/${string}`)?.value;
-  /** Такти текстом; `cells(b)` — комірки такту `b` (з 1) у його розмірі. */
-  const barsText = (bar: (b: number) => string) => "|" + sizes.map((_, i) => bar(i + 1)).join("|") + "|";
-  const each = (b: number, fn: (s: number) => string) => Array.from({ length: sizes[b - 1] }, (_, s) => fn(s)).join("");
+  const barsText = (bar: (b: number) => string) =>
+    "|" + Array.from({ length: bars }, (_, i) => bar(i + 1)).join("|") + "|";
 
-  if (kind === "cajon") return CAJON_ROWS.map((name, row) => name + barsText((b) => each(b, (s) => (at(b, s, row) ? HIT : "-"))));
+  if (kind === "cajon")
+    return CAJON_ROWS.map((name, row) => name + barsText((b) => Array.from({ length: steps }, (_, s) => (at(b, s, row) ? HIT : "-")).join("")));
   if (kind === "blocks")
     return [
       barsText((b) => {
         let out = "";
         let under = 0; // скільки ще кроків ховає під собою назва акорду
-        for (let s = 0; s < sizes[b - 1]; s++) {
+        for (let s = 0; s < steps; s++) {
           const v = at(b, s);
           if (v && v !== "-") {
             out += v;
@@ -300,8 +220,16 @@ export function renderCells(kind: CellKind, entries: Iterable<[string, string]>,
       }),
     ];
   // Таби: крок завширшки найдовшого ладу в ньому на всіх струнах, порожній — один «-».
-  const width = (step: number) => Math.max(1, ...TAB_STRINGS.map((_, string) => placed.get(`${step}/${string}`)?.value.length ?? 0));
-  return TAB_STRINGS.map((name, string) => name + barsText((b) => each(b, (s) => (at(b, s, string) ?? "").padEnd(width((b - 1) * steps + s), "-"))));
+  const widths = Array.from({ length: bars * steps }, (_, step) =>
+    Math.max(1, ...TAB_STRINGS.map((_, string) => placed.get(`${step}/${string}`)?.value.length ?? 0)),
+  );
+  return TAB_STRINGS.map(
+    (name, string) =>
+      name +
+      barsText((b) =>
+        Array.from({ length: steps }, (_, s) => (at(b, s, string) ?? "").padEnd(widths[(b - 1) * steps + s], "-")).join(""),
+      ),
+  );
 }
 
 /**
@@ -395,13 +323,13 @@ export function recognizeCells(lines: string[], i: number): { kind: CellKind; si
   return null;
 }
 
-/** Замінити вміст доріжки розібраним (вставка); рядок подовжується під вставлені такти. Викликати в транзакції. */
-export function writeParsed(line: Line, slot: Y.Map<unknown>, { cells, bars, grid }: Parsed, timeSignature: string) {
+/** Замінити вміст доріжки розібраним (вставка). Викликати в транзакції. */
+export function writeParsed(slot: Y.Map<unknown>, { cells, bars, grid }: Parsed) {
   const map = slot.get("cells") as Y.Map<string>;
   map.clear();
   Object.entries(cells).forEach(([key, value]) => map.set(key, value));
+  slot.set("bars", bars);
   slot.set("grid", grid);
-  growLine(line, bars * eighthsPerBar(timeSignature), timeSignature);
 }
 
 /**
@@ -415,17 +343,9 @@ export function writeParsed(line: Line, slot: Y.Map<unknown>, { cells, bars, gri
  * У кахоні «o» чи «x» — удар на лінії курсора, B / T / g — удар на своїй лінії
  * в цьому кроці.
  */
-export function typeCell(
-  kind: CellKind,
-  slot: Y.Map<unknown>,
-  scale: Scale,
-  at: CellAt,
-  ch: string,
-  prev: string | null,
-  /** Комірка за останньою в рядку (`endOf`). */
-  total = barsOf(slot) * scale.cells,
-): CellAt {
+export function typeCell(kind: CellKind, slot: Y.Map<unknown>, scale: Scale, at: CellAt, ch: string, prev: string | null): CellAt {
   const cells = slot.get("cells") as Y.Map<string>;
+  const total = barsOf(slot) * scale.cells;
   const key = (a: CellAt) => cellKey(kind, scale, a);
   const next = { ...at, step: Math.min(at.step + 1, total - 1) };
   const clearAndNext = () => (cells.delete(key(at)), next);
@@ -487,22 +407,31 @@ export function eraseCell(kind: CellKind, slot: Y.Map<unknown>, scale: Scale, at
   return back;
 }
 
+/** Додати такт у кінець доріжки рядка. Викликати в транзакції. */
+export const addBar = (slot: Y.Map<unknown>) => slot.set("bars", barsOf(slot) + 1);
+
+/** Прибрати останній такт, якщо він порожній і не єдиний. Викликати в транзакції. */
+export function removeBar(slot: Y.Map<unknown>) {
+  const bars = barsOf(slot);
+  const cells = slot.get("cells") as Y.Map<string>;
+  const used = Array.from(cells.keys()).some((key) => parseKey(key)?.bar === bars);
+  if (bars > 1 && !used) slot.set("bars", bars - 1);
+}
+
 /**
- * Склеювання: клітинки слота `from` дописуються в `to`, зсунуті на `offset`
- * вісімок (довжину першого рядка — і з неповним тактом). Це копія, як і
- * акорди. Викликати, поки `from` ще в документі.
+ * Склеювання: клітинки рядка `from` дописуються в `to` після його тактів (це
+ * копія, як і акорди). Викликати, поки `from` ще в документі.
  */
-export function appendCells(from: Y.Map<unknown>, to: Y.Map<unknown>, offset: number, timeSignature: string) {
+export function appendCells(from: Y.Map<unknown>, to: Y.Map<unknown>) {
   const src = from.get("cells") as Y.Map<string>;
-  if (!src?.size) return;
+  const extra = Number(from.get("bars")) > 1;
+  if (!src?.size && !extra) return;
   const dst = to.get("cells") as Y.Map<string>;
-  const grid = Number(to.get("grid")) || TICKS;
-  const [n, d] = meter(timeSignature);
-  const perBar = Math.max(1, Math.round((n * grid) / d));
-  const shift = Math.round((offset * grid) / 8);
+  // Порожня доріжка з одним тактом — дописуємо з її початку, без зайвого порожнього такту.
+  const shift = !dst.size && barsOf(to) === 1 ? 0 : barsOf(to);
   src.forEach((value, key) => {
     const k = parseKey(key)!;
-    const at = (k.bar - 1) * perBar + (k.step - 1) + shift; // від початку рядка
-    dst.set(`${Math.floor(at / perBar) + 1}.${(at % perBar) + 1}${key.includes("/") ? `/${k.string}` : ""}`, value);
+    dst.set(`${k.bar + shift}.${k.step}${key.includes("/") ? `/${k.string}` : ""}`, value);
   });
+  to.set("bars", shift + barsOf(from));
 }

@@ -1,7 +1,6 @@
 /** Склеювання рядків: Backspace на початку слів і Delete у їхньому кінці. */
 import * as Y from "yjs";
-import { appendCells, blankLength, lineLength, setLineLength } from "../cells";
-import { readMeta } from "../meta";
+import { appendCells } from "../cells";
 import { movableNotes, moveLaneNote, moveWordsNote } from "../notes/move";
 import { filledLanes, laneText, layout, lineAt, lineKind, textSlotsOf } from "../read";
 import { removeLine } from "../write";
@@ -12,9 +11,8 @@ import type { Pos, Song } from "../song";
  * словами попереднього. Непорожні акорди й додані текстові доріжки
  * дописуються вирівняними під кінець слів (це копія), примітки всіх доріжок
  * переїжджають у попередній рядок. Клітинкові доріжки дописуються після
- * тактів попереднього (теж копія), і довжина склеєного — сума довжин (з
- * неповним тактом посередині — як є). Динаміка — попереднього рядка (як і
- * решта його полів).
+ * тактів попереднього (теж копія). Динаміка — попереднього рядка (як і решта
+ * його полів).
  */
 export function mergeLine(song: Song, ln: number): Pos {
   const prev = lineAt(song, ln - 1);
@@ -43,18 +41,10 @@ export function mergeLine(song: Song, ln: number): Pos {
     }
     laneNotes[i].forEach((n) => moveLaneNote(cur.line, prev.line, id, n, shift));
   });
-  const { timeSignature } = readMeta(song.doc);
-  const cellLanes = Array.from(cur.line.entries()).filter(([, slot]) => slot instanceof Y.Map && slot.has("cells"));
-  if (cellLanes.length) {
-    // Попередній без тактів і без вмісту — другий лягає з його початку, без зайвого порожнього такту.
-    const offset = blankLength(prev.line) ? 0 : lineLength(prev.line, timeSignature);
-    const length = offset + lineLength(cur.line, timeSignature);
-    cellLanes.forEach(([id, slot]) => {
-      const to = prev.line.get(id);
-      if (to instanceof Y.Map) appendCells(slot as Y.Map<unknown>, to, offset, timeSignature);
-    });
-    setLineLength(prev.line, length);
-  }
+  cur.line.forEach((slot, id) => {
+    const to = prev.line.get(id);
+    if (slot instanceof Y.Map && slot.has("cells") && to instanceof Y.Map) appendCells(slot, to);
+  });
   wordsNotes.forEach(({ note }) => moveWordsNote(cur.line, prev.line, note));
   song.text.delete(cur.at, 1);
   return { line: ln - 1, lane: "words", offset: prev.words.length };

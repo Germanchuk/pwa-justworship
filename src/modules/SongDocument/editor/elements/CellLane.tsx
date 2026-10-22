@@ -1,44 +1,18 @@
 /**
  * Клітинкова доріжка рядка (ADR-0008) — атомний вузол Slate, що виглядає як
  * текст: таби (струни) й кахон (лінія на удар) — лініями кроків, прямокутники
- * — блоками на сітці. У правці: курсор-крок (клік по кроку ставить його).
- *
- * Довжина — рядка, а не доріжки (`lineLength`): усі доріжки рядка мають ті
- * самі такти, останній може бути неповним. Над першою доріжкою рядка з
- * курсором — лінійка (`LineRuler`): тягни ручку чи тапни — шторка з ±.
+ * — блоками на сітці. У правці: курсор-крок (клік по кроку ставить його),
+ * «+ такт» / «− такт».
  *
  * Удари — у масштабі людини (`Scale`): подія в найближчій комірці; точно на
  * долі — звичайна, поруч — блідо-червона, що далі від долі — прозоріша; кілька в
  * одній комірці — буквально одна на одній. Правиться лише точне (`cells.ts`).
  */
 import * as Y from "yjs";
-import { useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
-import { XMarkIcon } from "@heroicons/react/24/outline";
-import { Node } from "slate";
+import type { ReactNode } from "react";
 import { RenderElementProps, ReactEditor, useSlateStatic } from "slate-react";
-import {
-  allLanes,
-  barSizes,
-  eighthsPerBar,
-  hiddenPastEnd,
-  layout,
-  lengthLabel,
-  lineLength,
-  CellAt,
-  CellKind,
-  Line,
-  placeCells,
-  readMeta,
-  readZoom,
-  rowsOf,
-  scaleOf,
-  setLineLength,
-  stepsPerBeat,
-} from "../../model";
-import { isCellsNode } from "../../bridge/projection";
+import { addBar, allLanes, barsOf, layout, CellAt, CellKind, placeCells, readMeta, readZoom, removeBar, rowsOf, scaleOf, stepsPerBeat } from "../../model";
 import { useEditorCtx, useModelLine } from "../context";
-import { DYNAMICS_PANEL_BOTTOM } from "../dynamics/DynamicsPalette";
 
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
 const INK: Record<CellKind, string> = { tab: "#57534e", cajon: "#92400e", blocks: "#1e40af" };
@@ -87,9 +61,8 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
   const beatTicks = (stepsPerBeat(timeSignature) * scale.grid) / 16;
   // Прямокутники без масштабу: їхня комірка ширша чи вужча, щоб такт був завширшки як у ударів.
   const stepPx = kind === "blocks" ? (STEP_PX * scaleOf("tab", timeSignature, zoom).cells) / steps : STEP_PX;
-  const length = lineLength(line!, timeSignature);
-  const sizes = barSizes(length, timeSignature, scale);
-  const placed = placeCells(kind, (slot.get("cells") as Y.Map<string>).entries(), sizes, scale);
+  const bars = barsOf(slot);
+  const placed = placeCells(kind, (slot.get("cells") as Y.Map<string>).entries(), bars, scale);
   const shown = (at: CellAt) => placed.get(`${at.step}/${at.string}`);
   const read = (at: CellAt) => shown(at)?.value;
   const cursor = ctx.canEdit ? ctx.lanes.cells.cursor() : null;
@@ -123,12 +96,12 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
       <span className="text-stone-400" style={{ ...fixed(LABEL_PX), textAlign: "left" }}>
         {name}
       </span>
-      {sizes.flatMap((size, b) => [
+      {Array.from({ length: bars }, (_, b) => [
         <span key={`bar${b}`} className="text-stone-400" style={fixed(BAR_PX)}>
           |
         </span>,
-        ...Array.from({ length: size }, (_, s) => fn(b * steps + s)),
-      ])}
+        ...Array.from({ length: steps }, (_, s) => fn(b * steps + s)),
+      ]).flat()}
       <span key="end" className="text-stone-400" style={fixed(BAR_PX)}>
         |
       </span>
@@ -184,8 +157,7 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
       const start = !!v && v !== "-";
       const prevV = step > 0 && step % steps !== 0 ? read({ step: step - 1, string: 0 }) : undefined;
       const inBlock = start || (v === "-" && !!prevV);
-      const lastInBar = (step % steps) + 1 >= sizes[Math.floor(step / steps)];
-      const nextV = !lastInBar ? read({ step: step + 1, string: 0 }) : undefined;
+      const nextV = (step + 1) % steps !== 0 ? read({ step: step + 1, string: 0 }) : undefined;
       const ends = inBlock && nextV !== "-";
       return stepSpan(
         { step, string: 0 },
@@ -207,138 +179,24 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
     });
   }
 
-  // Лінійка — над першою клітинковою доріжкою рядка, у правці й лише на рядку з курсором.
-  const ruler = ctx.canEdit && ctx.cursorLine === ln && firstCellLane(editor, element);
-
   return (
     <div {...attributes} data-cell-lane={id} className="pr-2 md:pr-3" style={{ paddingLeft: 16, boxShadow: RULE }}>
-      <div contentEditable={false} className="select-none py-0.5" style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, lineHeight: 1.35, color: INK[kind] }}>
-        <div className="min-w-0 overflow-x-auto">
-          {ruler && <LineRuler line={line!} timeSignature={timeSignature} zoom={zoom} />}
-          {body}
-        </div>
+      <div contentEditable={false} className="select-none flex items-start gap-2 py-0.5" style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, lineHeight: 1.35, color: INK[kind] }}>
+        <div className="min-w-0 overflow-x-auto">{body}</div>
+        {ctx.canEdit && (
+          <span className="flex gap-1 text-[11px] font-sans text-stone-400 shrink-0">
+            <button type="button" title={`${lane.name}: додати такт`} onMouseDown={(e) => e.preventDefault()} onClick={() => ctx.lanes.change(() => addBar(slot))}>
+              +такт
+            </button>
+            {bars > 1 && (
+              <button type="button" title="Прибрати останній порожній такт" onMouseDown={(e) => e.preventDefault()} onClick={() => ctx.lanes.change(() => removeBar(slot))}>
+                −
+              </button>
+            )}
+          </span>
+        )}
       </div>
       {children}
-    </div>
-  );
-}
-
-/** Чи вузол — перша клітинкова доріжка свого рядка у видимому. */
-function firstCellLane(editor: ReturnType<typeof useSlateStatic>, element: RenderRef) {
-  try {
-    const path = ReactEditor.findPath(editor, element);
-    const siblings = Node.parent(editor, path).children;
-    return siblings.findIndex((n) => isCellsNode(n)) === path[path.length - 1];
-  } catch {
-    return false;
-  }
-}
-type RenderRef = RenderElementProps["element"];
-
-/**
- * Лінійка довжини рядка: номери тактів і ручка в кінці з довжиною словами
- * («1 такт + 3/8»). Тягни ручку — довжина міняється по вісімці (прив'язка під пальцем);
- * тапни — шторка знизу з ± вісімка і ± такт. Довжина спільна для всіх доріжок
- * рядка; укоротив — те, що за кінцем, сховане, а не стерте.
- */
-function LineRuler({ line, timeSignature, zoom }: { line: Line; timeSignature: string; zoom: number | undefined }) {
-  const ctx = useEditorCtx();
-  const length = lineLength(line, timeSignature);
-  const [drag, setDrag] = useState<number | null>(null);
-  const [sheet, setSheet] = useState(false);
-  const start = useRef<{ x: number; moved: boolean } | null>(null);
-  const shown = drag ?? length;
-  const scale = scaleOf("tab", timeSignature, zoom); // ширини — за ударами, прямокутники тягнуться під них
-  const sizes = barSizes(shown, timeSignature, scale);
-  const per = eighthsPerBar(timeSignature);
-  const eighthPx = (STEP_PX * scale.cells) / per;
-  const set = (eighths: number) => ctx.lanes.change(() => setLineLength(line, eighths));
-  const keep = (e: React.MouseEvent) => e.preventDefault(); // курсор лишається в рядку
-  const hidden = hiddenPastEnd(line, timeSignature);
-
-  return (
-    <div className="flex items-center font-sans text-[10px] text-stone-500" style={{ height: 18 }}>
-      <span style={{ flex: "none", width: LABEL_PX }} />
-      {sizes.map((size, b) => (
-        <span
-          key={b}
-          className="border-l border-stone-400/60 pl-0.5 truncate"
-          style={{ flex: "none", width: BAR_PX + size * STEP_PX, background: b % 2 ? "rgba(120,95,50,0.05)" : undefined }}
-        >
-          {b + 1}
-        </span>
-      ))}
-      <button
-        type="button"
-        aria-label={`Довжина рядка: ${lengthLabel(length, timeSignature)}. Тягни, щоб змінити`}
-        title="Тягни — довжина по вісімці; тапни — точніше"
-        className="ml-0.5 flex h-[18px] items-center gap-1 rounded-full border border-stone-400 bg-white/80 px-1.5 text-stone-600 touch-none"
-        onMouseDown={keep}
-        onPointerDown={(e) => {
-          e.currentTarget.setPointerCapture(e.pointerId);
-          start.current = { x: e.clientX, moved: false };
-        }}
-        onPointerMove={(e) => {
-          const s = start.current;
-          if (!s) return;
-          const dx = e.clientX - s.x;
-          if (Math.abs(dx) > 6) s.moved = true;
-          if (s.moved) setDrag(Math.max(1, length + Math.round(dx / eighthPx)));
-        }}
-        onPointerUp={() => {
-          const s = start.current;
-          start.current = null;
-          if (s?.moved && drag !== null && drag !== length) set(drag);
-          if (!s?.moved) setSheet(true);
-          setDrag(null);
-        }}
-        onPointerCancel={() => {
-          start.current = null;
-          setDrag(null);
-        }}
-      >
-        ⟷<span className="whitespace-nowrap">{lengthLabel(shown, timeSignature)}</span>
-      </button>
-      {hidden && drag === null && <span className="ml-1 whitespace-nowrap text-stone-400">далі сховане</span>}
-      {sheet &&
-        createPortal(
-          <div
-            role="dialog"
-            aria-label="Довжина рядка"
-            className="glass fixed left-1/2 -translate-x-1/2 z-50 w-max max-w-[calc(100vw-2rem)] rounded-2xl px-3 py-2 font-sans"
-            style={{ bottom: DYNAMICS_PANEL_BOTTOM }}
-            onMouseDown={keep}
-          >
-            <div className="mb-1.5 flex items-center gap-2 text-sm">
-              <span className="flex-1 text-stone-500">
-                Довжина рядка: <b className="text-stone-800">{lengthLabel(length, timeSignature)}</b>
-              </span>
-              <button type="button" aria-label="Закрити" className="text-stone-500" onClick={() => setSheet(false)}>
-                <XMarkIcon className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex gap-2">
-              {[
-                ["− такт", -per],
-                ["− 1/8", -1],
-                ["+ 1/8", 1],
-                ["+ такт", per],
-              ].map(([label, delta]) => (
-                <button
-                  key={label}
-                  type="button"
-                  className="h-10 min-w-14 rounded-xl border border-stone-300 bg-white/80 px-3 text-sm disabled:opacity-40"
-                  disabled={length + Number(delta) < 1}
-                  onClick={() => set(length + Number(delta))}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {hidden && <div className="mt-1.5 text-xs text-stone-500">За кінцем рядка є записане — сховане, повернеться, якщо подовжити.</div>}
-          </div>,
-          document.body,
-        )}
     </div>
   );
 }
