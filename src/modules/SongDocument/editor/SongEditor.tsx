@@ -85,9 +85,9 @@ function LoadedEditor({ song }: { song: Song }) {
   }, [lanes, hidden.join()]); // eslint-disable-line react-hooks/exhaustive-deps
   const view = lanes.view;
 
-  // Рядок, що народився одночасно з новою доріжкою, — без її слота: дописати (ADR-0008).
+  // Рядок, що народився одночасно з новою доріжкою, — без її слота: дописати (ADR-0008);
+  // клітинки на старій сітці — перерахувати. У будь-якому режимі: інакше читання показало б старі як є.
   useEffect(() => {
-    if (!canEdit) return;
     const heal = () => {
       const lines = linesOf(song);
       if (missingSlots(song, lines).length) song.doc.transact(() => ensureSlots(song, lines), "heal");
@@ -104,7 +104,7 @@ function LoadedEditor({ song }: { song: Song }) {
     heal();
     song.doc.on("afterTransaction", onTransaction);
     return () => song.doc.off("afterTransaction", onTransaction);
-  }, [song, canEdit]);
+  }, [song]);
 
   // Курсор-крок у клітинковій доріжці живе поза Slate — перемальовуватись на його рух.
   const [, cellMoved] = useState(0);

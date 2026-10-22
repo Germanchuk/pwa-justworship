@@ -2,23 +2,55 @@
  * Клітинкові доріжки (ADR-0008) — псевдо-текст: зберігаються клітинками
  * сітки, показуються й копіюються текстом, пишуться за синтаксисом виду.
  *
- * Сітка стала: крок — вісімка (`4/4` → 8 кроків у такті, `6/8` → 6).
- * Доріжка в рядку — `bars` тактів (за замовчуванням один, додаються). Ключ
- * клітинки — «такт.крок», для табів ще «/струна» (усе з 1).
+ * Сітка стала: крок — 1/32 (`4/4` → 32 кроки в такті, `6/8` → 24). Слот
+ * пам'ятає свою сітку (`grid` — кроків у цілій ноті): клітинки, записані
+ * раніше вісімками, перераховує `upgradeGrid`. Доріжка в рядку — `bars`
+ * тактів (за замовчуванням один, додаються). Ключ клітинки — «такт.крок»,
+ * для табів ще «/струна» (усе з 1).
  *
  *   прямокутники  |Am------|F---G---|   назва відкриває, «-» тягне, «.» — порожньо
  *   кахон         |B-T-B-T-|           B — бас, T — тон, g — гост, «-» — нічого
- *   таби          e|---1----|          шість струн e B G D A E; лад 0–24, x
+ *   таби          e|---12---|          шість струн e B G D A E; лад 0–24, x;
+ *                                      порожній крок — один «-», крок із
+ *                                      двозначним ладом — два символи на всіх струнах
  */
 import * as Y from "yjs";
 import type { CellKind } from "./lanes";
 
 export const TAB_STRINGS = ["e", "B", "G", "D", "A", "E"] as const;
 
-/** Кроків (вісімок) у такті розміру `4/4`, `6/8`… */
+/** Кроків у цілій ноті: крок — тридцять друга. */
+export const GRID = 32;
+/** Сітка слотів, записаних до 2026-10-22 (без `grid`): крок — вісімка. */
+const OLD_GRID = 8;
+
+/** Кроків (тридцять других) у такті розміру `4/4`, `6/8`… */
 export function stepsPerBar(timeSignature: string) {
   const [n, d] = timeSignature.split("/").map(Number);
-  return n > 0 && d > 0 ? Math.max(1, Math.round((n * 8) / d)) : 8;
+  return n > 0 && d > 0 ? Math.max(1, Math.round((n * GRID) / d)) : GRID;
+}
+
+/** Слот клітинкової доріжки на іншій сітці — його клітинки треба перерахувати. */
+export const staleGrid = (slot: Y.Map<unknown>) => slot.has("cells") && slot.get("grid") !== GRID;
+
+/**
+ * Перерахувати клітинки слота на сітку `GRID`: удар (таби, кахон) стає першим
+ * із кроків, які старий крок тепер займає; прямокутник тягнеться на всі
+ * («-» в решті). Викликати в транзакції.
+ */
+export function upgradeGrid(slot: Y.Map<unknown>, kind: CellKind) {
+  const from = Number(slot.get("grid")) || OLD_GRID;
+  const cells = slot.get("cells") as Y.Map<string>;
+  const moved = Array.from(cells.entries()).flatMap(([key, value]) => {
+    const k = parseKey(key);
+    if (!k) return [];
+    const first = Math.round(((k.step - 1) * GRID) / from) + 1;
+    const span = kind === "blocks" ? Math.max(1, Math.round((k.step * GRID) / from) + 1 - first) : 1;
+    return Array.from({ length: span }, (_, i) => [`${k.bar}.${first + i}${key.includes("/") ? `/${k.string}` : ""}`, i ? "-" : value] as const);
+  });
+  cells.clear();
+  moved.forEach(([key, value]) => cells.set(key, value));
+  slot.set("grid", GRID);
 }
 
 /** Місце курсора в доріжці: крок від початку рядка (з 0) і струна (з 0; не таби — 0). */
@@ -68,17 +100,51 @@ export function renderCells(kind: CellKind, read: Read, bars: number, steps: num
         return out;
       }),
     ];
-  // Таби: якщо в такті є двозначний лад — усі кроки такту завширшки два символи.
-  const width = (b: number) =>
-    Array.from({ length: steps * 6 }).some((_, i) => (at(b, i % steps, Math.floor(i / steps)) ?? "").length > 1) ? 2 : 1;
+  // Таби: крок завширшки найдовшого ладу в ньому на всіх струнах, порожній — один «-».
+  const widths = tabWidths(read, bars, steps);
   return TAB_STRINGS.map(
     (name, string) =>
       name +
-      barsText((b) => {
-        const w = width(b);
-        return Array.from({ length: steps }, (_, s) => (at(b, s, string) ?? "").padEnd(w, "-")).join("");
-      }),
+      barsText((b) =>
+        Array.from({ length: steps }, (_, s) => (at(b, s, string) ?? "").padEnd(widths[(b - 1) * steps + s], "-")).join(""),
+      ),
   );
+}
+
+/** Ширина кожного кроку табів (від початку рядка): найдовший лад у ньому на всіх струнах, не менше 1. */
+export function tabWidths(read: Read, bars: number, steps: number): number[] {
+  return Array.from({ length: bars * steps }, (_, step) =>
+    Math.max(1, ...TAB_STRINGS.map((_, string) => read(cellKey("tab", steps, { step, string }))?.length ?? 0)),
+  );
+}
+
+/**
+ * Колонки такту табів: шість рядків тексту одного такту → значення по
+ * колонках. Колонка — один символ, або ширше, якщо в ній починається лад у
+ * кілька цифр (на будь-якій струні).
+ */
+function tabColumns(texts: string[]): (string | undefined)[][] {
+  const len = Math.max(0, ...texts.map((t) => t.length));
+  const cols: (string | undefined)[][] = [];
+  for (let i = 0; i < len; ) {
+    let width = 1;
+    let values: (string | undefined)[] = [];
+    for (let grown = true; grown; ) {
+      grown = false;
+      values = texts.map((t) => {
+        const m = /\d+|x/i.exec(t.slice(i));
+        if (!m || m.index >= width) return undefined;
+        if (m.index + m[0].length > width) {
+          width = m.index + m[0].length;
+          grown = true;
+        }
+        return m[0].toLowerCase();
+      });
+    }
+    cols.push(values);
+    i += width;
+  }
+  return cols;
 }
 
 export type Parsed = { cells: Record<string, string>; bars: number };
@@ -93,15 +159,15 @@ export function parseCells(kind: CellKind, lines: string[], steps: number): Pars
   };
   if (kind === "tab") {
     if (lines.length !== 6 || !lines.every(isTabLine)) return null;
-    let bars = 1;
-    lines.forEach((line, string) => {
-      const all = barsIn(line);
-      bars = Math.max(bars, all.length);
-      all.forEach((text, b) => {
-        // Ширина такту будь-яка (табулатура з сайту) — місце ладу переводимо в крок пропорційно.
-        for (const m of text.matchAll(/\d+|x/gi)) put(b + 1, Math.floor((m.index! * steps) / Math.max(1, text.length)), m[0].toLowerCase(), string);
-      });
-    });
+    const perString = lines.map(barsIn);
+    const bars = Math.max(1, ...perString.map((b) => b.length));
+    for (let b = 0; b < bars; b++) {
+      const cols = tabColumns(perString.map((all) => all[b] ?? ""));
+      // Свій текст — колонка на крок; табулатура з сайту з іншою кількістю колонок лягає пропорційно.
+      cols.forEach((values, c) =>
+        values.forEach((v, string) => v && put(b + 1, cols.length === steps ? c : Math.floor((c * steps) / cols.length), v, string)),
+      );
+    }
     return { cells, bars };
   }
   if (lines.length !== 1 || !(kind === "cajon" ? isCajonLine(lines[0]) : isBlocksLine(lines[0]))) return null;
@@ -136,13 +202,17 @@ export function writeParsed(slot: Y.Map<unknown>, { cells, bars }: Parsed) {
   map.clear();
   Object.entries(cells).forEach(([key, value]) => map.set(key, value));
   slot.set("bars", bars);
+  slot.set("grid", GRID);
 }
 
 /**
  * Друк символу `ch` у крок `at` за синтаксисом виду; повертає, де курсор далі.
  * `prev` — символ, надрукований у цій доріжці щойно перед цим (курсор відтоді
- * не переставляли), інакше `null`: з ним двозначний лад, назва акорду в кілька
- * символів, «-» після ладу. Викликати в транзакції.
+ * не переставляли), інакше `null`: з ним двозначний лад і назва акорду в
+ * кілька символів. Викликати в транзакції.
+ *
+ * Таби — навігація ручна: друк лишає курсор на місці (цифри поспіль — один
+ * лад, «12»), «-» чи пробіл стирають крок; на інший крок — стрілками.
  */
 export function typeCell(kind: CellKind, slot: Y.Map<unknown>, steps: number, at: CellAt, ch: string, prev: string | null): CellAt {
   const cells = slot.get("cells") as Y.Map<string>;
@@ -161,13 +231,10 @@ export function typeCell(kind: CellKind, slot: Y.Map<unknown>, steps: number, at
   if (kind === "tab") {
     if (/\d/.test(ch)) {
       const cur = cells.get(key(at));
-      cells.set(key(at), prev && /\d/.test(prev) && cur && /^\d$/.test(cur) && Number(cur + ch) <= 24 ? cur + ch : ch);
-      return at;
-    }
-    if (ch.toLowerCase() === "x") return (cells.set(key(at), "x"), at);
-    if (ch !== "-" && ch !== " ") return at;
-    // «-» одразу після ладу — «далі»: лад лишається, курсор іде на наступний крок.
-    return prev && /[\dx]/i.test(prev) ? next : clearAndNext();
+      cells.set(key(at), prev && /\d/.test(prev) && cur && /^\d+$/.test(cur) && Number(cur + ch) <= 24 ? cur + ch : ch);
+    } else if (ch.toLowerCase() === "x") cells.set(key(at), "x");
+    else if (ch === "-" || ch === " ") cells.delete(key(at));
+    return at;
   }
   // Прямокутники: назва акорду пишеться як текст — по кроку на символ; «-» тягне, «.» — порожньо.
   if (ch === "-") return (cells.set(key(at), "-"), next);
@@ -192,6 +259,12 @@ export function typeCell(kind: CellKind, slot: Y.Map<unknown>, steps: number, at
 export function eraseCell(kind: CellKind, slot: Y.Map<unknown>, steps: number, at: CellAt, backward: boolean): CellAt {
   const cells = slot.get("cells") as Y.Map<string>;
   const key = (a: CellAt) => cellKey(kind, steps, a);
+  // Лад у кілька цифр Backspace скорочує на цифру.
+  const cur = cells.get(key(at));
+  if (kind === "tab" && backward && cur && /^\d{2,}$/.test(cur)) {
+    cells.set(key(at), cur.slice(0, -1));
+    return at;
+  }
   if (cells.has(key(at)) || !backward || at.step === 0) {
     cells.delete(key(at));
     return at;

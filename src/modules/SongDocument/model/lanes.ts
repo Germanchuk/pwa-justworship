@@ -11,6 +11,7 @@
  */
 import * as Y from "yjs";
 import type { Line, Song } from "./song";
+import { GRID, staleGrid, upgradeGrid } from "./cells";
 
 /** `text` — додана текстова доріжка (вигуки, бек-вокал): правиться як акорди, текстом у Slate. */
 export type LaneKind = "words" | "chords" | "text" | "blocks" | "tab" | "cajon";
@@ -63,7 +64,10 @@ export const songLanes = (doc: Y.Doc) => allLanes(doc).filter((l) => !l.removed)
 export function newSlot(kind: LaneKind, chords = ""): Y.Map<unknown> {
   const slot = new Y.Map<unknown>();
   if (kind === "chords" || kind === "text") slot.set("text", new Y.Text(chords));
-  else if (kind !== "words") slot.set("cells", new Y.Map());
+  else if (kind !== "words") {
+    slot.set("cells", new Y.Map());
+    slot.set("grid", GRID);
+  }
   slot.set("notes", new Y.Map());
   return slot;
 }
@@ -86,13 +90,27 @@ export const hasCells = (line: Line) => filledCells(line).length > 0;
 /** Стерти вміст клітинкової доріжки рядка (її захопило видалення виділеного). Викликати в транзакції. */
 export const clearCells = (line: Line, id: string) => cellsOf(line, id)?.clear();
 
-/** Слоти рядка, яких бракує, — для рядків, що народились одночасно з доріжкою. */
-export const missingSlots = (song: Song, lines: readonly Line[]) =>
-  allLanes(song.doc).flatMap((lane) => lines.filter((line) => !line.has(lane.id)).map((line) => ({ line, lane })));
+/**
+ * Що в слотах рядків треба полагодити: слоти, яких бракує (рядки, що
+ * народились одночасно з доріжкою), і клітинки на старій сітці (`upgradeGrid`).
+ */
+export const missingSlots = (song: Song, lines: readonly Line[]) => [
+  ...allLanes(song.doc).flatMap((lane) => lines.filter((line) => !line.has(lane.id)).map((line) => ({ line, lane }))),
+  ...staleSlots(song, lines),
+];
 
-/** Дописати рядкам слоти, яких бракує (ADR-0008, «одночасність»). Викликати в транзакції. */
+const staleSlots = (song: Song, lines: readonly Line[]) =>
+  addedLanes(song.doc).flatMap((lane) =>
+    lines.filter((line) => line.get(lane.id) instanceof Y.Map && staleGrid(line.get(lane.id) as Y.Map<unknown>)).map((line) => ({ line, lane })),
+  );
+
+/** Дописати рядкам слоти, яких бракує (ADR-0008, «одночасність»), і перерахувати старі сітки. Викликати в транзакції. */
 export function ensureSlots(song: Song, lines: readonly Line[]) {
-  missingSlots(song, lines).forEach(({ line, lane }) => line.set(lane.id, newSlot(lane.kind)));
+  missingSlots(song, lines).forEach(({ line, lane }) => {
+    const slot = line.get(lane.id);
+    if (slot instanceof Y.Map) upgradeGrid(slot as Y.Map<unknown>, lane.kind as CellKind);
+    else line.set(lane.id, newSlot(lane.kind));
+  });
 }
 
 const newId = () => `l-${Math.random().toString(36).slice(2, 8)}`;

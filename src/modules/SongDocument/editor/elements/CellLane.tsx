@@ -6,7 +6,7 @@
 import * as Y from "yjs";
 import type { ReactNode } from "react";
 import { RenderElementProps, ReactEditor, useSlateStatic } from "slate-react";
-import { addBar, allLanes, barsOf, layout, cellKey, CellAt, CellKind, readMeta, removeBar, stepsPerBar, TAB_STRINGS } from "../../model";
+import { addBar, allLanes, barsOf, layout, cellKey, CellAt, CellKind, readMeta, removeBar, stepsPerBar, TAB_STRINGS, tabWidths } from "../../model";
 import { useEditorCtx, useModelLine } from "../context";
 
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
@@ -62,12 +62,12 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
 
   let body: ReactNode;
   if (kind === "tab") {
-    // Двозначний лад у такті — усі кроки такту завширшки два символи (як у тексті табів).
-    const wide = (bar: number) => TAB_STRINGS.some((_, string) => Array.from({ length: steps }, (_, s) => read({ step: bar * steps + s, string }) ?? "").some((v) => v.length > 1));
+    // Порожній крок — один «-»; крок із двозначним ладом — два символи на всіх струнах (як у тексті табів).
+    const widths = tabWidths((k) => cells.get(k), bars, steps);
     body = TAB_STRINGS.map((name, string) => (
       <div key={name} className="whitespace-pre">
         <span className="text-stone-400">{name}</span>
-        {allSteps((step) => stepSpan({ step, string }, (read({ step, string }) ?? "").padEnd(wide(Math.floor(step / steps)) ? 2 : 1, "-")))}
+        {allSteps((step) => stepSpan({ step, string }, (read({ step, string }) ?? "").padEnd(widths[step], "-")))}
       </div>
     ));
   } else if (kind === "cajon") {
@@ -88,7 +88,7 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
             start ? <span className="relative z-[1] font-bold">{v}</span> : inBlock ? " " : "·",
             {
               display: "inline-block",
-              minWidth: "2ch",
+              minWidth: "1ch",
               textAlign: "left",
               color: inBlock ? INK.blocks : "#a8a29e",
               background: inBlock ? "rgba(59,130,246,0.12)" : undefined,
