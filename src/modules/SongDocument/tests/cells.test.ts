@@ -104,11 +104,11 @@ describe("сітка", () => {
       cells.set("2.8/1", "x");
     });
     change(net.A, () => upgradeGrid(slotOf(net.A, 0, id), "tab"));
-    expect((slotOf(net.B, 0, id).get("cells") as Y.Map<string>).toJSON()).toEqual({ "1.1/6": "3", "1.73/2": "12", "2.169/1": "x" });
-    expect(slotOf(net.B, 0, id).get("grid")).toBe(192);
+    expect((slotOf(net.B, 0, id).get("cells") as Y.Map<string>).toJSON()).toEqual({ "1.1/6": "3", "1.145/2": "12", "2.337/1": "x" });
+    expect(slotOf(net.B, 0, id).get("grid")).toBe(384);
   });
 
-  it("тридцять другі → тіки: без втрат, кожна на свій тік", () => {
+  it("тридцять другі → тіки: без втрат, кожна на свій тік; 1/128 — точно", () => {
     const { net, id } = withLane("tab");
     change(net.A, () => {
       const slot = slotOf(net.A, 0, id);
@@ -119,7 +119,7 @@ describe("сітка", () => {
       cells.set("1.3/1", "7");
     });
     change(net.A, () => upgradeGrid(slotOf(net.A, 0, id), "tab"));
-    expect((slotOf(net.B, 0, id).get("cells") as Y.Map<string>).toJSON()).toEqual({ "1.1/1": "3", "1.7/1": "5", "1.13/1": "7" });
+    expect((slotOf(net.B, 0, id).get("cells") as Y.Map<string>).toJSON()).toEqual({ "1.1/1": "3", "1.13/1": "5", "1.25/1": "7" });
   });
 
   it("прямокутник старої сітки тягнеться на всі свої кроки", () => {
@@ -158,7 +158,7 @@ describe("кахон", () => {
       upgradeGrid(slotOf(net.A, 0, id), "cajon");
     });
     expect(text(net.B, 0, id, "cajon")).toEqual(cajon(1, { B: [0], T: [4], g: [6] }));
-    expect(parseCells("cajon", [`|B---T-g${d(9)}|`], sc("cajon"))!.cells).toEqual({ "1.1/1": "o", "1.49/2": "o", "1.73/3": "o" });
+    expect(parseCells("cajon", [`|B---T-g${d(9)}|`], sc("cajon"))!.cells).toEqual({ "1.1/1": "o", "1.97/2": "o", "1.145/3": "o" });
   });
 });
 
@@ -202,7 +202,7 @@ describe("таби", () => {
   it("текст табів ↔ клітинки — туди й назад той самий; табулатура з сайту з іншою шириною теж лягає", () => {
     const lines = [tabLine("e"), tabLine("B", [6, "1"]), tabLine("G", [4, "0"]), tabLine("D", [2, "2"]), tabLine("A", [0, "3"]), tabLine("E")];
     const parsed = parseCells("tab", lines, sc("tab"))!;
-    expect(parsed.cells).toEqual({ "1.73/2": "1", "1.49/3": "0", "1.25/4": "2", "1.1/5": "3" });
+    expect(parsed.cells).toEqual({ "1.145/2": "1", "1.97/3": "0", "1.49/4": "2", "1.1/5": "3" });
     expect(renderCells("tab", Object.entries(parsed.cells), parsed.bars, sc("tab"))).toEqual(lines);
     const site = ["e|--------|", "B|---1----|", "G|--0-----|", "D|-2------|", "A|3-------|", "E|--------|"];
     expect(parseCells("tab", site, sc("tab"))!.cells).toEqual(parsed.cells);
@@ -214,7 +214,7 @@ describe("таби", () => {
     type("3", 0, { step: 15, string: 5 });
     const shown = text(net.B, 0, id, "tab");
     const parsed = parseCells("tab", shown, sc("tab"))!;
-    expect(parsed.cells).toEqual({ "1.25/2": "12", "1.181/6": "3" });
+    expect(parsed.cells).toEqual({ "1.49/2": "12", "1.361/6": "3" });
   });
 });
 
@@ -296,13 +296,14 @@ describe("вставка розпізнає доріжки і збирає їх 
 
 describe("запис у тіках, показ у масштабі людини", () => {
   it("масштаб: комірок у такті і тіків на комірку; тріолі — точно", () => {
-    expect([16, 32, 64, 12, 24, 48].map((z) => sc("tab", z)).map(({ cells, tick }) => [cells, tick])).toEqual([
-      [16, 12],
-      [32, 6],
-      [64, 3],
-      [12, 16],
-      [24, 8],
-      [48, 4],
+    expect([16, 32, 64, 128, 12, 24, 48].map((z) => sc("tab", z)).map(({ cells, tick }) => [cells, tick])).toEqual([
+      [16, 24],
+      [32, 12],
+      [64, 6],
+      [128, 3],
+      [12, 32],
+      [24, 16],
+      [48, 8],
     ]);
     expect(sc("blocks", 64)).toMatchObject({ cells: 16, tick: 1 }); // прямокутники без масштабу
   });
@@ -310,11 +311,11 @@ describe("запис у тіках, показ у масштабі людини"
   it("записане в 1/64 у масштабі 1/16 — у найближчій комірці, сіріше; правка 1/16 його не чіпає", () => {
     const { net, id, type } = withLane("cajon");
     type("B", 0, { step: 1, string: 0 }, 64); // одна 64-та після першої долі
-    expect(cellsJSON(net.B, 0, id)).toEqual({ "1.4/1": "o" });
+    expect(cellsJSON(net.B, 0, id)).toEqual({ "1.7/1": "o" });
     const placed = placeCells("cajon", (slotOf(net.B, 0, id).get("cells") as Y.Map<string>).entries(), 1, sc("cajon"));
     expect(placed.get("0/0")).toMatchObject({ value: "o", off: 0.25 });
     change(net.A, () => eraseCell("cajon", slotOf(net.A, 0, id), sc("cajon"), { step: 0, string: 0 }, false));
-    expect(cellsJSON(net.B, 0, id)).toEqual({ "1.4/1": "o" });
+    expect(cellsJSON(net.B, 0, id)).toEqual({ "1.7/1": "o" });
     change(net.A, () => eraseCell("cajon", slotOf(net.A, 0, id), sc("cajon", 64), { step: 1, string: 0 }, false));
     expect(cellsJSON(net.B, 0, id)).toEqual({});
   });
@@ -339,10 +340,18 @@ describe("запис у тіках, показ у масштабі людини"
     expect(placed.get("15/1")).toMatchObject({ value: "5", off: 0.5 });
   });
 
+  it("1/128: друк на свій тік, у 1/16 — у своїй комірці блідо", () => {
+    const { net, id, type } = withLane("tab");
+    type("4", 0, { step: 1, string: 0 }, 128);
+    expect(cellsJSON(net.B, 0, id)).toEqual({ "1.4/1": "4" });
+    const placed = placeCells("tab", (slotOf(net.B, 0, id).get("cells") as Y.Map<string>).entries(), 1, sc("tab"));
+    expect(placed.get("0/0")).toMatchObject({ value: "4", off: 0.125 });
+  });
+
   it("тріолі: друк у масштабі 1/8 тріолі — на свій тік", () => {
     const { net, id, type } = withLane("tab");
     type("2", 0, { step: 1, string: 0 }, 12);
-    expect(cellsJSON(net.B, 0, id)).toEqual({ "1.17/1": "2" });
+    expect(cellsJSON(net.B, 0, id)).toEqual({ "1.33/1": "2" });
     expect(text(net.B, 0, id, "tab", sc("tab", 12))[0]).toBe(`e|-2${d(10)}|`);
   });
 
@@ -350,7 +359,7 @@ describe("запис у тіках, показ у масштабі людини"
     const { net, id } = withLane("cajon", [{ words: "" }]);
     const bars32 = cajon(1, { B: [0, 1] }, 32);
     change(net.A, () => insertPlainText(net.A, { line: 0, lane: "words", offset: 0 }, [...bars32, "Ти"].join("\n"), 32));
-    expect(cellsJSON(net.B, 0, id)).toEqual({ "1.1/1": "o", "1.7/1": "o" });
+    expect(cellsJSON(net.B, 0, id)).toEqual({ "1.1/1": "o", "1.13/1": "o" });
   });
 
   it("масштаб — особистий, як капо: за ніком у пісні, за замовчуванням 1/16", () => {
