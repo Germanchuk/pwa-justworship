@@ -12,14 +12,12 @@ import { useEditorCtx, useModelLine } from "../context";
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
 const INK: Record<CellKind, string> = { tab: "#57534e", cajon: "#92400e", blocks: "#1e40af" };
 /**
- * Крок табів на екрані — комірка, однакова для риски й ладу до 24. Ширину
- * тримає CSS, а не символи: усі кроки ділять ширину порівну (від `MIN` до
- * `MAX` px — такт `4/4` уміщається на телефоні; більше тактів — прокрутка),
- * двозначний лад стискається по горизонталі, щоб уміститись у крок.
- * Текстом (буфер) — як `renderCells`.
+ * Крок табів на екрані — комірка сталої ширини `TAB_STEP_PX`, однакова для
+ * риски й ладу до 24 і на будь-якому екрані (не тягнеться й не стискається;
+ * не влазить — прокрутка вбік). Двозначний лад стискається по горизонталі,
+ * щоб уміститись у крок. Текстом (буфер) — як `renderCells`.
  */
-const TAB_STEP_MIN_PX = 8;
-const TAB_STEP_MAX_PX = 12;
+const TAB_STEP_PX = 10;
 const TAB_ROW_PX = 17;
 const DASH = "linear-gradient(currentColor, currentColor) center / calc(100% - 2px) 1px no-repeat";
 
@@ -84,9 +82,8 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
             display: "flex",
             alignItems: "center",
             justifyContent: "center", // ширший за крок лад виходить на обидва боки порівну
-            flex: "1 1 0",
-            minWidth: TAB_STEP_MIN_PX,
-            maxWidth: TAB_STEP_MAX_PX,
+            flex: "none",
+            width: TAB_STEP_PX,
             height: TAB_ROW_PX,
             fontSize: 10,
             fontWeight: 600,
@@ -134,7 +131,7 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
   return (
     <div {...attributes} data-cell-lane={id} className="pr-2 md:pr-3" style={{ paddingLeft: 16, boxShadow: RULE }}>
       <div contentEditable={false} className="select-none flex items-start gap-2 py-0.5" style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, lineHeight: 1.35, color: INK[kind] }}>
-        <div className={`min-w-0 overflow-x-auto ${kind === "tab" ? "flex-1" : ""}`}>{body}</div>
+        <div className="min-w-0 overflow-x-auto">{body}</div>
         {ctx.canEdit && (
           <span className="flex gap-1 text-[11px] font-sans text-stone-400 shrink-0">
             <button type="button" title={`${lane.name}: додати такт`} onMouseDown={(e) => e.preventDefault()} onClick={() => ctx.lanes.change(() => addBar(slot))}>
