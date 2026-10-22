@@ -2,9 +2,9 @@
  * Проєкція: який вигляд має рядок моделі у видимому дереві конкретної людини.
  * Лише вибрані доріжки; каркас (структурні примітки й порожні рядки) — завжди.
  *
- * Доріжки рядка у видимому — згори донизу (ADR-0008): додані в порядку пісні —
- * текстові (вигуки) правляться як акорди, клітинкові (прямокутники, таби,
- * кахон) — атомні вузли Slate зі своїм курсором; під ними акорди, найнижче — слова.
+ * Доріжки рядка у видимому — згори донизу в порядку пісні (ADR-0008): слова й
+ * акорди, текстові додані (вигуки) правляться як акорди, клітинкові
+ * (прямокутники, таби, кахон) — атомні вузли Slate зі своїм курсором.
  */
 import { Node } from "slate";
 import { isBuiltinKind, isTextSlot, LANES, laneOf, layout, Line, LineAt, lineKind, songLanes, Song } from "../model";
@@ -25,17 +25,22 @@ export const isCellsNode = (node: Node) => (node as unknown as { type: string })
 /** Рядок видимого дерева: який маркер він показує і які доріжки. */
 export type Source = { line: Line; lanes: readonly ViewLane[] };
 
-/** Додані доріжки, які людина бачить, — згори донизу. */
-export const shownAdded = (song: Song, display: LaneDisplay): ViewLane[] =>
-  songLanes(song.doc).flatMap((l) => (isBuiltinKind(l.kind) || display.hidden?.includes(l.id) ? [] : [l.id]));
+/** Доріжки, які людина бачить, — згори донизу в порядку пісні. */
+export const shownLanes = (song: Song, display: LaneDisplay): ViewLane[] =>
+  songLanes(song.doc).flatMap((l) =>
+    (isBuiltinKind(l.kind) ? display[l.kind as "words" | "chords"] : !display.hidden?.includes(l.id)) ? [l.id] : [],
+  );
 
 /** Які доріжки рядка є у видимому дереві; `null` — рядка у видимому немає. */
-export function viewLanes(l: LineAt, display: LaneDisplay, added: readonly ViewLane[] = []): readonly ViewLane[] | null {
+export function viewLanes(
+  l: LineAt,
+  display: LaneDisplay,
+  shown: readonly ViewLane[] = LANES.filter((lane) => display[lane as "words" | "chords"]),
+): readonly ViewLane[] | null {
   const kind = lineKind(l);
   if (kind === "note") return ["words"];
   if (kind === "empty") return display.words || !display.chords ? ["words"] : ["chords"];
-  const lanes = [...added, ...LANES.filter((lane) => display[lane as "words" | "chords"])];
-  return lanes.length ? lanes : null;
+  return shown.length ? shown : null;
 }
 
 /** Вузол доріжки: слова й акорди — `type` = id; додана текстова — `text`; клітинкова (і слот, якого ще немає) — `cells`. */
@@ -57,9 +62,9 @@ export const laneOfNode = (node: Node): ViewLane => {
 
 /** Видимі рядки для поточних рядків моделі. */
 export const project = (s: ViewState) => {
-  const added = shownAdded(s.song, s.display);
+  const shown = shownLanes(s.song, s.display);
   return s.lines.flatMap((l) => {
-    const lanes = viewLanes(l, s.display, added);
+    const lanes = viewLanes(l, s.display, shown);
     return lanes ? [{ l, lanes }] : [];
   });
 };
@@ -67,5 +72,5 @@ export const project = (s: ViewState) => {
 /** Чи видно (і можна правити) доріжку рядка. Посеред команди модель змінюється — тож завжди свіжі рядки. */
 export function isShown(s: ViewState, ln: number, lane: ViewLane) {
   const l = layout(s.song)[ln];
-  return !!l && (viewLanes(l, s.display, shownAdded(s.song, s.display))?.includes(lane) ?? false);
+  return !!l && (viewLanes(l, s.display, shownLanes(s.song, s.display))?.includes(lane) ?? false);
 }

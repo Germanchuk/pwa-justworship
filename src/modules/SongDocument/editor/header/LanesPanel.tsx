@@ -1,7 +1,8 @@
 /**
- * Доріжки пісні (ADR-0008): додані — порядок перетягуванням, назва, додати,
- * прибрати й повернути; слова й акорди — внизу, на сталому місці. Спільне для всіх — правиться лише в режимі правки; кожна дія — один
- * крок undo (`change`). Сховати доріжку собі — перемикачі в шапці.
+ * Доріжки пісні (ADR-0008): порядок усіх — перетягуванням (і слів з акордами);
+ * доданим — назва, прибрати й повернути. Спільне для всіх — правиться лише в
+ * режимі правки; кожна дія — один крок undo (`change`). Сховати доріжку собі —
+ * перемикачі в шапці.
  */
 import { useState } from "react";
 import { Bars2Icon, XMarkIcon } from "@heroicons/react/24/outline";
@@ -11,7 +12,7 @@ import {
   addLane,
   allLanes,
   CELL_KINDS,
-  isTextKind,
+  isBuiltinKind,
   KIND_NAMES,
   linesOf,
   moveLane,
@@ -26,9 +27,7 @@ type Props = { song: Song; change: (fn: () => void) => void; onClose: () => void
 export function LanesPanel({ song, change, onClose }: Props) {
   const { doc } = song;
   const all = allLanes(doc);
-  // Перетягуються лише додані: слова й акорди стоять внизу на сталому місці.
-  const lanes = all.filter((l) => !l.removed && !isTextKind(l.kind));
-  const fixed = all.filter((l) => isTextKind(l.kind));
+  const lanes = all.filter((l) => !l.removed);
   const removed = all.filter((l) => l.removed);
 
   const onDragEnd = ({ source, destination, draggableId }: DropResult) => {
@@ -48,29 +47,28 @@ export function LanesPanel({ song, change, onClose }: Props) {
                       <span {...drag.dragHandleProps} className="text-stone-400" aria-label="Перетягнути">
                         <Bars2Icon className="w-5 h-5" />
                       </span>
-                      <LaneName name={lane.name} onRename={(name) => change(() => renameLane(doc, lane.id, name))} />
-                      {lane.name !== KIND_NAMES[lane.kind] && (
-                        <span className="text-xs text-stone-400">{KIND_NAMES[lane.kind]}</span>
+                      {isBuiltinKind(lane.kind) ? (
+                        // Слова й акорди є завжди: без назви й без «прибрати».
+                        <span className="min-w-0 flex-1 text-sm">{lane.name}</span>
+                      ) : (
+                        <>
+                          <LaneName name={lane.name} onRename={(name) => change(() => renameLane(doc, lane.id, name))} />
+                          {lane.name !== KIND_NAMES[lane.kind] && <span className="text-xs text-stone-400">{KIND_NAMES[lane.kind]}</span>}
+                          <button
+                            type="button"
+                            className="text-stone-400 hover:text-red-600"
+                            aria-label={`Прибрати доріжку «${lane.name}»`}
+                            onClick={() => change(() => removeLane(doc, lane.id))}
+                          >
+                            <XMarkIcon className="w-4 h-4" />
+                          </button>
+                        </>
                       )}
-                      <button
-                        type="button"
-                        className="text-stone-400 hover:text-red-600"
-                        aria-label={`Прибрати доріжку «${lane.name}»`}
-                        onClick={() => change(() => removeLane(doc, lane.id))}
-                      >
-                        <XMarkIcon className="w-4 h-4" />
-                      </button>
                     </li>
                   )}
                 </Draggable>
               ))}
               {drop.placeholder}
-              {fixed.map((lane) => (
-                <li key={lane.id} className="flex items-center gap-2 bg-stone-50 px-2 py-1.5 text-sm text-stone-500">
-                  <span className="w-5" />
-                  {lane.name}
-                </li>
-              ))}
             </ul>
           )}
         </Droppable>

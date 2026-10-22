@@ -17,6 +17,7 @@ import {
   Song,
   ensureSlots,
   insertPlainText,
+  chordsOf,
   layout,
   lineKind,
   linesOf,
@@ -83,7 +84,7 @@ describe("список доріжок", () => {
     expect(linesOf(net.B).every((line) => cellsOf(line, id) !== undefined)).toBe(true);
   });
 
-  it("перетягуються лише додані — порядок спільний; слова завжди найнижчі, акорди — другі знизу", () => {
+  it("перетягується будь-яка доріжка, і слова з акордами — порядок спільний", () => {
     const net = makePair(SEED);
     let tab = "";
     let cajon = "";
@@ -91,12 +92,25 @@ describe("список доріжок", () => {
       tab = addLane(net.A, "tab", linesOf(net.A));
       cajon = addLane(net.A, "cajon", linesOf(net.A));
     });
+    expect(ids(songLanes(net.B.doc))).toEqual([tab, cajon, "chords", "words"]); // без запису — слова й акорди внизу
     change(net.A, () => moveLane(net.A.doc, cajon, 0));
     expect(ids(songLanes(net.B.doc))).toEqual([cajon, tab, "chords", "words"]);
-    change(net.B, () => moveLane(net.B.doc, cajon, 5)); // далі за кінець доданих — найнижча з доданих
-    expect(ids(songLanes(net.A.doc))).toEqual([tab, cajon, "chords", "words"]);
-    expect(() => moveLane(net.A.doc, "words", 0)).toThrow();
-    expect(() => moveLane(net.A.doc, "chords", 0)).toThrow();
+    change(net.B, () => moveLane(net.B.doc, "words", 0));
+    expect(ids(songLanes(net.A.doc))).toEqual(["words", cajon, tab, "chords"]);
+    change(net.A, () => moveLane(net.A.doc, "chords", 1));
+    expect(ids(songLanes(net.B.doc))).toEqual(["words", "chords", cajon, tab]);
+    change(net.B, () => moveLane(net.B.doc, cajon, 9)); // далі за кінець — найнижча
+    expect(ids(songLanes(net.A.doc))).toEqual(["words", "chords", tab, cajon]);
+  });
+
+  it("нова доріжка стає одразу над акордами, де б вони не стояли", () => {
+    const net = makePair(SEED);
+    let tab = "";
+    change(net.A, () => (tab = addLane(net.A, "tab", linesOf(net.A))));
+    change(net.A, () => moveLane(net.A.doc, "words", 0));
+    let cajon = "";
+    change(net.A, () => (cajon = addLane(net.A, "cajon", linesOf(net.A))));
+    expect(ids(songLanes(net.B.doc))).toEqual(["words", tab, cajon, "chords"]);
   });
 
   it("прибрана доріжка зникає зі списку, вміст лишається; її можна повернути; слова й акорди — ні", () => {
@@ -227,6 +241,18 @@ describe("клітинкові доріжки — атомні вузли вид
     expect(order()).toEqual([cajon, tab, "chords", "words"]);
     A.undoManager.undo();
     expect(order()).toEqual([tab, cajon, "chords", "words"]);
+  });
+
+  it("слова над акордами — рядки перебудовано, друк і вставка йдуть за новим порядком", () => {
+    const { net, A, B, tab } = withTab();
+    A.change(() => moveLane(net.A.doc, "words", 0));
+    expect(rowsOf(B, tab)[0]).toBe("w:Ти святий | t | c:Am F");
+    at(A, 0, 0, 9);
+    Editor.insertText(A.view, "!");
+    expect(layout(net.B)[0].words).toBe("Ти святий!");
+    // Слова вище за акорди: акорди під словами — той самий рядок пісні.
+    change(net.A, () => insertPlainText(net.A, { line: 2, lane: "words", offset: 7 }, "\nДуше моя\nD  G"));
+    expect(layout(net.B).slice(3).map((l) => [l.words, chordsOf(l.line).toString()])).toEqual([["Душе моя", "D  G"]]);
   });
 });
 
