@@ -312,22 +312,22 @@ describe("запис у тіках, показ у масштабі людини"
     type("B", 0, { step: 1, string: 0 }, 64); // одна 64-та після першої долі
     expect(cellsJSON(net.B, 0, id)).toEqual({ "1.4/1": "o" });
     const placed = placeCells("cajon", (slotOf(net.B, 0, id).get("cells") as Y.Map<string>).entries(), 1, sc("cajon"));
-    expect(placed.get("0/0")).toEqual({ value: "o", off: 0.25, count: 1 });
+    expect(placed.get("0/0")).toMatchObject({ value: "o", off: 0.25 });
     change(net.A, () => eraseCell("cajon", slotOf(net.A, 0, id), sc("cajon"), { step: 0, string: 0 }, false));
     expect(cellsJSON(net.B, 0, id)).toEqual({ "1.4/1": "o" });
     change(net.A, () => eraseCell("cajon", slotOf(net.A, 0, id), sc("cajon", 64), { step: 1, string: 0 }, false));
     expect(cellsJSON(net.B, 0, id)).toEqual({});
   });
 
-  it("дві події в одній комірці — показано найближчу й скільки їх; кінець такту — перша комірка наступного", () => {
+  it("дві події в одній комірці — обидві (показ кладе одна на одну), для тексту — найближча; кінець такту — перша комірка наступного", () => {
     const { net, id, type } = withLane("tab");
     change(net.A, () => addBar(slotOf(net.A, 0, id)));
     type("3", 0, { step: 0, string: 0 }, 64);
     type("5", 0, { step: 1, string: 0 }, 64);
     type("7", 0, { step: 63, string: 0 }, 64); // остання 64-та першого такту
     const placed = placeCells("tab", (slotOf(net.B, 0, id).get("cells") as Y.Map<string>).entries(), 2, sc("tab"));
-    expect(placed.get("0/0")).toEqual({ value: "3", off: 0, count: 2 });
-    expect(placed.get("16/0")).toEqual({ value: "7", off: 0.25, count: 1 });
+    expect(placed.get("0/0")).toEqual({ value: "3", off: 0, all: [{ value: "3", off: 0 }, { value: "5", off: 0.25 }] });
+    expect(placed.get("16/0")).toMatchObject({ value: "7", off: 0.25 });
   });
 
   it("рівно між двома комірками — у лівій, ближчій до початку такту", () => {
@@ -335,8 +335,8 @@ describe("запис у тіках, показ у масштабі людини"
     type("3", 0, { step: 1, string: 0 }, 32); // друга 32-га — рівно між 1-ю і 2-ю шістнадцятими
     type("5", 0, { step: 31, string: 1 }, 32); // остання 32-га такту — між останньою 16-ю і наступним тактом
     const placed = placeCells("tab", (slotOf(net.B, 0, id).get("cells") as Y.Map<string>).entries(), 2, sc("tab"));
-    expect(placed.get("0/0")).toEqual({ value: "3", off: 0.5, count: 1 });
-    expect(placed.get("15/1")).toEqual({ value: "5", off: 0.5, count: 1 });
+    expect(placed.get("0/0")).toMatchObject({ value: "3", off: 0.5 });
+    expect(placed.get("15/1")).toMatchObject({ value: "5", off: 0.5 });
   });
 
   it("тріолі: друк у масштабі 1/8 тріолі — на свій тік", () => {

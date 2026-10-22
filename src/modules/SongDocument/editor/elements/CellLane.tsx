@@ -6,7 +6,7 @@
  *
  * Удари — у масштабі людини (`Scale`): подія в найближчій комірці; точно на
  * долі — звичайна, поруч — сіріша й прозоріша, що далі від долі; кілька в
- * одній комірці — число в кутку. Правиться лише точне (`cells.ts`).
+ * одній комірці — буквально одна на одній. Правиться лише точне (`cells.ts`).
  */
 import * as Y from "yjs";
 import type { ReactNode } from "react";
@@ -105,20 +105,25 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
       </span>
     </div>
   );
-  /** Крок лінії: риска, коли порожньо, інакше — значення по центру; не на долі — сіріше, що далі. */
-  const lineStep = (at: CellAt, content: ReactNode) => {
+  /**
+   * Крок лінії: риска, коли порожньо, інакше — значення по центру; не на долі
+   * — сіріше й прозоріше, що далі. Кілька подій у комірці (дрібна партія в
+   * грубій сітці) — буквально одна на одній: так видно, що їх там кілька.
+   */
+  const lineStep = (at: CellAt) => {
     const cell = shown(at);
-    const off = cell?.off ?? 0;
     return stepSpan(
       at,
-      <>
-        <span style={off ? { opacity: 1 - off * 1.2 } : undefined}>{content}</span>
-        {cell && cell.count > 1 && (
-          <span className="absolute -top-0.5 right-0 text-[7px] leading-none text-red-600" title={`Тут ${cell.count} події — точніше видно в дрібнішій сітці`}>
-            {cell.count}
-          </span>
-        )}
-      </>,
+      cell?.all.map(({ value, off }, i) => (
+        <span
+          key={i}
+          className="absolute inset-0 flex items-center justify-center"
+          style={off ? { color: "#78716c", opacity: 1 - off * 1.2 } : undefined}
+        >
+          {/* Двозначний лад стискається, щоб уміститись у крок. */}
+          {value.length > 1 ? <span style={{ display: "inline-block", transform: "scaleX(0.7)" }}>{value}</span> : value}
+        </span>
+      )),
       {
         ...fixed(STEP_PX),
         position: "relative",
@@ -128,7 +133,7 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
         height: ROW_PX,
         fontSize: 10,
         fontWeight: 600,
-        color: !cell ? "#a8a29e" : off ? "#78716c" : INK[kind],
+        color: cell ? INK[kind] : "#a8a29e",
         background: cell ? undefined : DASH,
       },
     );
@@ -139,9 +144,7 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
     // Таби — струна на лінію, кахон — вид удару на лінію.
     body = rowsOf(kind).map((name, string) =>
       row(name, (step) => {
-        const v = read({ step, string });
-        const digits = v && v.length > 1 ? <span style={{ display: "inline-block", transform: "scaleX(0.7)" }}>{v}</span> : v;
-        return lineStep({ step, string }, digits);
+        return lineStep({ step, string });
       }),
     );
   } else {

@@ -130,14 +130,16 @@ export type CellAt = { step: number; string: number };
 export const cellKey = (kind: CellKind, scale: Scale, { step, string }: CellAt) =>
   `${Math.floor(step / scale.cells) + 1}.${(step % scale.cells) * scale.tick + 1}${kind === "blocks" ? "" : `/${string + 1}`}`;
 
-/** Що показати в комірці: найближче до її долі значення, на скільки воно від долі (0 — точно, до 0.5 комірки) і скільки подій туди лягло. */
-export type Shown = { value: string; off: number; count: number };
+/** Подія в комірці: значення і на скільки воно від долі комірки (0 — точно, до 0.5 комірки). */
+export type Placed = { value: string; off: number };
+/** Що в комірці: найближче до долі (`value`, `off` — для тексту) і всі події, що туди лягли (`all` — показ накладанням). */
+export type Shown = Placed & { all: Placed[] };
 
 /**
  * Записане → комірки масштабу: кожна подія — у найближчу комірку, рівно
  * посередині — у ліву, ближчу до початку такту (ключ
- * `«комірка від початку рядка/лінія»`). Кілька в одній — лишається найближча,
- * `count` каже, скільки їх насправді.
+ * `«комірка від початку рядка/лінія»`). Кілька в одній — усі в `all`
+ * (показ кладе їх одна на одну), а найближча — для тексту.
  */
 export function placeCells(kind: CellKind, entries: Iterable<[string, string]>, bars: number, scale: Scale): Map<string, Shown> {
   const out = new Map<string, Shown>();
@@ -152,7 +154,8 @@ export function placeCells(kind: CellKind, entries: Iterable<[string, string]>, 
     if (bar >= bars) continue;
     const at = `${bar * scale.cells + cell}/${kind === "blocks" ? 0 : k.string - 1}`;
     const was = out.get(at);
-    out.set(at, !was ? { value, off, count: 1 } : { ...(off < was.off ? { value, off } : was), count: was.count + 1 });
+    const all = [...(was?.all ?? []), { value, off }];
+    out.set(at, { ...(was && was.off <= off ? { value: was.value, off: was.off } : { value, off }), all });
   }
   return out;
 }
