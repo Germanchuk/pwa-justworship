@@ -330,6 +330,15 @@ describe("запис у тіках, показ у масштабі людини"
     expect(placed.get("16/0")).toEqual({ value: "7", off: 0.25, count: 1 });
   });
 
+  it("рівно між двома комірками — у лівій, ближчій до початку такту", () => {
+    const { net, id, type } = withLane("tab");
+    type("3", 0, { step: 1, string: 0 }, 32); // друга 32-га — рівно між 1-ю і 2-ю шістнадцятими
+    type("5", 0, { step: 31, string: 1 }, 32); // остання 32-га такту — між останньою 16-ю і наступним тактом
+    const placed = placeCells("tab", (slotOf(net.B, 0, id).get("cells") as Y.Map<string>).entries(), 2, sc("tab"));
+    expect(placed.get("0/0")).toEqual({ value: "3", off: 0.5, count: 1 });
+    expect(placed.get("15/1")).toEqual({ value: "5", off: 0.5, count: 1 });
+  });
+
   it("тріолі: друк у масштабі 1/8 тріолі — на свій тік", () => {
     const { net, id, type } = withLane("tab");
     type("2", 0, { step: 1, string: 0 }, 12);

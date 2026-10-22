@@ -134,7 +134,8 @@ export const cellKey = (kind: CellKind, scale: Scale, { step, string }: CellAt) 
 export type Shown = { value: string; off: number; count: number };
 
 /**
- * Записане → комірки масштабу: кожна подія — у найближчу комірку (ключ
+ * Записане → комірки масштабу: кожна подія — у найближчу комірку, рівно
+ * посередині — у ліву, ближчу до початку такту (ключ
  * `«комірка від початку рядка/лінія»`). Кілька в одній — лишається найближча,
  * `count` каже, скільки їх насправді.
  */
@@ -144,7 +145,7 @@ export function placeCells(kind: CellKind, entries: Iterable<[string, string]>, 
     const k = parseKey(key);
     if (!k) continue;
     const exact = (k.step - 1) / scale.tick; // у комірках від початку такту
-    let cell = Math.round(exact);
+    let cell = Math.ceil(exact - 0.5); // рівно між двома — ліва, ближча до початку такту
     const off = Math.abs(exact - cell);
     let bar = k.bar - 1;
     if (cell >= scale.cells) [bar, cell] = [bar + 1, 0]; // найближча — перша комірка наступного такту
