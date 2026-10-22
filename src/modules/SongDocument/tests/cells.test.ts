@@ -20,6 +20,7 @@ import {
   stepsPerBar,
   stepsPerBeat,
   typeCell,
+  upgradeCajon,
   upgradeGrid,
   writeMeta,
 } from "../model";
@@ -33,6 +34,12 @@ const tabLine = (name: string, ...frets: [number, string][]) => {
   return `${name}|${out}|`;
 };
 
+/** Кахон текстом: `bars` тактів; удари — кроки від початку рядка (з 0) на лініях B, T, g. */
+const cajon = (bars: number, hits: { B?: number[]; T?: number[]; g?: number[] } = {}, steps = 16) =>
+  (["B", "T", "g"] as const).map(
+    (row) =>
+      `${row}|${Array.from({ length: bars }, (_, b) => Array.from({ length: steps }, (_, s) => (hits[row]?.includes(b * steps + s) ? "o" : "-")).join("")).join("|")}|`,
+  );
 const slotOf = (song: Song, ln: number, id: string) => linesOf(song)[ln].get(id) as Y.Map<unknown>;
 const text = (song: Song, ln: number, id: string, kind: CellKind, steps = 16) => {
   const slot = slotOf(song, ln, id);
@@ -69,11 +76,11 @@ describe("сітка", () => {
 
   it("за замовчуванням один такт; додати — скільки завгодно; прибрати можна лише порожній останній", () => {
     const { net, id, type } = withLane("cajon");
-    expect(text(net.B, 0, id, "cajon")).toEqual([`|${d(16)}|`]);
+    expect(text(net.B, 0, id, "cajon")).toEqual(cajon(1));
     change(net.A, () => addBar(slotOf(net.A, 0, id)));
     change(net.A, () => addBar(slotOf(net.A, 0, id)));
     type("B", 0, { step: 32, string: 0 });
-    expect(text(net.B, 0, id, "cajon")).toEqual([`|${d(16)}|${d(16)}|B${d(15)}|`]);
+    expect(text(net.B, 0, id, "cajon")).toEqual(cajon(3, { B: [32] }));
     change(net.A, () => removeBar(slotOf(net.A, 0, id)));
     expect(barsOf(slotOf(net.B, 0, id))).toBe(3);
   });
@@ -121,10 +128,24 @@ describe("сітка", () => {
 });
 
 describe("кахон", () => {
-  it("B / T / g / - — по кроку на символ", () => {
+  it("кожен удар на своїй лінії; B / T / g — на свою лінію, o — на лінію курсора, «-» стирає; курсор стоїть", () => {
     const { net, id, type } = withLane("cajon");
-    type("B-T-BgT-");
-    expect(text(net.B, 0, id, "cajon")).toEqual([`|B-T-BgT-${d(8)}|`]);
+    expect(type("B", 0, { step: 0, string: 0 })).toEqual({ step: 0, string: 0 });
+    type("Tg", 0, { step: 4, string: 0 }); // два удари разом
+    type("o", 0, { step: 8, string: 2 });
+    type("o-", 0, { step: 12, string: 1 });
+    expect(text(net.B, 0, id, "cajon")).toEqual(cajon(1, { B: [0], T: [4], g: [4, 8] }));
+  });
+
+  it("кахон однією лінією (до 2026-10-22) розкладається по лініях — і в пісні, і з буфера", () => {
+    const { net, id } = withLane("cajon");
+    change(net.A, () => {
+      const cells = slotOf(net.A, 0, id).get("cells") as Y.Map<string>;
+      ["1.1", "1.5", "1.7"].forEach((key, i) => cells.set(key, "BTg"[i]));
+    });
+    change(net.A, () => upgradeCajon(slotOf(net.A, 0, id)));
+    expect(text(net.B, 0, id, "cajon")).toEqual(cajon(1, { B: [0], T: [4], g: [6] }));
+    expect(parseCells("cajon", [`|B---T-g${d(9)}|`], 16)!.cells).toEqual({ "1.1/1": "o", "1.5/2": "o", "1.7/3": "o" });
   });
 });
 
@@ -207,29 +228,31 @@ describe("прямокутники", () => {
 describe("склеювання рядків", () => {
   it("клітинки другого рядка дописуються після тактів першого", () => {
     const { net, id, type } = withLane("cajon");
-    type("B-T-B-T-", 0);
-    type("BBT-BBT-", 1);
+    type("B", 0, { step: 0, string: 0 });
+    type("T", 0, { step: 4, string: 0 });
+    type("B", 1, { step: 1, string: 0 });
+    type("T", 1, { step: 2, string: 0 });
     change(net.A, () => mergeLine(net.A, 1));
     expect(layout(net.B).map((l) => l.words)).toEqual(["Ти святийГосподь"]);
-    expect(text(net.B, 0, id, "cajon")).toEqual([`|B-T-B-T-${d(8)}|BBT-BBT-${d(8)}|`]);
+    expect(text(net.B, 0, id, "cajon")).toEqual(cajon(2, { B: [0, 17], T: [4, 18] }));
   });
 });
 
 describe("вставка розпізнає доріжки і збирає їх у рядок", () => {
   const TAB = [tabLine("e"), tabLine("B", [6, "1"]), tabLine("G", [4, "0"]), tabLine("D", [2, "2"]), tabLine("A", [0, "3"]), tabLine("E")];
-  const CAJON = `|B-T-B-T-${d(8)}|`;
+  const CAJON = cajon(1, { B: [0, 4], T: [2, 6], g: [7] });
 
   it("таби, кахон, акорди й слова → один рядок пісні; наступні таби — новий рядок", () => {
     const { net, id: tab } = withLane("tab", [{ words: "" }]);
-    let cajon = "";
-    change(net.A, () => (cajon = addLane(net.A, "cajon", linesOf(net.A))));
-    const pasted = [...TAB, CAJON, "C       G", "Ти святий", ...TAB, "Господь"].join("\n");
+    let lane = "";
+    change(net.A, () => (lane = addLane(net.A, "cajon", linesOf(net.A))));
+    const pasted = [...TAB, ...CAJON, "C       G", "Ти святий", ...TAB, "Господь"].join("\n");
     change(net.A, () => insertPlainText(net.A, { line: 0, lane: "words", offset: 0 }, pasted));
     expect(layout(net.B).map((l) => l.words)).toEqual(["Ти святий", "Господь"]);
     expect(text(net.B, 0, tab, "tab")).toEqual(TAB);
-    expect(text(net.B, 0, cajon, "cajon")).toEqual([CAJON]);
+    expect(text(net.B, 0, lane, "cajon")).toEqual(CAJON);
     expect(text(net.B, 1, tab, "tab")).toEqual(TAB);
-    expect(text(net.B, 1, cajon, "cajon")).toEqual([`|${d(16)}|`]);
+    expect(text(net.B, 1, lane, "cajon")).toEqual(cajon(1));
   });
 
   it("дві доріжки табів — перші таби групи в першу, другі — в другу", () => {
@@ -254,6 +277,6 @@ describe("вставка розпізнає доріжки і збирає їх 
     change(net.A, () => writeMeta(net.A.doc, { timeSignature: "6/8" }));
     const bar = `|B--T--${d(6)}|`;
     change(net.A, () => insertPlainText(net.A, { line: 0, lane: "words", offset: 0 }, `${bar}\nТи`));
-    expect(text(net.B, 0, id, "cajon", 12)).toEqual([bar]);
+    expect(text(net.B, 0, id, "cajon", 12)).toEqual(cajon(1, { B: [0], T: [3] }, 12));
   });
 });

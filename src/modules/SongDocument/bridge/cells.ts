@@ -1,7 +1,7 @@
 /**
  * Курсор у клітинковій доріжці (ADR-0008). Для Slate доріжка — атомний вузол;
  * усередині нього в кожного свій курсор-крок: стрілки ходять по кроках (у табах
- * ↑↓ — по струнах), символ пишеться за синтаксисом виду, Backspace стирає крок.
+ * і кахоні ↑↓ — по лініях), символ пишеться за синтаксисом виду, Backspace стирає крок.
  * Дійшли до краю — стрілку обробляє Slate: курсор виходить у сусідню доріжку.
  */
 import * as Y from "yjs";
@@ -17,6 +17,7 @@ import {
   parseCells,
   readMeta,
   renderCells,
+  rowsOf,
   stepsPerBar,
   typeCell,
   writeParsed,
@@ -136,9 +137,9 @@ export function installCells(s: ViewState, history: History): Cells {
         case "ArrowRight":
           return step < total - 1 && move({ step: step + 1, string });
         case "ArrowUp":
-          return c.kind === "tab" && string > 0 && move({ step, string: string - 1 });
+          return string > 0 && move({ step, string: string - 1 });
         case "ArrowDown":
-          return c.kind === "tab" && string < 5 && move({ step, string: string + 1 });
+          return string < rowsOf(c.kind).length - 1 && move({ step, string: string + 1 });
         case "Home":
           return move({ step: 0, string });
         case "End":

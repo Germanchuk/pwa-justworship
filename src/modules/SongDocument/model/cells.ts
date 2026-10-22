@@ -6,10 +6,12 @@
  * Слот пам'ятає свою сітку (`grid` — кроків у цілій ноті): клітинки, записані
  * на іншій (вісімки, тридцять другі), перераховує `upgradeGrid`. Доріжка в рядку — `bars`
  * тактів (за замовчуванням один, додаються). Ключ клітинки — «такт.крок»,
- * для табів ще «/струна» (усе з 1).
+ * для табів і кахона ще «/лінія» — струна чи вид удару (усе з 1).
  *
  *   прямокутники  |Am------|F---G---|   назва відкриває, «-» тягне, «.» — порожньо
- *   кахон         |B-T-B-T-|           B — бас, T — тон, g — гост, «-» — нічого
+ *   кахон         B|o-------o-------|  кожен удар на своїй лінії: B — бас,
+ *                 T|----o-------o---|  T — тон, g — гост; «o» — удар, «-» — нічого
+ *                 g|--o---o---o---o-|
  *   таби          e|---12---|          шість струн e B G D A E; лад 0–24, x;
  *                                      порожній крок — один «-», крок із
  *                                      двозначним ладом — два символи на всіх струнах
@@ -18,6 +20,12 @@ import * as Y from "yjs";
 import type { CellKind } from "./lanes";
 
 export const TAB_STRINGS = ["e", "B", "G", "D", "A", "E"] as const;
+/** Лінії кахона згори донизу: бас, тон, гост. */
+export const CAJON_ROWS = ["B", "T", "g"] as const;
+/** Лінії доріжки згори донизу: струни табів, удари кахона; у прямокутників одна, без назви. */
+export const rowsOf = (kind: CellKind): readonly string[] => (kind === "tab" ? TAB_STRINGS : kind === "cajon" ? CAJON_ROWS : [""]);
+/** Удар кахона в клітинці. */
+const HIT = "o";
 
 /** Кроків у цілій ноті: крок — шістнадцята. */
 export const GRID = 16;
@@ -78,11 +86,25 @@ export function upgradeGrid(slot: Y.Map<unknown>, kind: CellKind) {
   slot.set("grid", GRID);
 }
 
-/** Місце курсора в доріжці: крок від початку рядка (з 0) і струна (з 0; не таби — 0). */
+/** Місце курсора в доріжці: крок від початку рядка (з 0) і лінія — струна чи удар (з 0; прямокутники — 0). */
 export type CellAt = { step: number; string: number };
 
 export const cellKey = (kind: CellKind, steps: number, { step, string }: CellAt) =>
-  `${Math.floor(step / steps) + 1}.${(step % steps) + 1}${kind === "tab" ? `/${string + 1}` : ""}`;
+  `${Math.floor(step / steps) + 1}.${(step % steps) + 1}${kind === "blocks" ? "" : `/${string + 1}`}`;
+
+/** Кахон, записаний до 2026-10-22 однією лінією («такт.крок» → B/T/g), — треба розкласти по лініях. */
+export const staleCajon = (slot: Y.Map<unknown>) => Array.from((slot.get("cells") as Y.Map<string>).keys()).some((key) => !key.includes("/"));
+
+/** Розкласти старий кахон по лініях: удар іде на лінію свого виду. Викликати в транзакції. */
+export function upgradeCajon(slot: Y.Map<unknown>) {
+  const cells = slot.get("cells") as Y.Map<string>;
+  Array.from(cells.entries()).forEach(([key, value]) => {
+    if (key.includes("/")) return;
+    cells.delete(key);
+    const row = CAJON_ROWS.indexOf(value as (typeof CAJON_ROWS)[number]);
+    if (row >= 0) cells.set(`${key}/${row + 1}`, HIT);
+  });
+}
 
 function parseKey(key: string) {
   const m = /^(\d+)\.(\d+)(?:\/(\d+))?$/.exec(key);
@@ -105,7 +127,8 @@ export function renderCells(kind: CellKind, read: Read, bars: number, steps: num
   const barsText = (bar: (b: number) => string) =>
     "|" + Array.from({ length: bars }, (_, i) => bar(i + 1)).join("|") + "|";
 
-  if (kind === "cajon") return [barsText((b) => Array.from({ length: steps }, (_, s) => at(b, s) ?? "-").join(""))];
+  if (kind === "cajon")
+    return CAJON_ROWS.map((name, row) => name + barsText((b) => Array.from({ length: steps }, (_, s) => (at(b, s, row) ? HIT : "-")).join("")));
   if (kind === "blocks")
     return [
       barsText((b) => {
@@ -195,10 +218,17 @@ export function parseCells(kind: CellKind, lines: string[], steps: number): Pars
     }
     return { cells, bars };
   }
+  if (kind === "cajon" && lines.length === CAJON_ROWS.length) {
+    if (!isCajonRows(lines)) return null;
+    const perRow = lines.map(barsIn);
+    perRow.forEach((all, row) => all.forEach((text, b) => [...text].forEach((ch, s) => /[oxOX]/.test(ch) && put(b + 1, s, HIT, row))));
+    return { cells, bars: Math.max(1, ...perRow.map((b) => b.length)) };
+  }
   if (lines.length !== 1 || !(kind === "cajon" ? isCajonLine(lines[0]) : isBlocksLine(lines[0]))) return null;
   const all = barsIn(lines[0]);
   all.forEach((text, b) => {
-    if (kind === "cajon") [...text].forEach((ch, s) => ch !== "-" && put(b + 1, s, ch));
+    // Кахон однією лінією (як писали до 2026-10-22): літера — на свою лінію.
+    if (kind === "cajon") [...text].forEach((ch, s) => CAJON_ROWS.includes(ch as "B") && put(b + 1, s, HIT, CAJON_ROWS.indexOf(ch as "B")));
     else
       for (const m of text.matchAll(/[^-.]+|-|\./g)) {
         if (m[0] === ".") continue;
@@ -211,11 +241,15 @@ export function parseCells(kind: CellKind, lines: string[], steps: number): Pars
 
 export const isTabLine = (line: string) => /^\s*[eBGDAE]\s*\|[-\dxX|hpbr/\\~ ]*$/.test(line) && line.includes("-");
 export const isCajonLine = (line: string) => /^\s*\|([BTg-]+\|)+\s*$/.test(line);
+/** Три лінії кахона: B, T, g — по «o» (чи «x») і «-». */
+export const isCajonRows = (lines: string[]) =>
+  lines.length === CAJON_ROWS.length && lines.every((line, i) => new RegExp(`^\\s*${CAJON_ROWS[i]}\\s*\\|([-oOxX]+\\|)+\\s*$`).test(line));
 export const isBlocksLine = (line: string) => !isCajonLine(line) && /^\s*\|([^\s|]+\|)+\s*$/.test(line) && /[A-H]/.test(line);
 
 /** Вид клітинкової доріжки, текстом якої починається `lines[i]`, і скільки рядків тексту вона займає. */
 export function recognizeCells(lines: string[], i: number): { kind: CellKind; size: number } | null {
   if (lines.slice(i, i + 6).length === 6 && lines.slice(i, i + 6).every(isTabLine)) return { kind: "tab", size: 6 };
+  if (isCajonRows(lines.slice(i, i + CAJON_ROWS.length))) return { kind: "cajon", size: CAJON_ROWS.length };
   if (isCajonLine(lines[i])) return { kind: "cajon", size: 1 };
   if (isBlocksLine(lines[i])) return { kind: "blocks", size: 1 };
   return null;
@@ -236,8 +270,10 @@ export function writeParsed(slot: Y.Map<unknown>, { cells, bars }: Parsed) {
  * не переставляли), інакше `null`: з ним двозначний лад і назва акорду в
  * кілька символів. Викликати в транзакції.
  *
- * Таби — навігація ручна: друк лишає курсор на місці (цифри поспіль — один
- * лад, «12»), «-» чи пробіл стирають крок; на інший крок — стрілками.
+ * Таби й кахон — навігація ручна: друк лишає курсор на місці (цифри поспіль
+ * — один лад, «12»), «-» чи пробіл стирають крок; на інший крок — стрілками.
+ * У кахоні «o» чи «x» — удар на лінії курсора, B / T / g — удар на своїй лінії
+ * в цьому кроці.
  */
 export function typeCell(kind: CellKind, slot: Y.Map<unknown>, steps: number, at: CellAt, ch: string, prev: string | null): CellAt {
   const cells = slot.get("cells") as Y.Map<string>;
@@ -247,11 +283,11 @@ export function typeCell(kind: CellKind, slot: Y.Map<unknown>, steps: number, at
   const clearAndNext = () => (cells.delete(key(at)), next);
 
   if (kind === "cajon") {
-    const hit = { b: "B", t: "T", g: "g" }[ch.toLowerCase()];
-    if (hit) cells.set(key(at), hit);
+    const row = { b: 0, t: 1, g: 2 }[ch.toLowerCase()];
+    if (row !== undefined) cells.set(key({ ...at, string: row }), HIT);
+    else if (/[ox]/i.test(ch)) cells.set(key(at), HIT);
     else if (ch === "-" || ch === " " || ch === ".") cells.delete(key(at));
-    else return at;
-    return next;
+    return at;
   }
   if (kind === "tab") {
     if (/\d/.test(ch)) {

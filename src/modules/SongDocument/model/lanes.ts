@@ -12,7 +12,7 @@
  */
 import * as Y from "yjs";
 import type { Line, Song } from "./song";
-import { GRID, staleGrid, upgradeGrid } from "./cells";
+import { GRID, staleCajon, staleGrid, upgradeCajon, upgradeGrid } from "./cells";
 
 /** `text` — додана текстова доріжка (вигуки, бек-вокал): правиться як акорди, текстом у Slate. */
 export type LaneKind = "words" | "chords" | "text" | "blocks" | "tab" | "cajon";
@@ -100,23 +100,30 @@ export const clearCells = (line: Line, id: string) => cellsOf(line, id)?.clear()
 
 /**
  * Що в слотах рядків треба полагодити: слоти, яких бракує (рядки, що
- * народились одночасно з доріжкою), і клітинки на старій сітці (`upgradeGrid`).
+ * народились одночасно з доріжкою), клітинки на старій сітці (`upgradeGrid`) і
+ * кахон однією лінією (`upgradeCajon`).
  */
 export const missingSlots = (song: Song, lines: readonly Line[]) => [
   ...allLanes(song.doc).flatMap((lane) => lines.filter((line) => !line.has(lane.id)).map((line) => ({ line, lane }))),
   ...staleSlots(song, lines),
 ];
 
+/** Слот на старій сітці чи (кахон) ще однією лінією. */
+const stale = (kind: LaneKind, slot: Y.Map<unknown>) => staleGrid(slot) || (kind === "cajon" && staleCajon(slot));
+
 const staleSlots = (song: Song, lines: readonly Line[]) =>
   addedLanes(song.doc).flatMap((lane) =>
-    lines.filter((line) => line.get(lane.id) instanceof Y.Map && staleGrid(line.get(lane.id) as Y.Map<unknown>)).map((line) => ({ line, lane })),
+    lines.filter((line) => line.get(lane.id) instanceof Y.Map && stale(lane.kind, line.get(lane.id) as Y.Map<unknown>)).map((line) => ({ line, lane })),
   );
 
 /** Дописати рядкам слоти, яких бракує (ADR-0008, «одночасність»), і перерахувати старі сітки. Викликати в транзакції. */
 export function ensureSlots(song: Song, lines: readonly Line[]) {
   missingSlots(song, lines).forEach(({ line, lane }) => {
     const slot = line.get(lane.id);
-    if (slot instanceof Y.Map) upgradeGrid(slot as Y.Map<unknown>, lane.kind as CellKind);
+    if (slot instanceof Y.Map) {
+      if (lane.kind === "cajon" && staleCajon(slot as Y.Map<unknown>)) upgradeCajon(slot as Y.Map<unknown>);
+      if (staleGrid(slot as Y.Map<unknown>)) upgradeGrid(slot as Y.Map<unknown>, lane.kind as CellKind);
+    }
     else line.set(lane.id, newSlot(lane.kind));
   });
 }

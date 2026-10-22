@@ -1,24 +1,29 @@
 /**
  * Клітинкова доріжка рядка (ADR-0008) — атомний вузол Slate, що виглядає як
- * текст: таби й кахон — моноширинним текстом, прямокутники — блоками на сітці.
- * У правці: курсор-крок (клік по кроку ставить його), «+ такт» / «− такт».
+ * текст: таби (струни) й кахон (лінія на удар) — лініями кроків, прямокутники
+ * — блоками на сітці. У правці: курсор-крок (клік по кроку ставить його),
+ * «+ такт» / «− такт».
  */
 import * as Y from "yjs";
 import type { ReactNode } from "react";
 import { RenderElementProps, ReactEditor, useSlateStatic } from "slate-react";
-import { addBar, allLanes, barsOf, layout, cellKey, CellAt, CellKind, readMeta, removeBar, stepsPerBar, stepsPerBeat, TAB_STRINGS } from "../../model";
+import { addBar, allLanes, barsOf, layout, cellKey, CellAt, CellKind, readMeta, removeBar, rowsOf, stepsPerBar, stepsPerBeat } from "../../model";
 import { useEditorCtx, useModelLine } from "../context";
 
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
 const INK: Record<CellKind, string> = { tab: "#57534e", cajon: "#92400e", blocks: "#1e40af" };
 /**
- * Крок табів на екрані — комірка сталої ширини `TAB_STEP_PX`, однакова для
- * риски й ладу до 24 і на будь-якому екрані (не тягнеться й не стискається;
- * не влазить — прокрутка вбік). Двозначний лад стискається по горизонталі,
- * щоб уміститись у крок. Текстом (буфер) — як `renderCells`.
+ * Крок на екрані — комірка сталої ширини `STEP_PX`, однакова в усіх видів,
+ * для риски, ладу до 24, удару й шматка прямокутника, на будь-якому екрані
+ * (не тягнеться й не стискається; не влазить — прокрутка вбік). Назва лінії й
+ * риска такту теж сталої ширини, тож такти доріжок стоять одне під одним.
+ * Двозначний лад стискається по горизонталі, щоб уміститись у крок. Текстом
+ * (буфер) — як `renderCells`.
  */
-const TAB_STEP_PX = 10;
-const TAB_ROW_PX = 17;
+const STEP_PX = 10;
+const ROW_PX = 17;
+const LABEL_PX = 10;
+const BAR_PX = 8;
 const DASH = "linear-gradient(currentColor, currentColor) center / calc(100% - 2px) 1px no-repeat";
 /** Фон кольором — шаром, щоб лягати під риску й під прямокутник. */
 const fill = (color: string) => `linear-gradient(${color}, ${color})`;
@@ -72,70 +77,75 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
       </span>
     );
   };
-  const allSteps = (fn: (step: number) => ReactNode): ReactNode[] => [
-    ...Array.from({ length: bars }, (_, b) => [
-      <span key={`bar${b}`} className="text-stone-400">|</span>,
-      ...Array.from({ length: steps }, (_, s) => fn(b * steps + s)),
-    ]).flat(),
-    <span key="end" className="text-stone-400">|</span>,
-  ];
+  const fixed = (width: number): React.CSSProperties => ({ flex: "none", width, textAlign: "center" });
+  /** Лінія доріжки: назва, такти з кроками. */
+  const row = (name: string, fn: (step: number) => ReactNode) => (
+    <div key={name || "row"} className="whitespace-pre flex items-stretch" style={{ lineHeight: `${ROW_PX}px` }}>
+      <span className="text-stone-400" style={{ ...fixed(LABEL_PX), textAlign: "left" }}>
+        {name}
+      </span>
+      {Array.from({ length: bars }, (_, b) => [
+        <span key={`bar${b}`} className="text-stone-400" style={fixed(BAR_PX)}>
+          |
+        </span>,
+        ...Array.from({ length: steps }, (_, s) => fn(b * steps + s)),
+      ]).flat()}
+      <span key="end" className="text-stone-400" style={fixed(BAR_PX)}>
+        |
+      </span>
+    </div>
+  );
+  /** Крок лінії: риска, коли порожньо, інакше — значення по центру. */
+  const lineStep = (at: CellAt, v: string | undefined, content: ReactNode = v) =>
+    stepSpan(at, content ?? "", {
+      ...fixed(STEP_PX),
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center", // ширший за крок лад виходить на обидва боки порівну
+      height: ROW_PX,
+      fontSize: 10,
+      fontWeight: 600,
+      color: v ? INK[kind] : "#a8a29e",
+      background: v ? undefined : DASH,
+    });
 
   let body: ReactNode;
-  if (kind === "tab") {
-    body = TAB_STRINGS.map((name, string) => (
-      <div key={name} className="whitespace-pre flex items-center" style={{ lineHeight: `${TAB_ROW_PX}px` }}>
-        <span className="text-stone-400">{name}</span>
-        {allSteps((step) => {
-          const v = read({ step, string });
-          const digits = v && v.length > 1 ? <span style={{ display: "inline-block", transform: "scaleX(0.7)" }}>{v}</span> : v;
-          return stepSpan({ step, string }, digits ?? "", {
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center", // ширший за крок лад виходить на обидва боки порівну
-            flex: "none",
-            width: TAB_STEP_PX,
-            height: TAB_ROW_PX,
-            fontSize: 10,
-            fontWeight: 600,
-            color: v ? INK.tab : "#a8a29e",
-            background: v ? undefined : DASH,
-          });
-        })}
-      </div>
-    ));
-  } else if (kind === "cajon") {
-    body = <div className="whitespace-pre">{allSteps((step) => stepSpan({ step, string: 0 }, read({ step, string: 0 }) ?? "-"))}</div>;
+  if (kind !== "blocks") {
+    // Таби — струна на лінію, кахон — вид удару на лінію.
+    body = rowsOf(kind).map((name, string) =>
+      row(name, (step) => {
+        const v = read({ step, string });
+        const digits = v && v.length > 1 ? <span style={{ display: "inline-block", transform: "scaleX(0.7)" }}>{v}</span> : v;
+        return lineStep({ step, string }, v, digits);
+      }),
+    );
   } else {
     // Прямокутники: назва відкриває блок, «-» його тягне; порожній крок — «·».
-    body = (
-      <div className="whitespace-pre flex items-stretch">
-        {allSteps((step) => {
-          const v = read({ step, string: 0 });
-          const start = !!v && v !== "-";
-          const prevV = step > 0 && step % steps !== 0 ? read({ step: step - 1, string: 0 }) : undefined;
-          const inBlock = start || (v === "-" && !!prevV);
-          const nextV = (step + 1) % steps !== 0 ? read({ step: step + 1, string: 0 }) : undefined;
-          const ends = inBlock && nextV !== "-";
-          return stepSpan(
-            { step, string: 0 },
-            start ? <span className="relative z-[1] font-bold">{v}</span> : inBlock ? " " : "·",
-            {
-              display: "inline-block",
-              minWidth: "1ch",
-              textAlign: "left",
-              color: inBlock ? INK.blocks : "#a8a29e",
-              background: inBlock ? fill("rgba(59,130,246,0.12)") : undefined,
-              borderTop: inBlock ? "1px solid rgba(30,64,175,0.4)" : undefined,
-              borderBottom: inBlock ? "1px solid rgba(30,64,175,0.4)" : undefined,
-              borderLeft: start ? "1px solid rgba(30,64,175,0.6)" : undefined,
-              borderRight: ends ? "1px solid rgba(30,64,175,0.6)" : undefined,
-              borderRadius: start && ends ? 3 : start ? "3px 0 0 3px" : ends ? "0 3px 3px 0" : undefined,
-              overflow: "visible",
-            },
-          );
-        })}
-      </div>
-    );
+    body = row("", (step) => {
+      const v = read({ step, string: 0 });
+      const start = !!v && v !== "-";
+      const prevV = step > 0 && step % steps !== 0 ? read({ step: step - 1, string: 0 }) : undefined;
+      const inBlock = start || (v === "-" && !!prevV);
+      const nextV = (step + 1) % steps !== 0 ? read({ step: step + 1, string: 0 }) : undefined;
+      const ends = inBlock && nextV !== "-";
+      return stepSpan(
+        { step, string: 0 },
+        start ? <span className="relative z-[1] font-bold">{v}</span> : inBlock ? " " : "·",
+        {
+          ...fixed(STEP_PX),
+          display: "inline-block",
+          textAlign: "left",
+          color: inBlock ? INK.blocks : "#a8a29e",
+          background: inBlock ? fill("rgba(59,130,246,0.12)") : undefined,
+          borderTop: inBlock ? "1px solid rgba(30,64,175,0.4)" : undefined,
+          borderBottom: inBlock ? "1px solid rgba(30,64,175,0.4)" : undefined,
+          borderLeft: start ? "1px solid rgba(30,64,175,0.6)" : undefined,
+          borderRight: ends ? "1px solid rgba(30,64,175,0.6)" : undefined,
+          borderRadius: start && ends ? 3 : start ? "3px 0 0 3px" : ends ? "0 3px 3px 0" : undefined,
+          overflow: "visible",
+        },
+      );
+    });
   }
 
   return (
