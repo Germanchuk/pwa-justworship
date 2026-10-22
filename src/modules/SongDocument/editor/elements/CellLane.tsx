@@ -20,7 +20,7 @@ const INK: Record<CellKind, string> = { tab: "#57534e", cajon: "#92400e", blocks
  * Двозначний лад стискається по горизонталі, щоб уміститись у крок. Текстом
  * (буфер) — як `renderCells`.
  */
-const STEP_PX = 10;
+const STEP_PX = 12;
 const ROW_PX = 17;
 const LABEL_PX = 10;
 const BAR_PX = 8;
