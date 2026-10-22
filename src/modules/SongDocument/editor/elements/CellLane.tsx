@@ -14,7 +14,6 @@
  */
 import * as Y from "yjs";
 import type { ReactNode } from "react";
-import { ArrowsRightLeftIcon } from "@heroicons/react/24/outline";
 import { Node } from "slate";
 import {
   DropdownMenu,
@@ -28,6 +27,7 @@ import { RenderElementProps, ReactEditor, useSlateStatic } from "slate-react";
 import {
   allLanes,
   barSizes,
+  eighthsPerBar,
   hiddenPastEnd,
   layout,
   lengthLabel,
@@ -244,7 +244,8 @@ function lengthAnchor(editor: ReturnType<typeof useSlateStatic>, element: Render
 type RenderRef = RenderElementProps["element"];
 
 /**
- * Кнопка довжини рядка — перед рядком прямокутників, у полі ліворуч. Тап —
+ * Кнопка довжини рядка — перед рядком прямокутників, у полі ліворуч; на ній
+ * сама довжина коротко («2», «1+3/8»). Тап —
  * меню з довжиною словами і «− 1/8 / + 1/8» (меню не закривається між
  * тапами). Довжина спільна для всіх доріжок рядка; укоротив — записане за
  * кінцем сховане, а не стерте.
@@ -253,15 +254,19 @@ function LengthMenu({ line, timeSignature }: { line: Line; timeSignature: string
   const ctx = useEditorCtx();
   const length = lineLength(line, timeSignature);
   const label = lengthLabel(length, timeSignature);
+  // На кнопці — коротко: тактів і вісімки неповного («1+3/8»), щоб влізло в поле ліворуч.
+  const per = eighthsPerBar(timeSignature);
+  const [full, rest] = [Math.floor(length / per), length % per];
+  const short = full && rest ? `${full}+${rest}/8` : full ? `${full}` : `${rest}/8`;
   const set = (eighths: number) => ctx.lanes.change(() => setLineLength(line, eighths));
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`Довжина рядка: ${label}`}
         title={`Довжина рядка: ${label}`}
-        className="absolute left-0.5 top-0.5 z-[2] flex h-[17px] w-[15px] items-center justify-center rounded border border-stone-300 bg-white/90 text-stone-500 hover:text-stone-800"
+        className="absolute left-0 top-0.5 z-[2] flex h-[17px] min-w-[18px] max-w-[26px] items-center justify-center whitespace-nowrap rounded border border-stone-300 bg-white/90 px-0.5 font-sans text-[9px] font-semibold leading-none tracking-tight text-stone-600 hover:text-stone-900"
       >
-        <ArrowsRightLeftIcon className="size-3" />
+        {short}
       </DropdownMenuTrigger>
       <DropdownMenuContent side="right" align="start" className="min-w-44 font-sans">
         <DropdownMenuLabel>Довжина рядка: {label}</DropdownMenuLabel>
