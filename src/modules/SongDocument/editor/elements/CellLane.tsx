@@ -5,7 +5,7 @@
  * «+ такт» / «− такт».
  *
  * Удари — у масштабі людини (`Scale`): подія в найближчій комірці; точно на
- * долі — звичайна, поруч — сіріша й прозоріша, що далі від долі; кілька в
+ * долі — звичайна, поруч — блідо-червона, що далі від долі — прозоріша; кілька в
  * одній комірці — буквально одна на одній. Правиться лише точне (`cells.ts`).
  */
 import * as Y from "yjs";
@@ -31,6 +31,8 @@ const BAR_PX = 8;
 const DASH = "linear-gradient(currentColor, currentColor) center / calc(100% - 2px) 1px no-repeat";
 /** Фон кольором — шаром, щоб лягати під риску й під прямокутник. */
 const fill = (color: string) => `linear-gradient(${color}, ${color})`;
+/** Подія не на долі своєї комірки (дрібніша за сітку перегляду). */
+const OFF_GRID_INK = "#f87171";
 /** Кожна друга доля такту трохи темніша — як смуги в FL Studio. */
 const BEAT_TINT = "rgba(120, 95, 50, 0.09)";
 
@@ -118,7 +120,8 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
         <span
           key={i}
           className="absolute inset-0 flex items-center justify-center"
-          style={off ? { color: "#78716c", opacity: 1 - off * 1.2 } : undefined}
+          // Не на своїй долі — блідо-червона; що далі від долі, то трохи прозоріша.
+          style={off ? { color: OFF_GRID_INK, opacity: 1 - off * 0.6 } : undefined}
         >
           {/* Двозначний лад стискається, щоб уміститись у крок. */}
           {value.length > 1 ? <span style={{ display: "inline-block", transform: "scaleX(0.7)" }}>{value}</span> : value}
