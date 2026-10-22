@@ -8,7 +8,9 @@ import * as Y from "yjs";
 import { Editor, Path, Range, Transforms } from "slate";
 import {
   allLanes,
-  barsOf,
+  barSizes,
+  endOf,
+  lineLength,
   CellAt,
   CellKind,
   eraseCell,
@@ -46,6 +48,11 @@ export type Cells = {
 const kindOf = (s: ViewState, id: string) => allLanes(s.song.doc).find((l) => l.id === id)?.kind;
 /** Масштаб доріжки виду `kind` для цієї людини. */
 export const scaleIn = (s: ViewState, kind: CellKind) => scaleOf(kind, readMeta(s.song.doc).timeSignature, s.display.zoom);
+/** Такти рядка в комірках масштабу виду `kind` (довжина рядка спільна для всіх його доріжок). */
+const sizesIn = (s: ViewState, line: Line, kind: CellKind) => {
+  const { timeSignature } = readMeta(s.song.doc);
+  return barSizes(lineLength(line, timeSignature), timeSignature, scaleIn(s, kind));
+};
 const slotOf = (c: CellCursor) => c.line.get(c.lane) as Y.Map<unknown> | undefined;
 
 /** Доріжка текстом (для буфера) — так само, як її показує редактор. */
@@ -54,7 +61,7 @@ export function cellText(s: ViewState, line: Line, id: string): string[] {
   const slot = line.get(id) as Y.Map<unknown> | undefined;
   if (!kind || isTextKind(kind) || !slot) return [];
   const cells = slot.get("cells") as Y.Map<string>;
-  return renderCells(kind, cells.entries(), barsOf(slot), scaleIn(s, kind));
+  return renderCells(kind, cells.entries(), sizesIn(s, line, kind), scaleIn(s, kind));
 }
 
 export function installCells(s: ViewState, history: History): Cells {
@@ -112,7 +119,7 @@ export function installCells(s: ViewState, history: History): Cells {
     if (!current()) return false;
     edit(TYPING, (c, slot) => {
       for (const ch of text) {
-        c.at = typeCell(c.kind, slot, scaleIn(s, c.kind), c.at, ch, c.prev);
+        c.at = typeCell(c.kind, slot, scaleIn(s, c.kind), c.at, ch, c.prev, endOf(sizesIn(s, c.line, c.kind), scaleIn(s, c.kind)));
         c.prev = ch;
       }
     });
@@ -129,8 +136,7 @@ export function installCells(s: ViewState, history: History): Cells {
     key: (e) => {
       const c = current();
       if (!c || e.metaKey || e.ctrlKey || e.altKey) return false;
-      const slot = slotOf(c);
-      const total = barsOf(slot) * scaleIn(s, c.kind).cells;
+      const total = endOf(sizesIn(s, c.line, c.kind), scaleIn(s, c.kind));
       const { step, string } = c.at;
       switch (e.key) {
         case "ArrowLeft":
@@ -163,7 +169,7 @@ export function installCells(s: ViewState, history: History): Cells {
       const c = current();
       if (!c) return false;
       const parsed = parseCells(c.kind, text.split(/\r?\n/).filter((l) => l.trim()), scaleIn(s, c.kind));
-      if (parsed) edit(COMMAND, (_, slot) => writeParsed(slot, parsed));
+      if (parsed) edit(COMMAND, (cur, slot) => writeParsed(cur.line, slot, parsed, readMeta(s.song.doc).timeSignature));
       return true;
     },
     listen: (fn) => {

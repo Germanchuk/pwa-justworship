@@ -98,7 +98,7 @@ export function insertPlainText(song: Song, at: Pos, pasted: string, zoom: numbe
     }
     Object.entries(cells).forEach(([id, parsed]) => {
       const slot = line.get(id);
-      if (slot instanceof Y.Map) writeParsed(slot, parsed);
+      if (slot instanceof Y.Map) writeParsed(line, slot, parsed, timeSignature);
     });
     return words ? insertText(song, here, words) ?? here : here;
   }, at);
