@@ -1,8 +1,12 @@
 /**
  * Клітинкова доріжка рядка (ADR-0008) — атомний вузол Slate, що виглядає як
  * текст: таби (струни) й кахон (лінія на удар) — лініями кроків, прямокутники
- * — блоками на сітці. У правці: курсор-крок (клік по кроку ставить його),
- * «+ такт» / «− такт».
+ * — блоками на сітці. У правці: курсор-крок (клік по кроку ставить його).
+ *
+ * Довжина — рядка, а не доріжки (`lineLength`): усі доріжки рядка мають ті
+ * самі такти, останній може бути неповним. Задає її кнопка перед доріжкою
+ * прямокутників рядка (`LengthMenu`; немає прямокутників — перед першою
+ * клітинковою): меню «− 1/8 / + 1/8».
  *
  * Удари — у масштабі людини (`Scale`): подія в найближчій комірці; точно на
  * долі — звичайна, поруч — блідо-червона, що далі від долі — прозоріша; кілька в
@@ -10,8 +14,36 @@
  */
 import * as Y from "yjs";
 import type { ReactNode } from "react";
+import { ArrowsRightLeftIcon } from "@heroicons/react/24/outline";
+import { Node } from "slate";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { RenderElementProps, ReactEditor, useSlateStatic } from "slate-react";
-import { addBar, allLanes, barsOf, layout, CellAt, CellKind, placeCells, readMeta, readZoom, removeBar, rowsOf, scaleOf, stepsPerBeat } from "../../model";
+import {
+  allLanes,
+  barSizes,
+  hiddenPastEnd,
+  layout,
+  lengthLabel,
+  lineLength,
+  CellAt,
+  CellKind,
+  Line,
+  placeCells,
+  readMeta,
+  readZoom,
+  rowsOf,
+  scaleOf,
+  setLineLength,
+  stepsPerBeat,
+} from "../../model";
+import { isCellsNode } from "../../bridge/projection";
 import { useEditorCtx, useModelLine } from "../context";
 
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
@@ -61,8 +93,9 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
   const beatTicks = (stepsPerBeat(timeSignature) * scale.grid) / 16;
   // Прямокутники без масштабу: їхня комірка ширша чи вужча, щоб такт був завширшки як у ударів.
   const stepPx = kind === "blocks" ? (STEP_PX * scaleOf("tab", timeSignature, zoom).cells) / steps : STEP_PX;
-  const bars = barsOf(slot);
-  const placed = placeCells(kind, (slot.get("cells") as Y.Map<string>).entries(), bars, scale);
+  const length = lineLength(line!, timeSignature);
+  const sizes = barSizes(length, timeSignature, scale);
+  const placed = placeCells(kind, (slot.get("cells") as Y.Map<string>).entries(), sizes, scale);
   const shown = (at: CellAt) => placed.get(`${at.step}/${at.string}`);
   const read = (at: CellAt) => shown(at)?.value;
   const cursor = ctx.canEdit ? ctx.lanes.cells.cursor() : null;
@@ -96,12 +129,12 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
       <span className="text-stone-400" style={{ ...fixed(LABEL_PX), textAlign: "left" }}>
         {name}
       </span>
-      {Array.from({ length: bars }, (_, b) => [
+      {sizes.flatMap((size, b) => [
         <span key={`bar${b}`} className="text-stone-400" style={fixed(BAR_PX)}>
           |
         </span>,
-        ...Array.from({ length: steps }, (_, s) => fn(b * steps + s)),
-      ]).flat()}
+        ...Array.from({ length: size }, (_, s) => fn(b * steps + s)),
+      ])}
       <span key="end" className="text-stone-400" style={fixed(BAR_PX)}>
         |
       </span>
@@ -157,7 +190,8 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
       const start = !!v && v !== "-";
       const prevV = step > 0 && step % steps !== 0 ? read({ step: step - 1, string: 0 }) : undefined;
       const inBlock = start || (v === "-" && !!prevV);
-      const nextV = (step + 1) % steps !== 0 ? read({ step: step + 1, string: 0 }) : undefined;
+      const lastInBar = (step % steps) + 1 >= sizes[Math.floor(step / steps)];
+      const nextV = !lastInBar ? read({ step: step + 1, string: 0 }) : undefined;
       const ends = inBlock && nextV !== "-";
       return stepSpan(
         { step, string: 0 },
@@ -179,24 +213,68 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
     });
   }
 
+  // Кнопка довжини рядка — одна на рядок, перед його прямокутниками.
+  const lengthHere = ctx.canEdit && lengthAnchor(editor, element, (lane) => allLanes(ctx.song.doc).find((l) => l.id === lane)?.kind);
+
   return (
-    <div {...attributes} data-cell-lane={id} className="pr-2 md:pr-3" style={{ paddingLeft: 16, boxShadow: RULE }}>
-      <div contentEditable={false} className="select-none flex items-start gap-2 py-0.5" style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, lineHeight: 1.35, color: INK[kind] }}>
+    <div {...attributes} data-cell-lane={id} className="relative pr-2 md:pr-3" style={{ paddingLeft: 16, boxShadow: RULE }}>
+      <div contentEditable={false} className="select-none py-0.5" style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, lineHeight: 1.35, color: INK[kind] }}>
+        {lengthHere && <LengthMenu line={line!} timeSignature={timeSignature} />}
         <div className="min-w-0 overflow-x-auto">{body}</div>
-        {ctx.canEdit && (
-          <span className="flex gap-1 text-[11px] font-sans text-stone-400 shrink-0">
-            <button type="button" title={`${lane.name}: додати такт`} onMouseDown={(e) => e.preventDefault()} onClick={() => ctx.lanes.change(() => addBar(slot))}>
-              +такт
-            </button>
-            {bars > 1 && (
-              <button type="button" title="Прибрати останній порожній такт" onMouseDown={(e) => e.preventDefault()} onClick={() => ctx.lanes.change(() => removeBar(slot))}>
-                −
-              </button>
-            )}
-          </span>
-        )}
       </div>
       {children}
     </div>
+  );
+}
+
+/**
+ * Чи вузол — доріжка, перед якою стоїть кнопка довжини рядка: перші
+ * прямокутники рядка у видимому, а якщо їх немає — перша клітинкова доріжка.
+ */
+function lengthAnchor(editor: ReturnType<typeof useSlateStatic>, element: RenderRef, kindOf: (lane: string) => string | undefined) {
+  try {
+    const path = ReactEditor.findPath(editor, element);
+    const cells = Node.parent(editor, path).children.map((n, i) => ({ n, i })).filter(({ n }) => isCellsNode(n));
+    const blocks = cells.find(({ n }) => kindOf((n as unknown as { lane: string }).lane) === "blocks");
+    return (blocks ?? cells[0])?.i === path[path.length - 1];
+  } catch {
+    return false;
+  }
+}
+type RenderRef = RenderElementProps["element"];
+
+/**
+ * Кнопка довжини рядка — перед рядком прямокутників, у полі ліворуч. Тап —
+ * меню з довжиною словами і «− 1/8 / + 1/8» (меню не закривається між
+ * тапами). Довжина спільна для всіх доріжок рядка; укоротив — записане за
+ * кінцем сховане, а не стерте.
+ */
+function LengthMenu({ line, timeSignature }: { line: Line; timeSignature: string }) {
+  const ctx = useEditorCtx();
+  const length = lineLength(line, timeSignature);
+  const label = lengthLabel(length, timeSignature);
+  const set = (eighths: number) => ctx.lanes.change(() => setLineLength(line, eighths));
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={`Довжина рядка: ${label}`}
+        title={`Довжина рядка: ${label}`}
+        className="absolute left-0.5 top-0.5 z-[2] flex h-[17px] w-[15px] items-center justify-center rounded border border-stone-300 bg-white/90 text-stone-500 hover:text-stone-800"
+      >
+        <ArrowsRightLeftIcon className="size-3" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="right" align="start" className="min-w-44 font-sans">
+        <DropdownMenuLabel>Довжина рядка: {label}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {/* Меню лишається відкритим: кілька вісімок — кілька тапів поспіль. */}
+        <DropdownMenuItem disabled={length <= 1} onSelect={(e) => (e.preventDefault(), set(length - 1))}>
+          − 1/8
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={(e) => (e.preventDefault(), set(length + 1))}>+ 1/8</DropdownMenuItem>
+        {hiddenPastEnd(line, timeSignature) && (
+          <div className="px-2 py-1 text-xs text-muted-foreground">За кінцем є записане — сховане, повернеться, якщо подовжити.</div>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

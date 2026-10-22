@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { change, makePair } from "./harness";
 import {
-  addBar,
   addLane,
-  barsOf,
+  barSizes,
+  endOf,
+  hiddenPastEnd,
+  lengthLabel,
+  lineLength,
   CellAt,
   CellKind,
   eraseCell,
@@ -14,8 +17,8 @@ import {
   linesOf,
   mergeLine,
   parseCells,
-  removeBar,
   readZoom,
+  setLineLength,
   renderCells,
   scaleOf,
   Song,
@@ -48,11 +51,12 @@ const cajon = (bars: number, hits: { B?: number[]; T?: number[]; g?: number[] } 
       `${row}|${Array.from({ length: bars }, (_, b) => Array.from({ length: steps }, (_, s) => (hits[row]?.includes(b * steps + s) ? "o" : "-")).join("")).join("|")}|`,
   );
 const slotOf = (song: Song, ln: number, id: string) => linesOf(song)[ln].get(id) as Y.Map<unknown>;
-const text = (song: Song, ln: number, id: string, kind: CellKind, scale = sc(kind)) => {
+const text = (song: Song, ln: number, id: string, kind: CellKind, scale = sc(kind), ts = "4/4") => {
   const slot = slotOf(song, ln, id);
   const cells = slot.get("cells") as Y.Map<string>;
-  return renderCells(kind, cells.entries(), barsOf(slot), scale);
+  return renderCells(kind, cells.entries(), barSizes(lineLength(linesOf(song)[ln], ts), ts, scale), scale);
 };
+const lengthTo = (song: Song, ln: number, eighths: number) => change(song, () => setLineLength(linesOf(song)[ln], eighths));
 const cellsJSON = (song: Song, ln: number, id: string) => (slotOf(song, ln, id).get("cells") as Y.Map<string>).toJSON();
 /** Пісня з однією доріжкою виду `kind`; `type` друкує рядок символів із кроку 0. */
 function withLane(kind: CellKind, seed = [{ words: "Ти святий" }, { words: "Господь" }]) {
@@ -64,7 +68,9 @@ function withLane(kind: CellKind, seed = [{ words: "Ти святий" }, { word
     let prev: string | null = null;
     change(net.A, () =>
       [...chars].forEach((ch) => {
-        at = typeCell(kind, slotOf(net.A, ln, id), sc(kind, zoom), at, ch, prev);
+        const scale = sc(kind, zoom);
+        const end = endOf(barSizes(lineLength(linesOf(net.A)[ln], "4/4"), "4/4", scale), scale); // як у редакторі: до кінця рядка
+        at = typeCell(kind, slotOf(net.A, ln, id), scale, at, ch, prev, end);
         prev = ch;
       }),
     );
@@ -82,15 +88,31 @@ describe("сітка", () => {
     expect(["4/4", "3/4", "2/2", "6/8", "12/8", "7/8"].map(stepsPerBeat)).toEqual([4, 4, 8, 6, 6, 2]);
   });
 
-  it("за замовчуванням один такт; додати — скільки завгодно; прибрати можна лише порожній останній", () => {
+  it("довжина — рядка, у вісімках: за замовчуванням один такт, однакова в усіх доріжок; неповний такт — свої вісімки", () => {
     const { net, id, type } = withLane("cajon");
+    let tab = "";
+    change(net.A, () => (tab = addLane(net.A, "tab", linesOf(net.A))));
+    expect(lineLength(linesOf(net.B)[0], "4/4")).toBe(8);
     expect(text(net.B, 0, id, "cajon")).toEqual(cajon(1));
-    change(net.A, () => addBar(slotOf(net.A, 0, id)));
-    change(net.A, () => addBar(slotOf(net.A, 0, id)));
+    lengthTo(net.A, 0, 24);
     type("B", 0, { step: 32, string: 0 });
     expect(text(net.B, 0, id, "cajon")).toEqual(cajon(3, { B: [32] }));
-    change(net.A, () => removeBar(slotOf(net.A, 0, id)));
-    expect(barsOf(slotOf(net.B, 0, id))).toBe(3);
+    expect(text(net.B, 0, tab, "tab")[0]).toBe(`e|${d(16)}|${d(16)}|${d(16)}|`);
+    lengthTo(net.A, 0, 12); // такт і половина
+    expect(text(net.B, 0, id, "cajon")[0]).toBe(`B|${d(16)}|${d(8)}|`);
+    expect(lengthLabel(12, "4/4")).toBe("1 такт + 4/8");
+  });
+
+  it("укоротили — те, що за кінцем, сховане, а не стерте; подовжили — знову видно", () => {
+    const { net, id, type } = withLane("cajon");
+    lengthTo(net.A, 0, 16);
+    type("T", 0, { step: 20, string: 0 });
+    lengthTo(net.A, 0, 9); // такт і вісімка: 20-й крок за кінцем
+    expect(text(net.B, 0, id, "cajon")[1]).toBe(`T|${d(16)}|--|`);
+    expect(hiddenPastEnd(linesOf(net.B)[0], "4/4")).toBe(true);
+    lengthTo(net.A, 0, 16);
+    expect(text(net.B, 0, id, "cajon")).toEqual(cajon(2, { T: [20] }));
+    expect(hiddenPastEnd(linesOf(net.B)[0], "4/4")).toBe(false);
   });
 
   it("клітинки, записані вісімками (слот без `grid`), перераховуються: крок вісімки — перша з її шістнадцятих", () => {
@@ -222,7 +244,7 @@ describe("прямокутники", () => {
   it("назва відкриває прямокутник, «-» тягне, «.» — порожньо; текст ↔ клітинки", () => {
     const { net, id, type } = withLane("blocks");
     type("Am------");
-    change(net.A, () => addBar(slotOf(net.A, 0, id)));
+    lengthTo(net.A, 0, 16);
     type("F---G...", 0, { step: 16, string: 0 });
     const shown = [`|Am------${".".repeat(8)}|F---G${".".repeat(11)}|`];
     expect(text(net.B, 0, id, "blocks")).toEqual(shown);
@@ -248,6 +270,26 @@ describe("склеювання рядків", () => {
     change(net.A, () => mergeLine(net.A, 1));
     expect(layout(net.B).map((l) => l.words)).toEqual(["Ти святийГосподь"]);
     expect(text(net.B, 0, id, "cajon")).toEqual(cajon(2, { B: [0, 17], T: [4, 18] }));
+    expect(lineLength(linesOf(net.B)[0], "4/4")).toBe(16);
+  });
+
+  it("перший рядок з неповним тактом — другий дописується одразу після нього; довжина — сума", () => {
+    const { net, id, type } = withLane("cajon");
+    lengthTo(net.A, 0, 12); // такт і половина
+    type("B", 0, { step: 0, string: 0 });
+    type("T", 1, { step: 0, string: 0 });
+    change(net.A, () => mergeLine(net.A, 1));
+    expect(lineLength(linesOf(net.B)[0], "4/4")).toBe(20); // два такти й половина
+    const [B, T] = text(net.B, 0, id, "cajon");
+    expect(B).toBe(`B|o${d(15)}|${d(16)}|${d(8)}|`);
+    expect(T).toBe(`T|${d(16)}|${d(8)}o${d(7)}|${d(8)}|`);
+  });
+
+  it("вставка тактів з буфера подовжує рядок під них", () => {
+    const { net, id } = withLane("cajon", [{ words: "" }]);
+    change(net.A, () => insertPlainText(net.A, { line: 0, lane: "words", offset: 0 }, [...cajon(2, { B: [0, 16] }), "Ти"].join("\n")));
+    expect(lineLength(linesOf(net.B)[0], "4/4")).toBe(16);
+    expect(text(net.B, 0, id, "cajon")).toEqual(cajon(2, { B: [0, 16] }));
   });
 });
 
@@ -290,7 +332,7 @@ describe("вставка розпізнає доріжки і збирає їх 
     change(net.A, () => writeMeta(net.A.doc, { timeSignature: "6/8" }));
     const bar = `|B--T--${d(6)}|`;
     change(net.A, () => insertPlainText(net.A, { line: 0, lane: "words", offset: 0 }, `${bar}\nТи`));
-    expect(text(net.B, 0, id, "cajon", sc("cajon", 16, "6/8"))).toEqual(cajon(1, { B: [0], T: [3] }, 12));
+    expect(text(net.B, 0, id, "cajon", sc("cajon", 16, "6/8"), "6/8")).toEqual(cajon(1, { B: [0], T: [3] }, 12));
   });
 });
 
@@ -322,7 +364,7 @@ describe("запис у тіках, показ у масштабі людини"
 
   it("дві події в одній комірці — обидві (показ кладе одна на одну), для тексту — найближча; кінець такту — перша комірка наступного", () => {
     const { net, id, type } = withLane("tab");
-    change(net.A, () => addBar(slotOf(net.A, 0, id)));
+    lengthTo(net.A, 0, 16);
     type("3", 0, { step: 0, string: 0 }, 64);
     type("5", 0, { step: 1, string: 0 }, 64);
     type("7", 0, { step: 63, string: 0 }, 64); // остання 64-та першого такту
