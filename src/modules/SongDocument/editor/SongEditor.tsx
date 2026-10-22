@@ -17,6 +17,7 @@ import DronePlayer from "#modules/SingleSong/services/DronePlayer/DronePlayer";
 import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/model";
 import {
   ensureSlots,
+  isTimeRange,
   linesOf,
   missingSlots,
   readCapo,
@@ -157,8 +158,9 @@ function LoadedEditor({ song }: { song: Song }) {
   }, [view, canEdit]);
 
   // Позначене приміткою й «/» структурної примітки — декорації видимого дерева.
+  // Позначки на кроках клітинкових доріжок малює сама доріжка (`CellLane`).
   const ranges = notes.flatMap((n) => {
-    if (n.status !== "visible" || !n.at) return [];
+    if (n.status !== "visible" || !n.at || isTimeRange(n.note)) return [];
     const anchor = lanes.toView({ line: n.at.line, lane: n.lane, offset: n.at.from });
     const focus = lanes.toView({ line: n.at.line, lane: n.lane, offset: n.at.to });
     const mark = n.foreign ? { [FOREIGN_KEY + n.note.id]: true } : { [NOTE_KEY + n.note.id]: n.note.color };

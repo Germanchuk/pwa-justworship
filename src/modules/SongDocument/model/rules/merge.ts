@@ -1,8 +1,9 @@
 /** Склеювання рядків: Backspace на початку слів і Delete у їхньому кінці. */
 import * as Y from "yjs";
-import { appendCells, blankLength, lineLength, setLineLength } from "../cells";
+import { appendCells, blankLength, EIGHTH_TICKS, lineLength, setLineLength } from "../cells";
 import { readMeta } from "../meta";
-import { movableNotes, moveLaneNote, moveWordsNote } from "../notes/move";
+import { notesOf } from "../notes/marks";
+import { movableNotes, moveLaneNote, moveTimeNote, moveWordsNote } from "../notes/move";
 import { filledLanes, laneText, layout, lineAt, lineKind, textSlotsOf } from "../read";
 import { removeLine } from "../write";
 import type { Pos, Song } from "../song";
@@ -12,8 +13,8 @@ import type { Pos, Song } from "../song";
  * словами попереднього. Непорожні акорди й додані текстові доріжки
  * дописуються вирівняними під кінець слів (це копія), примітки всіх доріжок
  * переїжджають у попередній рядок. Клітинкові доріжки дописуються після
- * тактів попереднього (теж копія), і довжина склеєного — сума довжин (з
- * неповним тактом посередині — як є). Динаміка — попереднього рядка (як і
+ * тактів попереднього (теж копія, примітки — зсунуті з ними), і довжина
+ * склеєного — сума довжин (з неповним тактом посередині — як є). Динаміка — попереднього рядка (як і
  * решта його полів).
  */
 export function mergeLine(song: Song, ln: number): Pos {
@@ -51,7 +52,9 @@ export function mergeLine(song: Song, ln: number): Pos {
     const length = offset + lineLength(cur.line, timeSignature);
     cellLanes.forEach(([id, slot]) => {
       const to = prev.line.get(id);
-      if (to instanceof Y.Map) appendCells(slot as Y.Map<unknown>, to, offset, timeSignature);
+      if (!(to instanceof Y.Map)) return;
+      appendCells(slot as Y.Map<unknown>, to, offset, timeSignature);
+      Array.from(notesOf(cur.line, id)?.values() ?? []).forEach((note) => moveTimeNote(cur.line, prev.line, id, note, offset * EIGHTH_TICKS));
     });
     setLineLength(prev.line, length);
   }

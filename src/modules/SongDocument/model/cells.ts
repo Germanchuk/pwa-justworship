@@ -262,6 +262,64 @@ export function barSizes(length: number, timeSignature: string, scale: Scale): n
 /** Комірка за останньою в рядку (індекси — «такт · комірок у такті + комірка»). */
 export const endOf = (sizes: readonly number[], scale: Scale) => (sizes.length - 1) * scale.cells + sizes[sizes.length - 1];
 
+/**
+ * Час позначок (примітки на клітинковій доріжці) — тіки `TICKS` від початку
+ * рядка, однаково для всіх видів і масштабів: зміна масштабу показу позначку
+ * не зсуває, а прямокутники (своя сітка) міряються тим самим часом.
+ */
+export const EIGHTH_TICKS = TICKS / 8;
+/** Довжина рядка в тіках позначок. */
+export const lineTicks = (line: Line, timeSignature: string) => lineLength(line, timeSignature) * EIGHTH_TICKS;
+
+/** Проміжок часу комірки `i` масштабу (індекс «такт · комірок у такті + комірка»): `[початок, кінець)` у тіках позначок. */
+export function cellSpan(scale: Scale, i: number): [number, number] {
+  const per = TICKS / scale.grid;
+  const bar = Math.floor(i / scale.cells) * scale.ticks;
+  const at = (i % scale.cells) * scale.tick;
+  return [(bar + at) * per, (bar + Math.min(at + scale.tick, scale.ticks)) * per];
+}
+
+/** Записане в слоті на проміжку `from…to` (тіки позначок) — коротко, «3 5 7» чи «B T», для «було на …» втраченої примітки. */
+export function cellsQuote(kind: CellKind, slot: Y.Map<unknown>, from: number, to: number, timeSignature: string): string {
+  const grid = Number(slot.get("grid")) || gridOf(kind);
+  const [n, d] = meter(timeSignature);
+  const perBar = Math.max(1, Math.round((n * grid) / d));
+  return Array.from((slot.get("cells") as Y.Map<string>).entries())
+    .flatMap(([key, value]) => {
+      const k = parseKey(key);
+      const time = k ? (((k.bar - 1) * perBar + k.step - 1) * TICKS) / grid : -1;
+      if (!k || time < from || time >= to || value === "-") return [];
+      return [{ time, string: k.string, text: kind === "cajon" ? (CAJON_ROWS[k.string - 1] ?? value) : value }];
+    })
+    .sort((a, b) => a.time - b.time || a.string - b.string)
+    .map((c) => c.text)
+    .join(" ");
+}
+
+/**
+ * Стерти записане в слоті на проміжку `from…to` (тіки позначок) — видалення
+ * виділених кроків, усіх ліній. Прямокутник, якого шматок стерли, за
+ * проміжком теж обривається (його «-» далі). Викликати в транзакції.
+ */
+export function eraseSpan(kind: CellKind, slot: Y.Map<unknown>, from: number, to: number, timeSignature: string) {
+  const grid = Number(slot.get("grid")) || gridOf(kind);
+  const [n, d] = meter(timeSignature);
+  const perBar = Math.max(1, Math.round((n * grid) / d));
+  const cells = slot.get("cells") as Y.Map<string>;
+  const indexOf = (key: string) => {
+    const k = parseKey(key);
+    return k ? (k.bar - 1) * perBar + k.step - 1 : -1;
+  };
+  const [first, end] = [Math.ceil((from * grid) / TICKS), Math.ceil((to * grid) / TICKS)];
+  Array.from(cells.keys()).forEach((key) => {
+    const i = indexOf(key);
+    if (i >= first && i < end) cells.delete(key);
+  });
+  if (kind !== "blocks") return;
+  const keyAt = (i: number) => `${Math.floor(i / perBar) + 1}.${(i % perBar) + 1}`;
+  for (let i = end; cells.get(keyAt(i)) === "-"; i++) cells.delete(keyAt(i));
+}
+
 /** Такти: числом — стільки повних, масивом — розміри кожного (`barSizes`). */
 type Bars = number | readonly number[];
 const sizesOf = (bars: Bars, scale: Scale) => (typeof bars === "number" ? Array.from({ length: bars }, () => scale.cells) : bars);

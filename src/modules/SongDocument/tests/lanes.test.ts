@@ -199,6 +199,34 @@ describe("клітинкові доріжки — атомні вузли вид
     expect(A.cells.key({ key: "ArrowLeft" })).toBe(false); // перший крок — далі Slate
   });
 
+  it("кроки виділяються, як символи: Shift+стрілки від кроку, де почали; Backspace стирає виділене на всіх струнах", () => {
+    const { net, A, tab } = withTab();
+    change(net.A, () => {
+      const cells = cellsOf(linesOf(net.A)[1], tab)!;
+      ["1.1/1", "1.25/3", "1.49/6", "1.73/2"].forEach((key) => cells.set(key, "5"));
+    });
+    at(A, 1, 0, 0);
+    A.cells.key({ key: "ArrowRight" });
+    expect(A.cells.key({ key: "ArrowRight", shiftKey: true })).toBe(true);
+    A.cells.key({ key: "ArrowRight", shiftKey: true });
+    // кроки 1–3 (з 0): тіки 24…96
+    expect(A.cells.selection()).toMatchObject({ lane: tab, from: 24, to: 96 });
+    A.cells.key({ key: "ArrowLeft", shiftKey: true });
+    expect(A.cells.selection()).toMatchObject({ from: 24, to: 72 });
+    A.cells.key({ key: "Backspace" });
+    expect(cellsOf(linesOf(net.B)[1], tab)!.toJSON()).toEqual({ "1.1/1": "5", "1.73/2": "5" });
+    expect(A.cells.selection()).toBe(null);
+  });
+
+  it("будь-яка інша клавіша знімає виділення кроків", () => {
+    const { A, tab } = withTab();
+    at(A, 1, 0, 0);
+    A.cells.key({ key: "ArrowRight", shiftKey: true });
+    expect(A.cells.selection()).toMatchObject({ lane: tab, from: 0, to: 48 });
+    A.cells.key({ key: "ArrowRight" });
+    expect(A.cells.selection()).toBe(null);
+  });
+
   it("копіювання: доріжка — уся, своїм текстом; вставка в доріжку — розбирає текст", () => {
     const { net, A, tab } = withTab();
     change(net.A, () => cellsOf(linesOf(net.A)[1], tab)!.set("1.73/2", "1"));

@@ -1,10 +1,34 @@
 /**
  * Смужки динаміки відрізка: ліворуч — спільна, праворуч — моя особиста. На
  * телефоні притиснуті до краю екрана (виходять на поле `Container`, `p-2`),
- * на широкому — до краю колонки. У правці — веди по смужці пальцем, щоб фарбувати.
+ * на широкому — до краю колонки. Поки відкрита панель динаміки — веди по
+ * смужці пальцем, щоб фарбувати.
+ *
+ * Динаміка — рядка, а показується перед словами й акордами (`LaneDynamics`):
+ * обидві смужки — та сама динаміка, і поруч вони зливаються в одну. Немає ні
+ * слів, ні акордів у видимому — смужки на всіх доріжках рядка.
  */
+import { Element, Node } from "slate";
+import { ReactEditor, useSlateStatic } from "slate-react";
+import { laneOfNode } from "../../bridge/projection";
 import { DynamicsLayer, DynamicsStepKey, getDynamicsStepColor, layout, lineKind, shownDynamics, SILENCE } from "../../model";
-import { useEditorCtx } from "../context";
+import { useEditorCtx, useModelLine } from "../context";
+
+/** Смужки динаміки на доріжці `lane` рядка, якщо вони на ній (див. вище). */
+export function LaneDynamics({ element, lane }: { element: Element; lane: string }) {
+  const editor = useSlateStatic();
+  const ln = useModelLine(element);
+  if (ln < 0) return null;
+  if (lane !== "words" && lane !== "chords") {
+    try {
+      const lanes = Node.parent(editor, ReactEditor.findPath(editor, element)).children.map(laneOfNode);
+      if (lanes.includes("words") || lanes.includes("chords")) return null;
+    } catch {
+      return null;
+    }
+  }
+  return <DynamicsZone ln={ln} />;
+}
 
 export function DynamicsZone({ ln }: { ln: number }) {
   const ctx = useEditorCtx();

@@ -1,7 +1,7 @@
 /** Перенесення записів приміток між рядками — при Enter і склеюванні. */
 import { laneText, layout } from "../read";
 import type { LaneType, Line, Song } from "../song";
-import { NoteRecord, notesOf, rel, resolveRange, TextAt } from "./marks";
+import { isTimeRange, NoteRecord, notesOf, rel, resolveRange, TextAt } from "./marks";
 
 /** Примітка доріжки рядка з тим, що вона зараз позначає (null — позначене зникло). */
 export type MovableNote = { note: NoteRecord; at: TextAt | null };
@@ -33,4 +33,14 @@ export function moveLaneNote(from: Line, to: Line, lane: LaneType, { note, at }:
     note.id,
     at ? { ...note, anchor: rel(text, at.from + shift, 0), focus: rel(text, at.to + shift, -1) } : note,
   );
+}
+
+/**
+ * Перенести примітку клітинкової доріжки `lane` у ту саму доріжку рядка `to`,
+ * зсунуту на `shift` тіків (клітинки `from` дописані туди з цього місця —
+ * склеювання). Викликати, поки маркер `from` ще в документі.
+ */
+export function moveTimeNote(from: Line, to: Line, lane: LaneType, note: NoteRecord, shift: number) {
+  notesOf(from, lane).delete(note.id);
+  notesOf(to, lane).set(note.id, isTimeRange(note) ? { ...note, from: note.from + shift, to: note.to + shift } : note);
 }

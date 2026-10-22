@@ -3,13 +3,20 @@
  * усередині нього в кожного свій курсор-крок: стрілки ходять по кроках (у табах
  * і кахоні ↑↓ — по лініях), символ пишеться за синтаксисом виду, Backspace стирає крок.
  * Дійшли до краю — стрілку обробляє Slate: курсор виходить у сусідню доріжку.
+ *
+ * Доріжка — псевдо-текст, і кроки в ній виділяються, як символи: протяг
+ * мишею, довгий натиск і протяг пальцем, Shift+стрілки. Виділене — проміжок
+ * часу рядка (тіки, `cellSpan`), у будь-якому режимі: на ньому ставлять
+ * примітку, а в правці — стирають (Backspace/Delete).
  */
 import * as Y from "yjs";
 import { Editor, Path, Range, Transforms } from "slate";
 import {
   allLanes,
   barSizes,
+  cellSpan,
   endOf,
+  eraseSpan,
   lineLength,
   CellAt,
   CellKind,
@@ -29,6 +36,8 @@ import { isCellsNode, laneOfNode } from "./projection";
 import { COMMAND, TYPING, ViewState } from "./state";
 
 export type CellCursor = { line: Line; lane: string; kind: CellKind; at: CellAt; prev: string | null };
+/** Виділені кроки доріжки `lane` рядка `line`: `from…to` — тіки від початку рядка (кінець не входить). */
+export type CellSelection = { line: Line; lane: string; from: number; to: number };
 
 export type Cells = {
   /** Курсор цього учасника в клітинковій доріжці; `null` — він не в ній. */
@@ -36,12 +45,19 @@ export type Cells = {
   /** Поставити курсор на крок доріжки-вузла `path` (клік по кроку). */
   place: (path: Path, at: CellAt) => void;
   /** Клавіша, поки курсор у доріжці: `true` — оброблено (не пускати далі в Slate). */
-  key: (e: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean }) => boolean;
+  key: (e: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; shiftKey?: boolean }) => boolean;
   /** Друк тексту в доріжку (з клавіатури телефона — через Slate); `false` — курсор не в доріжці. */
   type: (text: string) => boolean;
   /** Вставка тексту доріжки з буфера; `false` — курсор не в доріжці. */
   paste: (text: string) => boolean;
-  /** Підписатися на рух курсора; повертає відписку. */
+  /** Виділені кроки (в будь-якому режимі); `null` — нічого не виділено. */
+  selection: () => CellSelection | null;
+  /**
+   * Виділити кроки (`null` — зняти). `anchor` — комірка, від якої тягнуть
+   * (Shift+стрілки ведуть від неї); у правці курсор стає на `focus`.
+   */
+  select: (sel: CellSelection | null, ends?: { anchor: number; focus: number; string: number }) => void;
+  /** Підписатися на рух курсора й виділення; повертає відписку. */
   listen: (fn: () => void) => () => void;
 };
 
@@ -67,6 +83,9 @@ export function cellText(s: ViewState, line: Line, id: string): string[] {
 export function installCells(s: ViewState, history: History): Cells {
   const { view } = s;
   let cursor: CellCursor | null = null;
+  let selected: CellSelection | null = null;
+  /** Комірка, від якої тягнуть виділення (у масштабі людини). */
+  let anchor: number | null = null;
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((fn) => fn());
 
@@ -115,8 +134,21 @@ export function installCells(s: ViewState, history: History): Cells {
     notify();
     return true;
   };
+  const select = (sel: CellSelection | null, from: number | null = null) => {
+    selected = sel;
+    anchor = sel ? from : null;
+    notify();
+  };
+  /** Кроки `a…b` (комірки масштабу, у будь-якому порядку) доріжки під курсором. */
+  const span = (c: CellCursor, a: number, b: number): CellSelection => {
+    const scale = scaleIn(s, c.kind);
+    return { line: c.line, lane: c.lane, from: cellSpan(scale, Math.min(a, b))[0], to: cellSpan(scale, Math.max(a, b))[1] };
+  };
+  /** Виділене — у доріжці під курсором. */
+  const selectedHere = (c: CellCursor) => (selected && selected.line === c.line && selected.lane === c.lane ? selected : null);
   const type = (text: string) => {
     if (!current()) return false;
+    if (selected) select(null);
     edit(TYPING, (c, slot) => {
       for (const ch of text) {
         c.at = typeCell(c.kind, slot, scaleIn(s, c.kind), c.at, ch, c.prev, endOf(sizesIn(s, c.line, c.kind), scaleIn(s, c.kind)));
@@ -138,6 +170,26 @@ export function installCells(s: ViewState, history: History): Cells {
       if (!c || e.metaKey || e.ctrlKey || e.altKey) return false;
       const total = endOf(sizesIn(s, c.line, c.kind), scaleIn(s, c.kind));
       const { step, string } = c.at;
+      const sel = selectedHere(c);
+      // Shift+←/→ — виділення від комірки, де почали, до курсора.
+      if (e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        const to = Math.max(0, Math.min(total - 1, step + (e.key === "ArrowLeft" ? -1 : 1)));
+        const from = sel && anchor !== null ? anchor : step;
+        move({ step: to, string });
+        select(span(c, from, to), from);
+        return true;
+      }
+      if (e.key === "Escape") {
+        if (!selected) return false;
+        select(null);
+        return true;
+      }
+      if (sel && (e.key === "Backspace" || e.key === "Delete")) {
+        edit(COMMAND, (cur, slot) => eraseSpan(cur.kind, slot, sel.from, sel.to, readMeta(s.song.doc).timeSignature));
+        select(null);
+        return true;
+      }
+      if (selected) select(null); // будь-яка інша клавіша — виділення вже не те
       switch (e.key) {
         case "ArrowLeft":
           return step > 0 && move({ step: step - 1, string });
@@ -165,6 +217,12 @@ export function installCells(s: ViewState, history: History): Cells {
       }
     },
     type,
+    selection: () => selected,
+    select: (sel, ends) => {
+      select(sel, ends?.anchor ?? null);
+      // У правці курсор стає туди, куди дотягли (як у тексті).
+      if (sel && ends && cursor && cursor.line === sel.line && cursor.lane === sel.lane) move({ step: ends.focus, string: ends.string });
+    },
     paste: (text) => {
       const c = current();
       if (!c) return false;

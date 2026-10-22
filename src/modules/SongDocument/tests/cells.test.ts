@@ -4,7 +4,10 @@ import * as Y from "yjs";
 import { change, makePair } from "./harness";
 import {
   addLane,
+  addNote,
+  ALL,
   barSizes,
+  cellSpan,
   endOf,
   hiddenPastEnd,
   lengthLabel,
@@ -18,6 +21,7 @@ import {
   mergeLine,
   parseCells,
   readZoom,
+  resolveNotes,
   setLineLength,
   renderCells,
   scaleOf,
@@ -411,5 +415,56 @@ describe("запис у тіках, показ у масштабі людини"
     expect([readZoom(net.B.doc, "Оля"), readZoom(net.B.doc, "Вова")]).toEqual([64, 16]);
     change(net.A, () => writeZoom(net.A.doc, "Оля", 16));
     expect(net.B.doc.getMap("zoom").has("Оля")).toBe(false);
+  });
+});
+
+describe("примітки на кроках — проміжок часу рядка", () => {
+  /** Примітка на кроках `from…to` (з 0, кінець не входить) доріжки в масштабі `zoom`. */
+  const noteOn = (song: Song, ln: number, id: string, kind: CellKind, from: number, to: number, zoom = 16) =>
+    change(song, () =>
+      addNote(song, ln, id, cellSpan(sc(kind, zoom), from)[0], cellSpan(sc(kind, zoom), to - 1)[1], {
+        id: "n",
+        author: "Оля",
+        visibleFor: [ALL],
+        color: "#F5C518",
+        body: "",
+      }),
+    );
+  const shown = (song: Song) => resolveNotes(song, [], () => true).map((n) => ({ status: n.status, line: n.line, at: n.at, quote: n.note.quote }));
+
+  it("крок — у тіках від початку рядка; у прямокутників той самий час", () => {
+    expect(cellSpan(sc("tab"), 0)).toEqual([0, 24]);
+    expect(cellSpan(sc("tab"), 17)).toEqual([408, 432]); // другий такт, другий крок
+    expect(cellSpan(sc("tab", 32), 1)).toEqual([12, 24]);
+    expect(cellSpan(sc("blocks"), 17)).toEqual([408, 432]);
+  });
+
+  it("позначка пам'ятає час, а не комірки: в іншому масштабі — те саме місце", () => {
+    const { net, id, type } = withLane("tab");
+    type("3", 0, { step: 2, string: 0 });
+    type("5", 0, { step: 3, string: 1 });
+    noteOn(net.A, 0, id, "tab", 2, 4); // кроки 2–3 у 1/16
+    expect(shown(net.B)).toEqual([{ status: "visible", line: 0, at: { line: 0, from: 48, to: 96 }, quote: "3 5" }]);
+    expect([cellSpan(sc("tab", 32), 4)[0], cellSpan(sc("tab", 32), 7)[1]]).toEqual([48, 96]); // у 1/32 — кроки 4–7
+  });
+
+  it("склеювання зсуває примітки другого рядка разом із клітинками", () => {
+    const { net, id, type } = withLane("cajon");
+    lengthTo(net.A, 0, 12); // такт і половина
+    type("B", 1, { step: 1, string: 0 });
+    noteOn(net.A, 1, id, "cajon", 1, 2);
+    change(net.A, () => mergeLine(net.A, 1));
+    // Другий рядок почався з 12-ї вісімки: 12 · 48 тіків; крок 1 — ще 24.
+    expect(shown(net.B)).toEqual([{ status: "visible", line: 0, at: { line: 0, from: 600, to: 624 }, quote: "B" }]);
+  });
+
+  it("укоротили рядок — позначене за кінцем сховане (втрачене), подовжили — повернулось", () => {
+    const { net, id } = withLane("tab");
+    lengthTo(net.A, 0, 16);
+    noteOn(net.A, 0, id, "tab", 20, 22);
+    lengthTo(net.A, 0, 8);
+    expect(shown(net.B)[0].status).toBe("lost");
+    lengthTo(net.A, 0, 16);
+    expect(shown(net.B)[0]).toMatchObject({ status: "visible", at: { from: 480, to: 528 } });
   });
 });

@@ -1,5 +1,5 @@
 /** Примітки для показу: над яким рядком картка, що зараз позначено, чи видно. */
-import { layout, textSlotsOf } from "../read";
+import { cellSlotsOf, layout, textSlotsOf } from "../read";
 import type { LaneType, Line, Song } from "../song";
 import { ALL, Audience, canSee, NoteRecord, notesOf, resolveRange, TextAt } from "./marks";
 
@@ -19,7 +19,9 @@ export type NoteView = {
 /** Усі записи приміток пісні: рядок запису, доріжка, запис. */
 function records(song: Song) {
   return layout(song).flatMap((l, owner) =>
-    [...textSlotsOf(l.line), "words"].flatMap((lane) => Array.from(notesOf(l.line, lane).values()).map((note) => ({ owner, lane, note }))),
+    [...textSlotsOf(l.line), ...cellSlotsOf(l.line), "words"].flatMap((lane) =>
+      Array.from(notesOf(l.line, lane)?.values() ?? []).map((note) => ({ owner, lane, note })),
+    ),
   );
 }
 
