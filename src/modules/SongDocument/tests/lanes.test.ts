@@ -189,9 +189,9 @@ describe("клітинкові доріжки — атомні вузли вид
     const { net, A, tab } = withTab();
     change(net.A, () => cellsOf(linesOf(net.A)[1], tab)!.set("1.4/2", "1"));
     Transforms.select(A.view, { anchor: { path: [0, 2, 0], offset: 3 }, focus: { path: [1, 1, 0], offset: 1 } });
-    const E = "-".repeat(32); // порожній такт: 32 кроки по прочерку
+    const E = "-".repeat(16); // порожній такт: 16 кроків по прочерку
     expect(A.copyText()).toBe(
-      ["святий", `e|${E}|`, `B|---1${"-".repeat(28)}|`, `G|${E}|`, `D|${E}|`, `A|${E}|`, `E|${E}|`, "C"].join("\n"),
+      ["святий", `e|${E}|`, `B|---1${"-".repeat(12)}|`, `G|${E}|`, `D|${E}|`, `A|${E}|`, `E|${E}|`, "C"].join("\n"),
     );
     at(A, 2, 0, 0);
     expect(A.cells.paste(["e|--------|", "B|--------|", "G|--------|", "D|--------|", "A|--------|", "E|3-------|"].join("\n"))).toBe(true);

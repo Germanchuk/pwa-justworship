@@ -2,9 +2,9 @@
  * Клітинкові доріжки (ADR-0008) — псевдо-текст: зберігаються клітинками
  * сітки, показуються й копіюються текстом, пишуться за синтаксисом виду.
  *
- * Сітка стала: крок — 1/32 (`4/4` → 32 кроки в такті, `6/8` → 24). Слот
- * пам'ятає свою сітку (`grid` — кроків у цілій ноті): клітинки, записані
- * раніше вісімками, перераховує `upgradeGrid`. Доріжка в рядку — `bars`
+ * Сітка стала: крок — шістнадцята (`4/4` → 16 кроків у такті, `6/8` → 12).
+ * Слот пам'ятає свою сітку (`grid` — кроків у цілій ноті): клітинки, записані
+ * на іншій (вісімки, тридцять другі), перераховує `upgradeGrid`. Доріжка в рядку — `bars`
  * тактів (за замовчуванням один, додаються). Ключ клітинки — «такт.крок»,
  * для табів ще «/струна» (усе з 1).
  *
@@ -19,12 +19,12 @@ import type { CellKind } from "./lanes";
 
 export const TAB_STRINGS = ["e", "B", "G", "D", "A", "E"] as const;
 
-/** Кроків у цілій ноті: крок — тридцять друга. */
-export const GRID = 32;
+/** Кроків у цілій ноті: крок — шістнадцята. */
+export const GRID = 16;
 /** Сітка слотів, записаних до 2026-10-22 (без `grid`): крок — вісімка. */
 const OLD_GRID = 8;
 
-/** Кроків (тридцять других) у такті розміру `4/4`, `6/8`… */
+/** Кроків (шістнадцятих) у такті розміру `4/4`, `6/8`… */
 export function stepsPerBar(timeSignature: string) {
   const [n, d] = timeSignature.split("/").map(Number);
   return n > 0 && d > 0 ? Math.max(1, Math.round((n * GRID) / d)) : GRID;
@@ -34,22 +34,35 @@ export function stepsPerBar(timeSignature: string) {
 export const staleGrid = (slot: Y.Map<unknown>) => slot.has("cells") && slot.get("grid") !== GRID;
 
 /**
- * Перерахувати клітинки слота на сітку `GRID`: удар (таби, кахон) стає першим
- * із кроків, які старий крок тепер займає; прямокутник тягнеться на всі
- * («-» в решті). Викликати в транзакції.
+ * Перерахувати клітинки слота на сітку `GRID`: удар (таби, кахон) стає на
+ * крок, у який припадає його початок; прямокутник тягнеться на всі кроки, що
+ * займав («-» в решті). Сітка грубшала й на один крок припало два — лишається
+ * перший, а назва акорду перемагає «-». Викликати в транзакції.
  */
 export function upgradeGrid(slot: Y.Map<unknown>, kind: CellKind) {
   const from = Number(slot.get("grid")) || OLD_GRID;
   const cells = slot.get("cells") as Y.Map<string>;
-  const moved = Array.from(cells.entries()).flatMap(([key, value]) => {
-    const k = parseKey(key);
-    if (!k) return [];
-    const first = Math.round(((k.step - 1) * GRID) / from) + 1;
-    const span = kind === "blocks" ? Math.max(1, Math.round((k.step * GRID) / from) + 1 - first) : 1;
-    return Array.from({ length: span }, (_, i) => [`${k.bar}.${first + i}${key.includes("/") ? `/${k.string}` : ""}`, i ? "-" : value] as const);
-  });
+  const moved = new Map<string, string>();
+  const order = (key: string) => {
+    const k = parseKey(key)!;
+    return k.bar * 1e6 + k.step * 10 + k.string;
+  };
+  Array.from(cells.entries())
+    .sort(([a], [b]) => order(a) - order(b))
+    .forEach(([key, value]) => {
+      const k = parseKey(key);
+      if (!k) return;
+      const first = Math.floor(((k.step - 1) * GRID) / from) + 1;
+      const last = kind === "blocks" ? Math.max(first, Math.floor((k.step * GRID) / from)) : first;
+      for (let step = first; step <= last; step++) {
+        const at = `${k.bar}.${step}${key.includes("/") ? `/${k.string}` : ""}`;
+        const v = step === first ? value : "-";
+        const was = moved.get(at);
+        if (was === undefined || (was === "-" && v !== "-")) moved.set(at, v);
+      }
+    });
   cells.clear();
-  moved.forEach(([key, value]) => cells.set(key, value));
+  moved.forEach((value, key) => cells.set(key, value));
   slot.set("grid", GRID);
 }
 
