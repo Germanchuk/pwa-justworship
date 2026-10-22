@@ -18,7 +18,7 @@ import {
   readMeta,
   renderCells,
   rowsOf,
-  stepsPerBar,
+  scaleOf,
   typeCell,
   writeParsed,
 } from "../model";
@@ -44,7 +44,8 @@ export type Cells = {
 };
 
 const kindOf = (s: ViewState, id: string) => allLanes(s.song.doc).find((l) => l.id === id)?.kind;
-const stepsOf = (s: ViewState) => stepsPerBar(readMeta(s.song.doc).timeSignature);
+/** Масштаб доріжки виду `kind` для цієї людини. */
+export const scaleIn = (s: ViewState, kind: CellKind) => scaleOf(kind, readMeta(s.song.doc).timeSignature, s.display.zoom);
 const slotOf = (c: CellCursor) => c.line.get(c.lane) as Y.Map<unknown> | undefined;
 
 /** Доріжка текстом (для буфера) — так само, як її показує редактор. */
@@ -53,7 +54,7 @@ export function cellText(s: ViewState, line: Line, id: string): string[] {
   const slot = line.get(id) as Y.Map<unknown> | undefined;
   if (!kind || isTextKind(kind) || !slot) return [];
   const cells = slot.get("cells") as Y.Map<string>;
-  return renderCells(kind, (k) => cells.get(k), barsOf(slot), stepsOf(s));
+  return renderCells(kind, cells.entries(), barsOf(slot), scaleIn(s, kind));
 }
 
 export function installCells(s: ViewState, history: History): Cells {
@@ -111,7 +112,7 @@ export function installCells(s: ViewState, history: History): Cells {
     if (!current()) return false;
     edit(TYPING, (c, slot) => {
       for (const ch of text) {
-        c.at = typeCell(c.kind, slot, stepsOf(s), c.at, ch, c.prev);
+        c.at = typeCell(c.kind, slot, scaleIn(s, c.kind), c.at, ch, c.prev);
         c.prev = ch;
       }
     });
@@ -129,7 +130,7 @@ export function installCells(s: ViewState, history: History): Cells {
       const c = current();
       if (!c || e.metaKey || e.ctrlKey || e.altKey) return false;
       const slot = slotOf(c);
-      const total = barsOf(slot) * stepsOf(s);
+      const total = barsOf(slot) * scaleIn(s, c.kind).cells;
       const { step, string } = c.at;
       switch (e.key) {
         case "ArrowLeft":
@@ -147,7 +148,7 @@ export function installCells(s: ViewState, history: History): Cells {
         case "Backspace":
         case "Delete":
           edit(COMMAND, (cur, sl) => {
-            cur.at = eraseCell(cur.kind, sl, stepsOf(s), cur.at, e.key === "Backspace");
+            cur.at = eraseCell(cur.kind, sl, scaleIn(s, cur.kind), cur.at, e.key === "Backspace");
             cur.prev = null;
           });
           return true;
@@ -161,7 +162,7 @@ export function installCells(s: ViewState, history: History): Cells {
     paste: (text) => {
       const c = current();
       if (!c) return false;
-      const parsed = parseCells(c.kind, text.split(/\r?\n/).filter((l) => l.trim()), stepsOf(s));
+      const parsed = parseCells(c.kind, text.split(/\r?\n/).filter((l) => l.trim()), scaleIn(s, c.kind));
       if (parsed) edit(COMMAND, (_, slot) => writeParsed(slot, parsed));
       return true;
     },

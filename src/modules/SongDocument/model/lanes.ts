@@ -12,7 +12,7 @@
  */
 import * as Y from "yjs";
 import type { Line, Song } from "./song";
-import { GRID, staleCajon, staleGrid, upgradeCajon, upgradeGrid } from "./cells";
+import { gridOf, staleCajon, staleGrid, upgradeCajon, upgradeGrid } from "./cells";
 
 /** `text` — додана текстова доріжка (вигуки, бек-вокал): правиться як акорди, текстом у Slate. */
 export type LaneKind = "words" | "chords" | "text" | "blocks" | "tab" | "cajon";
@@ -74,7 +74,7 @@ export function newSlot(kind: LaneKind, chords = ""): Y.Map<unknown> {
   if (kind === "chords" || kind === "text") slot.set("text", new Y.Text(chords));
   else if (kind !== "words") {
     slot.set("cells", new Y.Map());
-    slot.set("grid", GRID);
+    slot.set("grid", gridOf(kind as CellKind));
   }
   slot.set("notes", new Y.Map());
   return slot;
@@ -109,7 +109,7 @@ export const missingSlots = (song: Song, lines: readonly Line[]) => [
 ];
 
 /** Слот на старій сітці чи (кахон) ще однією лінією. */
-const stale = (kind: LaneKind, slot: Y.Map<unknown>) => staleGrid(slot) || (kind === "cajon" && staleCajon(slot));
+const stale = (kind: LaneKind, slot: Y.Map<unknown>) => staleGrid(slot, kind as CellKind) || (kind === "cajon" && staleCajon(slot));
 
 const staleSlots = (song: Song, lines: readonly Line[]) =>
   addedLanes(song.doc).flatMap((lane) =>
@@ -122,9 +122,8 @@ export function ensureSlots(song: Song, lines: readonly Line[]) {
     const slot = line.get(lane.id);
     if (slot instanceof Y.Map) {
       if (lane.kind === "cajon" && staleCajon(slot as Y.Map<unknown>)) upgradeCajon(slot as Y.Map<unknown>);
-      if (staleGrid(slot as Y.Map<unknown>)) upgradeGrid(slot as Y.Map<unknown>, lane.kind as CellKind);
-    }
-    else line.set(lane.id, newSlot(lane.kind));
+      if (staleGrid(slot as Y.Map<unknown>, lane.kind as CellKind)) upgradeGrid(slot as Y.Map<unknown>, lane.kind as CellKind);
+    } else line.set(lane.id, newSlot(lane.kind));
   });
 }
 

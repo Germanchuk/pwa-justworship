@@ -22,6 +22,7 @@ import {
   readCapo,
   readHiddenLanes,
   readMeta,
+  readZoom,
   resolveNotes,
   Song,
   updateNote,
@@ -67,7 +68,8 @@ function LoadedEditor({ song }: { song: Song }) {
   useDocVersion(song.doc); // шапка, примітки, особисте — перечитуються на кожну зміну
 
   const hidden = me ? readHiddenLanes(song.doc, me) : [];
-  const display: LaneDisplay = { words: !hidden.includes("words"), chords: !hidden.includes("chords"), hidden };
+  const zoom = me ? readZoom(song.doc, me) : undefined;
+  const display: LaneDisplay = { words: !hidden.includes("words"), chords: !hidden.includes("chords"), hidden, zoom };
   const lanes = useMemo(
     () => createLaneView(song, display, { base: () => withReact(createEditor()) }),
     // Видиме дерево створюється раз на документ; вибір доріжок міняє `setDisplay`.
@@ -82,7 +84,7 @@ function LoadedEditor({ song }: { song: Song }) {
   useLayoutEffect(() => {
     lanes.setDisplay(display);
     rerender((n) => n + 1);
-  }, [lanes, hidden.join()]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lanes, hidden.join(), zoom]); // eslint-disable-line react-hooks/exhaustive-deps
   const view = lanes.view;
 
   // Рядок, що народився одночасно з новою доріжкою, — без її слота: дописати (ADR-0008);

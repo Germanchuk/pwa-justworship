@@ -3,11 +3,15 @@
  * текст: таби (струни) й кахон (лінія на удар) — лініями кроків, прямокутники
  * — блоками на сітці. У правці: курсор-крок (клік по кроку ставить його),
  * «+ такт» / «− такт».
+ *
+ * Удари — у масштабі людини (`Scale`): подія в найближчій комірці; точно на
+ * долі — звичайна, поруч — сіріша й прозоріша, що далі від долі; кілька в
+ * одній комірці — число в кутку. Правиться лише точне (`cells.ts`).
  */
 import * as Y from "yjs";
 import type { ReactNode } from "react";
 import { RenderElementProps, ReactEditor, useSlateStatic } from "slate-react";
-import { addBar, allLanes, barsOf, layout, cellKey, CellAt, CellKind, readMeta, removeBar, rowsOf, stepsPerBar, stepsPerBeat } from "../../model";
+import { addBar, allLanes, barsOf, layout, CellAt, CellKind, placeCells, readMeta, readZoom, removeBar, rowsOf, scaleOf, stepsPerBeat } from "../../model";
 import { useEditorCtx, useModelLine } from "../context";
 
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
@@ -48,11 +52,17 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
   }
 
   const { timeSignature } = readMeta(ctx.song.doc);
-  const steps = stepsPerBar(timeSignature);
-  const beat = stepsPerBeat(timeSignature);
+  const zoom = ctx.me ? readZoom(ctx.song.doc, ctx.me) : undefined;
+  const scale = scaleOf(kind, timeSignature, zoom);
+  const steps = scale.cells;
+  // Доля — у кроках запису: смуги лягають за часом, а не за номером комірки.
+  const beatTicks = (stepsPerBeat(timeSignature) * scale.grid) / 16;
+  // Прямокутники без масштабу: їхня комірка ширша чи вужча, щоб такт був завширшки як у ударів.
+  const stepPx = kind === "blocks" ? (STEP_PX * scaleOf("tab", timeSignature, zoom).cells) / steps : STEP_PX;
   const bars = barsOf(slot);
-  const cells = slot.get("cells") as Y.Map<string>;
-  const read = (at: CellAt) => cells.get(cellKey(kind, steps, at));
+  const placed = placeCells(kind, (slot.get("cells") as Y.Map<string>).entries(), bars, scale);
+  const shown = (at: CellAt) => placed.get(`${at.step}/${at.string}`);
+  const read = (at: CellAt) => shown(at)?.value;
   const cursor = ctx.canEdit ? ctx.lanes.cells.cursor() : null;
   const here = cursor && cursor.line === line && cursor.lane === id ? cursor.at : null;
   const place = (at: CellAt) => (e: React.MouseEvent) => {
@@ -63,7 +73,7 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
     ctx.lanes.cells.place(ReactEditor.findPath(editor, element), at);
   };
   const stepSpan = (at: CellAt, content: ReactNode, style: React.CSSProperties = {}) => {
-    const tinted = Math.floor((at.step % steps) / beat) % 2 === 1;
+    const tinted = Math.floor(((at.step % steps) * scale.tick) / beatTicks) % 2 === 1;
     const background = [style.background, tinted && fill(BEAT_TINT)].filter(Boolean).join(", ") || undefined;
     return (
       <span
@@ -95,19 +105,34 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
       </span>
     </div>
   );
-  /** Крок лінії: риска, коли порожньо, інакше — значення по центру. */
-  const lineStep = (at: CellAt, v: string | undefined, content: ReactNode = v) =>
-    stepSpan(at, content ?? "", {
-      ...fixed(STEP_PX),
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center", // ширший за крок лад виходить на обидва боки порівну
-      height: ROW_PX,
-      fontSize: 10,
-      fontWeight: 600,
-      color: v ? INK[kind] : "#a8a29e",
-      background: v ? undefined : DASH,
-    });
+  /** Крок лінії: риска, коли порожньо, інакше — значення по центру; не на долі — сіріше, що далі. */
+  const lineStep = (at: CellAt, content: ReactNode) => {
+    const cell = shown(at);
+    const off = cell?.off ?? 0;
+    return stepSpan(
+      at,
+      <>
+        <span style={off ? { opacity: 1 - off * 1.2 } : undefined}>{content}</span>
+        {cell && cell.count > 1 && (
+          <span className="absolute -top-0.5 right-0 text-[7px] leading-none text-red-600" title={`Тут ${cell.count} події — точніше видно в дрібнішій сітці`}>
+            {cell.count}
+          </span>
+        )}
+      </>,
+      {
+        ...fixed(STEP_PX),
+        position: "relative",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center", // ширший за крок лад виходить на обидва боки порівну
+        height: ROW_PX,
+        fontSize: 10,
+        fontWeight: 600,
+        color: !cell ? "#a8a29e" : off ? "#78716c" : INK[kind],
+        background: cell ? undefined : DASH,
+      },
+    );
+  };
 
   let body: ReactNode;
   if (kind !== "blocks") {
@@ -116,7 +141,7 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
       row(name, (step) => {
         const v = read({ step, string });
         const digits = v && v.length > 1 ? <span style={{ display: "inline-block", transform: "scaleX(0.7)" }}>{v}</span> : v;
-        return lineStep({ step, string }, v, digits);
+        return lineStep({ step, string }, digits);
       }),
     );
   } else {
@@ -132,7 +157,7 @@ export function CellLane({ attributes, children, element }: RenderElementProps) 
         { step, string: 0 },
         start ? <span className="relative z-[1] font-bold">{v}</span> : inBlock ? " " : "·",
         {
-          ...fixed(STEP_PX),
+          ...fixed(stepPx),
           display: "inline-block",
           textAlign: "left",
           color: inBlock ? INK.blocks : "#a8a29e",

@@ -2,11 +2,19 @@
  * Клітинкові доріжки (ADR-0008) — псевдо-текст: зберігаються клітинками
  * сітки, показуються й копіюються текстом, пишуться за синтаксисом виду.
  *
- * Сітка стала: крок — шістнадцята (`4/4` → 16 кроків у такті, `6/8` → 12).
- * Слот пам'ятає свою сітку (`grid` — кроків у цілій ноті): клітинки, записані
- * на іншій (вісімки, тридцять другі), перераховує `upgradeGrid`. Доріжка в рядку — `bars`
- * тактів (за замовчуванням один, додаються). Ключ клітинки — «такт.крок»,
- * для табів і кахона ще «/лінія» — струна чи вид удару (усе з 1).
+ * **Запис і показ — різні сітки.** Удари (таби, кахон) записані в тіках:
+ * `TICKS` = 192 на цілу ноту — ділиться і на 2, і на 3, тож і 1/64, і тріолі
+ * лягають точно (для програвання, як у DAW). Показ — у масштабі людини
+ * (`Scale`, особисте, як капо): комірка 1/16 за замовчуванням, 1/32, 1/64 чи
+ * тріольні. Подія показується в найближчій комірці — точно на долі чи поруч
+ * (`placeCells`); правка й друк діють лише на точне (`cellKey` — тік долі
+ * комірки). Прямокутники поки записані на шістнадцятих і масштабу не мають.
+ *
+ * Слот пам'ятає свою сітку (`grid` — кроків у цілій ноті): записане на іншій
+ * (вісімки, шістнадцяті) перераховує `upgradeGrid`. Доріжка в рядку — `bars`
+ * тактів (за замовчуванням один, додаються). Ключ клітинки — «такт.тік»
+ * (прямокутники — «такт.крок»), для табів і кахона ще «/лінія» — струна чи
+ * вид удару (усе з 1).
  *
  *   прямокутники  |Am------|F---G---|   назва відкриває, «-» тягне, «.» — порожньо
  *   кахон         B|o-------o-------|  кожен удар на своїй лінії: B — бас,
@@ -27,15 +35,44 @@ export const rowsOf = (kind: CellKind): readonly string[] => (kind === "tab" ? T
 /** Удар кахона в клітинці. */
 const HIT = "o";
 
-/** Кроків у цілій ноті: крок — шістнадцята. */
-export const GRID = 16;
+/** Тіків у цілій ноті — запис ударів. */
+export const TICKS = 192;
+/** Прямокутники поки — на шістнадцятих (їхня механіка — згодом). */
+const BLOCKS_GRID = 16;
+/** Сітка запису виду — кроків у цілій ноті. */
+export const gridOf = (kind: CellKind) => (kind === "blocks" ? BLOCKS_GRID : TICKS);
 /** Сітка слотів, записаних до 2026-10-22 (без `grid`): крок — вісімка. */
 const OLD_GRID = 8;
 
-/** Кроків (шістнадцятих) у такті розміру `4/4`, `6/8`… */
-export function stepsPerBar(timeSignature: string) {
+/** Масштаби показу — комірок у цілій ноті: 1/16, 1/32, 1/64 і тріолі 1/8, 1/16, 1/32. */
+export const ZOOMS = [16, 32, 64, 12, 24, 48] as const;
+export const DEFAULT_ZOOM = 16;
+export const ZOOM_NAMES: Record<number, string> = { 16: "1/16", 32: "1/32", 64: "1/64", 12: "1/8 тріолі", 24: "1/16 тріолі", 48: "1/32 тріолі" };
+
+const meter = (timeSignature: string) => {
   const [n, d] = timeSignature.split("/").map(Number);
-  return n > 0 && d > 0 ? Math.max(1, Math.round((n * GRID) / d)) : GRID;
+  return n > 0 && d > 0 ? [n, d] : [4, 4];
+};
+
+/** Шістнадцятих у такті розміру `4/4`, `6/8`… */
+export function stepsPerBar(timeSignature: string) {
+  const [n, d] = meter(timeSignature);
+  return Math.max(1, Math.round((n * 16) / d));
+}
+
+/**
+ * Масштаб доріжки: `cells` — комірок у такті, `tick` — кроків запису на
+ * комірку, `ticks` — кроків запису в такті, `grid` — сітка запису виду.
+ * Прямокутники — без масштабу: комірка = крок запису.
+ */
+export type Scale = { cells: number; tick: number; ticks: number; grid: number };
+
+export function scaleOf(kind: CellKind, timeSignature: string, zoom: number = DEFAULT_ZOOM): Scale {
+  const [n, d] = meter(timeSignature);
+  const grid = gridOf(kind);
+  const ticks = Math.max(1, Math.round((n * grid) / d));
+  const tick = kind === "blocks" ? 1 : Math.max(1, Math.round(grid / zoom));
+  return { cells: Math.ceil(ticks / tick), tick, ticks, grid };
 }
 
 /**
@@ -44,23 +81,23 @@ export function stepsPerBar(timeSignature: string) {
  * — три вісімки (6 кроків).
  */
 export function stepsPerBeat(timeSignature: string) {
-  const [n, d] = timeSignature.split("/").map(Number);
-  if (!(n > 0 && d > 0)) return GRID / 4;
-  const unit = GRID / d;
+  const [n, d] = meter(timeSignature);
+  const unit = 16 / d;
   return Math.max(1, Math.round(d === 8 && n % 3 === 0 && n > 3 ? unit * 3 : unit));
 }
 
 /** Слот клітинкової доріжки на іншій сітці — його клітинки треба перерахувати. */
-export const staleGrid = (slot: Y.Map<unknown>) => slot.has("cells") && slot.get("grid") !== GRID;
+export const staleGrid = (slot: Y.Map<unknown>, kind: CellKind) => slot.has("cells") && slot.get("grid") !== gridOf(kind);
 
 /**
- * Перерахувати клітинки слота на сітку `GRID`: удар (таби, кахон) стає на
+ * Перерахувати клітинки слота на сітку свого виду: удар (таби, кахон) стає на
  * крок, у який припадає його початок; прямокутник тягнеться на всі кроки, що
  * займав («-» в решті). Сітка грубшала й на один крок припало два — лишається
  * перший, а назва акорду перемагає «-». Викликати в транзакції.
  */
 export function upgradeGrid(slot: Y.Map<unknown>, kind: CellKind) {
   const from = Number(slot.get("grid")) || OLD_GRID;
+  const to = gridOf(kind);
   const cells = slot.get("cells") as Y.Map<string>;
   const moved = new Map<string, string>();
   const order = (key: string) => {
@@ -72,8 +109,8 @@ export function upgradeGrid(slot: Y.Map<unknown>, kind: CellKind) {
     .forEach(([key, value]) => {
       const k = parseKey(key);
       if (!k) return;
-      const first = Math.floor(((k.step - 1) * GRID) / from) + 1;
-      const last = kind === "blocks" ? Math.max(first, Math.floor((k.step * GRID) / from)) : first;
+      const first = Math.floor(((k.step - 1) * to) / from) + 1;
+      const last = kind === "blocks" ? Math.max(first, Math.floor((k.step * to) / from)) : first;
       for (let step = first; step <= last; step++) {
         const at = `${k.bar}.${step}${key.includes("/") ? `/${k.string}` : ""}`;
         const v = step === first ? value : "-";
@@ -83,14 +120,41 @@ export function upgradeGrid(slot: Y.Map<unknown>, kind: CellKind) {
     });
   cells.clear();
   moved.forEach((value, key) => cells.set(key, value));
-  slot.set("grid", GRID);
+  slot.set("grid", to);
 }
 
-/** Місце курсора в доріжці: крок від початку рядка (з 0) і лінія — струна чи удар (з 0; прямокутники — 0). */
+/** Місце курсора в доріжці: комірка масштабу від початку рядка (з 0) і лінія — струна чи удар (з 0; прямокутники — 0). */
 export type CellAt = { step: number; string: number };
 
-export const cellKey = (kind: CellKind, steps: number, { step, string }: CellAt) =>
-  `${Math.floor(step / steps) + 1}.${(step % steps) + 1}${kind === "blocks" ? "" : `/${string + 1}`}`;
+/** Ключ запису точно на долі комірки `step`. */
+export const cellKey = (kind: CellKind, scale: Scale, { step, string }: CellAt) =>
+  `${Math.floor(step / scale.cells) + 1}.${(step % scale.cells) * scale.tick + 1}${kind === "blocks" ? "" : `/${string + 1}`}`;
+
+/** Що показати в комірці: найближче до її долі значення, на скільки воно від долі (0 — точно, до 0.5 комірки) і скільки подій туди лягло. */
+export type Shown = { value: string; off: number; count: number };
+
+/**
+ * Записане → комірки масштабу: кожна подія — у найближчу комірку (ключ
+ * `«комірка від початку рядка/лінія»`). Кілька в одній — лишається найближча,
+ * `count` каже, скільки їх насправді.
+ */
+export function placeCells(kind: CellKind, entries: Iterable<[string, string]>, bars: number, scale: Scale): Map<string, Shown> {
+  const out = new Map<string, Shown>();
+  for (const [key, value] of entries) {
+    const k = parseKey(key);
+    if (!k) continue;
+    const exact = (k.step - 1) / scale.tick; // у комірках від початку такту
+    let cell = Math.round(exact);
+    const off = Math.abs(exact - cell);
+    let bar = k.bar - 1;
+    if (cell >= scale.cells) [bar, cell] = [bar + 1, 0]; // найближча — перша комірка наступного такту
+    if (bar >= bars) continue;
+    const at = `${bar * scale.cells + cell}/${kind === "blocks" ? 0 : k.string - 1}`;
+    const was = out.get(at);
+    out.set(at, !was ? { value, off, count: 1 } : { ...(off < was.off ? { value, off } : was), count: was.count + 1 });
+  }
+  return out;
+}
 
 /** Кахон, записаний до 2026-10-22 однією лінією («такт.крок» → B/T/g), — треба розкласти по лініях. */
 export const staleCajon = (slot: Y.Map<unknown>) => Array.from((slot.get("cells") as Y.Map<string>).keys()).some((key) => !key.includes("/"));
@@ -119,11 +183,14 @@ export function barsOf(slot: Y.Map<unknown> | undefined) {
   return most;
 }
 
-type Read = (key: string) => string | undefined;
-
-/** Доріжка текстом — рядки, як їх показує редактор і кладе в буфер. */
-export function renderCells(kind: CellKind, read: Read, bars: number, steps: number): string[] {
-  const at = (bar: number, s: number, string = 0) => read(cellKey(kind, steps, { step: (bar - 1) * steps + s, string }));
+/**
+ * Доріжка текстом у масштабі — рядки, як їх показує редактор і кладе в буфер
+ * (подія не на долі — у найближчій комірці).
+ */
+export function renderCells(kind: CellKind, entries: Iterable<[string, string]>, bars: number, scale: Scale): string[] {
+  const steps = scale.cells;
+  const placed = placeCells(kind, entries, bars, scale);
+  const at = (bar: number, s: number, string = 0) => placed.get(`${(bar - 1) * steps + s}/${string}`)?.value;
   const barsText = (bar: (b: number) => string) =>
     "|" + Array.from({ length: bars }, (_, i) => bar(i + 1)).join("|") + "|";
 
@@ -149,20 +216,15 @@ export function renderCells(kind: CellKind, read: Read, bars: number, steps: num
       }),
     ];
   // Таби: крок завширшки найдовшого ладу в ньому на всіх струнах, порожній — один «-».
-  const widths = tabWidths(read, bars, steps);
+  const widths = Array.from({ length: bars * steps }, (_, step) =>
+    Math.max(1, ...TAB_STRINGS.map((_, string) => placed.get(`${step}/${string}`)?.value.length ?? 0)),
+  );
   return TAB_STRINGS.map(
     (name, string) =>
       name +
       barsText((b) =>
         Array.from({ length: steps }, (_, s) => (at(b, s, string) ?? "").padEnd(widths[(b - 1) * steps + s], "-")).join(""),
       ),
-  );
-}
-
-/** Ширина кожного кроку табів (від початку рядка): найдовший лад у ньому на всіх струнах, не менше 1. */
-export function tabWidths(read: Read, bars: number, steps: number): number[] {
-  return Array.from({ length: bars * steps }, (_, step) =>
-    Math.max(1, ...TAB_STRINGS.map((_, string) => read(cellKey("tab", steps, { step, string }))?.length ?? 0)),
   );
 }
 
@@ -195,15 +257,17 @@ function tabColumns(texts: string[]): (string | undefined)[][] {
   return cols;
 }
 
-export type Parsed = { cells: Record<string, string>; bars: number };
+export type Parsed = { cells: Record<string, string>; bars: number; grid: number };
 
 const barsIn = (line: string) => line.slice(line.indexOf("|") + 1).replace(/\|\s*$/, "").split("|");
 
-/** Текст доріжки (з буфера, свій чи з сайту) → клітинки. `null` — це не текст цього виду. */
-export function parseCells(kind: CellKind, lines: string[], steps: number): Parsed | null {
+/** Текст доріжки (з буфера, свій чи з сайту) → клітинки; символ — комірка масштабу. `null` — це не текст цього виду. */
+export function parseCells(kind: CellKind, lines: string[], scale: Scale): Parsed | null {
+  const steps = scale.cells;
+  const { grid } = scale;
   const cells: Record<string, string> = {};
   const put = (bar: number, s: number, value: string, string = 0) => {
-    if (s < steps) cells[cellKey(kind, steps, { step: (bar - 1) * steps + s, string })] = value;
+    if (s < steps) cells[cellKey(kind, scale, { step: (bar - 1) * steps + s, string })] = value;
   };
   if (kind === "tab") {
     if (lines.length !== 6 || !lines.every(isTabLine)) return null;
@@ -216,13 +280,13 @@ export function parseCells(kind: CellKind, lines: string[], steps: number): Pars
         values.forEach((v, string) => v && put(b + 1, cols.length === steps ? c : Math.floor((c * steps) / cols.length), v, string)),
       );
     }
-    return { cells, bars };
+    return { cells, bars, grid };
   }
   if (kind === "cajon" && lines.length === CAJON_ROWS.length) {
     if (!isCajonRows(lines)) return null;
     const perRow = lines.map(barsIn);
     perRow.forEach((all, row) => all.forEach((text, b) => [...text].forEach((ch, s) => /[oxOX]/.test(ch) && put(b + 1, s, HIT, row))));
-    return { cells, bars: Math.max(1, ...perRow.map((b) => b.length)) };
+    return { cells, bars: Math.max(1, ...perRow.map((b) => b.length)), grid };
   }
   if (lines.length !== 1 || !(kind === "cajon" ? isCajonLine(lines[0]) : isBlocksLine(lines[0]))) return null;
   const all = barsIn(lines[0]);
@@ -236,7 +300,7 @@ export function parseCells(kind: CellKind, lines: string[], steps: number): Pars
         for (let k = 1; k < m[0].length && m[0] !== "-"; k++) put(b + 1, m.index! + k, "-");
       }
   });
-  return { cells, bars: all.length };
+  return { cells, bars: all.length, grid };
 }
 
 export const isTabLine = (line: string) => /^\s*[eBGDAE]\s*\|[-\dxX|hpbr/\\~ ]*$/.test(line) && line.includes("-");
@@ -256,12 +320,12 @@ export function recognizeCells(lines: string[], i: number): { kind: CellKind; si
 }
 
 /** Замінити вміст доріжки розібраним (вставка). Викликати в транзакції. */
-export function writeParsed(slot: Y.Map<unknown>, { cells, bars }: Parsed) {
+export function writeParsed(slot: Y.Map<unknown>, { cells, bars, grid }: Parsed) {
   const map = slot.get("cells") as Y.Map<string>;
   map.clear();
   Object.entries(cells).forEach(([key, value]) => map.set(key, value));
   slot.set("bars", bars);
-  slot.set("grid", GRID);
+  slot.set("grid", grid);
 }
 
 /**
@@ -275,10 +339,10 @@ export function writeParsed(slot: Y.Map<unknown>, { cells, bars }: Parsed) {
  * У кахоні «o» чи «x» — удар на лінії курсора, B / T / g — удар на своїй лінії
  * в цьому кроці.
  */
-export function typeCell(kind: CellKind, slot: Y.Map<unknown>, steps: number, at: CellAt, ch: string, prev: string | null): CellAt {
+export function typeCell(kind: CellKind, slot: Y.Map<unknown>, scale: Scale, at: CellAt, ch: string, prev: string | null): CellAt {
   const cells = slot.get("cells") as Y.Map<string>;
-  const total = barsOf(slot) * steps;
-  const key = (a: CellAt) => cellKey(kind, steps, a);
+  const total = barsOf(slot) * scale.cells;
+  const key = (a: CellAt) => cellKey(kind, scale, a);
   const next = { ...at, step: Math.min(at.step + 1, total - 1) };
   const clearAndNext = () => (cells.delete(key(at)), next);
 
@@ -316,10 +380,14 @@ export function typeCell(kind: CellKind, slot: Y.Map<unknown>, steps: number, at
   return next;
 }
 
-/** Стерти крок (Backspace/Delete): порожній — стерти попередній і стати на нього. Повертає курсор. */
-export function eraseCell(kind: CellKind, slot: Y.Map<unknown>, steps: number, at: CellAt, backward: boolean): CellAt {
+/**
+ * Стерти крок (Backspace/Delete): порожній — стерти попередній і стати на
+ * нього. Лише точне на долі комірки — подію поруч видно, але правиться вона в
+ * масштабі, де вона точна. Повертає курсор.
+ */
+export function eraseCell(kind: CellKind, slot: Y.Map<unknown>, scale: Scale, at: CellAt, backward: boolean): CellAt {
   const cells = slot.get("cells") as Y.Map<string>;
-  const key = (a: CellAt) => cellKey(kind, steps, a);
+  const key = (a: CellAt) => cellKey(kind, scale, a);
   // Лад у кілька цифр Backspace скорочує на цифру.
   const cur = cells.get(key(at));
   if (kind === "tab" && backward && cur && /^\d{2,}$/.test(cur)) {

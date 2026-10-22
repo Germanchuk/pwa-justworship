@@ -171,7 +171,7 @@ export function installCommands(s: ViewState, history: History, cells: Cells): R
     const text = data.getData("text/plain");
     if (text && cells.paste(text)) return;
     if (text && guardRange()) return;
-    if (text) command((a, f) => insertPlainText(song, collapsed(a, f), text));
+    if (text) command((a, f) => insertPlainText(song, collapsed(a, f), text, s.display.zoom));
   };
 
   return {

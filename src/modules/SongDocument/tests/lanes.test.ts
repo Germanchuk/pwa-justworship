@@ -192,7 +192,7 @@ describe("клітинкові доріжки — атомні вузли вид
     A.view.insertText("x");
     expect(doc(net.B)).toEqual(["Am F / Ти святий", "C G / Господь", "F / Алилуя"]);
     const cells = cellsOf(linesOf(net.B)[1], tab)!;
-    expect(cells.toJSON()).toEqual({ "1.1/1": "3", "1.2/2": "x" });
+    expect(cells.toJSON()).toEqual({ "1.1/1": "3", "1.13/2": "x" });
     expect(A.cells.key({ key: "ArrowUp" })).toBe(true);
     expect(A.cells.key({ key: "ArrowUp" })).toBe(false); // верхня струна — далі Slate
     A.cells.key({ key: "Home" });
@@ -201,7 +201,7 @@ describe("клітинкові доріжки — атомні вузли вид
 
   it("копіювання: доріжка — уся, своїм текстом; вставка в доріжку — розбирає текст", () => {
     const { net, A, tab } = withTab();
-    change(net.A, () => cellsOf(linesOf(net.A)[1], tab)!.set("1.4/2", "1"));
+    change(net.A, () => cellsOf(linesOf(net.A)[1], tab)!.set("1.37/2", "1"));
     Transforms.select(A.view, { anchor: { path: [0, 2, 0], offset: 3 }, focus: { path: [1, 1, 0], offset: 1 } });
     const E = "-".repeat(16); // порожній такт: 16 кроків по прочерку
     expect(A.copyText()).toBe(

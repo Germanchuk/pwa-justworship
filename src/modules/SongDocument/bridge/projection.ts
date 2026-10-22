@@ -15,6 +15,8 @@ export type LaneDisplay = {
   readonly chords: boolean;
   /** id доданих доріжок, яких людина не бачить. */
   readonly hidden?: readonly string[];
+  /** Масштаб показу ударів — комірок у цілій ноті (`ZOOMS`, особисте, як капо). */
+  readonly zoom?: number;
 };
 
 /** Доріжка видимого рядка: `words`, `chords` або id доданої. */

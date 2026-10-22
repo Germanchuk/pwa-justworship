@@ -1,8 +1,8 @@
 /** Вставка простого тексту з буфера — зі свого редактора чи ззовні (сайт з акордами, табами). */
 import * as Y from "yjs";
 import { isChordsLine } from "#utils/keyUtils";
-import { parseCells, Parsed, recognizeCells, stepsPerBar, writeParsed } from "../cells";
-import { songLanes } from "../lanes";
+import { DEFAULT_ZOOM, parseCells, Parsed, recognizeCells, Scale, scaleOf, writeParsed } from "../cells";
+import { CellKind, songLanes } from "../lanes";
 import { readMeta } from "../meta";
 import { chordsOf, lineAt } from "../read";
 import type { Pos, Song } from "../song";
@@ -24,7 +24,11 @@ const empty = (): Pasted => ({ chords: "", words: "", cells: {} });
  * прямокутники, для яких у пісні немає доріжки, лишаються словами. Порожній
  * рядок — роздільник: окремий порожній рядок пісні.
  */
-export function groupLines(lines: string[], order: readonly { id: string; kind: string }[] = [], steps = 8): Pasted[] {
+export function groupLines(
+  lines: string[],
+  order: readonly { id: string; kind: string }[] = [],
+  scale: (kind: CellKind) => Scale = (kind) => scaleOf(kind, "4/4"),
+): Pasted[] {
   // Без списку доріжок — лише акорди над словами.
   const lanes = order.length ? order : [{ id: "chords", kind: "chords" }, { id: "words", kind: "words" }];
   const out: Pasted[] = [];
@@ -56,7 +60,7 @@ export function groupLines(lines: string[], order: readonly { id: string; kind: 
       continue;
     }
     const found = recognizeCells(lines, i);
-    const parsed = found && lanes.some((l) => l.kind === found.kind) && parseCells(found.kind, lines.slice(i, i + found.size), steps);
+    const parsed = found && lanes.some((l) => l.kind === found.kind) && parseCells(found.kind, lines.slice(i, i + found.size), scale(found.kind));
     if (found && parsed) {
       place(found.kind, (row, id) => (row.cells[id] = parsed));
       i += found.size - 1;
@@ -76,15 +80,16 @@ export function groupLines(lines: string[], order: readonly { id: string; kind: 
 /**
  * У словах рядки стають рядками (як Enter), акорди — в акорди свого рядка
  * (дописуються в кінець, якщо там уже щось є), клітинкові доріжки — у свої
- * доріжки рядка (замінюють вміст). В акордах усе — одним рядком через пробіл.
+ * доріжки рядка (замінюють вміст; символ — комірка масштабу `zoom` того, хто
+ * вставляє). В акордах усе — одним рядком через пробіл.
  */
-export function insertPlainText(song: Song, at: Pos, pasted: string): Pos {
+export function insertPlainText(song: Song, at: Pos, pasted: string, zoom: number = DEFAULT_ZOOM): Pos {
   const parts = pasted.split(/\r?\n/);
   // У будь-яку доріжку, крім слів (акорди, вигуки), — одним рядком через пробіл.
   if (at.lane !== "words") return insertText(song, at, parts.join(" ")) ?? at;
   const order = songLanes(song.doc).map(({ id, kind }) => ({ id, kind }));
-  const steps = stepsPerBar(readMeta(song.doc).timeSignature);
-  return groupLines(parts, order, steps).reduce<Pos>((pos, { chords, words, cells }, i) => {
+  const { timeSignature } = readMeta(song.doc);
+  return groupLines(parts, order, (kind) => scaleOf(kind, timeSignature, zoom)).reduce<Pos>((pos, { chords, words, cells }, i) => {
     const here = i > 0 ? splitLine(song, pos) ?? pos : pos;
     const line = lineAt(song, here.line).line;
     if (chords) {
