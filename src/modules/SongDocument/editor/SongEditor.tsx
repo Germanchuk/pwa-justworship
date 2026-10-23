@@ -17,11 +17,13 @@ import DronePlayer from "#modules/SingleSong/services/DronePlayer/DronePlayer";
 import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/model";
 import {
   ensureSlots,
+  isTimeRange,
   linesOf,
   missingSlots,
   readCapo,
   readHiddenLanes,
   readMeta,
+  readZoom,
   resolveNotes,
   Song,
   updateNote,
@@ -67,7 +69,8 @@ function LoadedEditor({ song }: { song: Song }) {
   useDocVersion(song.doc); // шапка, примітки, особисте — перечитуються на кожну зміну
 
   const hidden = me ? readHiddenLanes(song.doc, me) : [];
-  const display: LaneDisplay = { words: !hidden.includes("words"), chords: !hidden.includes("chords"), hidden };
+  const zoom = me ? readZoom(song.doc, me) : undefined;
+  const display: LaneDisplay = { words: !hidden.includes("words"), chords: !hidden.includes("chords"), hidden, zoom };
   const lanes = useMemo(
     () => createLaneView(song, display, { base: () => withReact(createEditor()) }),
     // Видиме дерево створюється раз на документ; вибір доріжок міняє `setDisplay`.
@@ -82,12 +85,12 @@ function LoadedEditor({ song }: { song: Song }) {
   useLayoutEffect(() => {
     lanes.setDisplay(display);
     rerender((n) => n + 1);
-  }, [lanes, hidden.join()]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lanes, hidden.join(), zoom]); // eslint-disable-line react-hooks/exhaustive-deps
   const view = lanes.view;
 
-  // Рядок, що народився одночасно з новою доріжкою, — без її слота: дописати (ADR-0008).
+  // Рядок, що народився одночасно з новою доріжкою, — без її слота: дописати (ADR-0008);
+  // клітинки на старій сітці — перерахувати. У будь-якому режимі: інакше читання показало б старі як є.
   useEffect(() => {
-    if (!canEdit) return;
     const heal = () => {
       const lines = linesOf(song);
       if (missingSlots(song, lines).length) song.doc.transact(() => ensureSlots(song, lines), "heal");
@@ -104,7 +107,7 @@ function LoadedEditor({ song }: { song: Song }) {
     heal();
     song.doc.on("afterTransaction", onTransaction);
     return () => song.doc.off("afterTransaction", onTransaction);
-  }, [song, canEdit]);
+  }, [song]);
 
   // Курсор-крок у клітинковій доріжці живе поза Slate — перемальовуватись на його рух.
   const [, cellMoved] = useState(0);
@@ -155,8 +158,9 @@ function LoadedEditor({ song }: { song: Song }) {
   }, [view, canEdit]);
 
   // Позначене приміткою й «/» структурної примітки — декорації видимого дерева.
+  // Позначки на кроках клітинкових доріжок малює сама доріжка (`CellLane`).
   const ranges = notes.flatMap((n) => {
-    if (n.status !== "visible" || !n.at) return [];
+    if (n.status !== "visible" || !n.at || isTimeRange(n.note)) return [];
     const anchor = lanes.toView({ line: n.at.line, lane: n.lane, offset: n.at.from });
     const focus = lanes.toView({ line: n.at.line, lane: n.lane, offset: n.at.to });
     const mark = n.foreign ? { [FOREIGN_KEY + n.note.id]: true } : { [NOTE_KEY + n.note.id]: n.note.color };

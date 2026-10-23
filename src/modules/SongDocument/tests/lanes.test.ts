@@ -17,6 +17,7 @@ import {
   Song,
   ensureSlots,
   insertPlainText,
+  chordsOf,
   layout,
   lineKind,
   linesOf,
@@ -83,7 +84,7 @@ describe("список доріжок", () => {
     expect(linesOf(net.B).every((line) => cellsOf(line, id) !== undefined)).toBe(true);
   });
 
-  it("перетягуються лише додані — порядок спільний; слова завжди найнижчі, акорди — другі знизу", () => {
+  it("перетягується будь-яка доріжка, і слова з акордами — порядок спільний", () => {
     const net = makePair(SEED);
     let tab = "";
     let cajon = "";
@@ -91,12 +92,25 @@ describe("список доріжок", () => {
       tab = addLane(net.A, "tab", linesOf(net.A));
       cajon = addLane(net.A, "cajon", linesOf(net.A));
     });
+    expect(ids(songLanes(net.B.doc))).toEqual([tab, cajon, "chords", "words"]); // без запису — слова й акорди внизу
     change(net.A, () => moveLane(net.A.doc, cajon, 0));
     expect(ids(songLanes(net.B.doc))).toEqual([cajon, tab, "chords", "words"]);
-    change(net.B, () => moveLane(net.B.doc, cajon, 5)); // далі за кінець доданих — найнижча з доданих
-    expect(ids(songLanes(net.A.doc))).toEqual([tab, cajon, "chords", "words"]);
-    expect(() => moveLane(net.A.doc, "words", 0)).toThrow();
-    expect(() => moveLane(net.A.doc, "chords", 0)).toThrow();
+    change(net.B, () => moveLane(net.B.doc, "words", 0));
+    expect(ids(songLanes(net.A.doc))).toEqual(["words", cajon, tab, "chords"]);
+    change(net.A, () => moveLane(net.A.doc, "chords", 1));
+    expect(ids(songLanes(net.B.doc))).toEqual(["words", "chords", cajon, tab]);
+    change(net.B, () => moveLane(net.B.doc, cajon, 9)); // далі за кінець — найнижча
+    expect(ids(songLanes(net.A.doc))).toEqual(["words", "chords", tab, cajon]);
+  });
+
+  it("нова доріжка стає одразу над акордами, де б вони не стояли", () => {
+    const net = makePair(SEED);
+    let tab = "";
+    change(net.A, () => (tab = addLane(net.A, "tab", linesOf(net.A))));
+    change(net.A, () => moveLane(net.A.doc, "words", 0));
+    let cajon = "";
+    change(net.A, () => (cajon = addLane(net.A, "cajon", linesOf(net.A))));
+    expect(ids(songLanes(net.B.doc))).toEqual(["words", tab, cajon, "chords"]);
   });
 
   it("прибрана доріжка зникає зі списку, вміст лишається; її можна повернути; слова й акорди — ні", () => {
@@ -178,19 +192,48 @@ describe("клітинкові доріжки — атомні вузли вид
     A.view.insertText("x");
     expect(doc(net.B)).toEqual(["Am F / Ти святий", "C G / Господь", "F / Алилуя"]);
     const cells = cellsOf(linesOf(net.B)[1], tab)!;
-    expect(cells.toJSON()).toEqual({ "1.1/1": "3", "1.2/2": "x" });
+    expect(cells.toJSON()).toEqual({ "1.1/1": "3", "1.25/2": "x" });
     expect(A.cells.key({ key: "ArrowUp" })).toBe(true);
     expect(A.cells.key({ key: "ArrowUp" })).toBe(false); // верхня струна — далі Slate
     A.cells.key({ key: "Home" });
     expect(A.cells.key({ key: "ArrowLeft" })).toBe(false); // перший крок — далі Slate
   });
 
+  it("кроки виділяються, як символи: Shift+стрілки від кроку, де почали; Backspace стирає виділене на всіх струнах", () => {
+    const { net, A, tab } = withTab();
+    change(net.A, () => {
+      const cells = cellsOf(linesOf(net.A)[1], tab)!;
+      ["1.1/1", "1.25/3", "1.49/6", "1.73/2"].forEach((key) => cells.set(key, "5"));
+    });
+    at(A, 1, 0, 0);
+    A.cells.key({ key: "ArrowRight" });
+    expect(A.cells.key({ key: "ArrowRight", shiftKey: true })).toBe(true);
+    A.cells.key({ key: "ArrowRight", shiftKey: true });
+    // кроки 1–3 (з 0): тіки 24…96
+    expect(A.cells.selection()).toMatchObject({ lane: tab, from: 24, to: 96 });
+    A.cells.key({ key: "ArrowLeft", shiftKey: true });
+    expect(A.cells.selection()).toMatchObject({ from: 24, to: 72 });
+    A.cells.key({ key: "Backspace" });
+    expect(cellsOf(linesOf(net.B)[1], tab)!.toJSON()).toEqual({ "1.1/1": "5", "1.73/2": "5" });
+    expect(A.cells.selection()).toBe(null);
+  });
+
+  it("будь-яка інша клавіша знімає виділення кроків", () => {
+    const { A, tab } = withTab();
+    at(A, 1, 0, 0);
+    A.cells.key({ key: "ArrowRight", shiftKey: true });
+    expect(A.cells.selection()).toMatchObject({ lane: tab, from: 0, to: 48 });
+    A.cells.key({ key: "ArrowRight" });
+    expect(A.cells.selection()).toBe(null);
+  });
+
   it("копіювання: доріжка — уся, своїм текстом; вставка в доріжку — розбирає текст", () => {
     const { net, A, tab } = withTab();
-    change(net.A, () => cellsOf(linesOf(net.A)[1], tab)!.set("1.4/2", "1"));
+    change(net.A, () => cellsOf(linesOf(net.A)[1], tab)!.set("1.73/2", "1"));
     Transforms.select(A.view, { anchor: { path: [0, 2, 0], offset: 3 }, focus: { path: [1, 1, 0], offset: 1 } });
+    const E = "-".repeat(16); // порожній такт: 16 кроків по прочерку
     expect(A.copyText()).toBe(
-      ["святий", "e|--------|", "B|---1----|", "G|--------|", "D|--------|", "A|--------|", "E|--------|", "C"].join("\n"),
+      ["святий", `e|${E}|`, `B|---1${"-".repeat(12)}|`, `G|${E}|`, `D|${E}|`, `A|${E}|`, `E|${E}|`, "C"].join("\n"),
     );
     at(A, 2, 0, 0);
     expect(A.cells.paste(["e|--------|", "B|--------|", "G|--------|", "D|--------|", "A|--------|", "E|3-------|"].join("\n"))).toBe(true);
@@ -226,6 +269,18 @@ describe("клітинкові доріжки — атомні вузли вид
     expect(order()).toEqual([cajon, tab, "chords", "words"]);
     A.undoManager.undo();
     expect(order()).toEqual([tab, cajon, "chords", "words"]);
+  });
+
+  it("слова над акордами — рядки перебудовано, друк і вставка йдуть за новим порядком", () => {
+    const { net, A, B, tab } = withTab();
+    A.change(() => moveLane(net.A.doc, "words", 0));
+    expect(rowsOf(B, tab)[0]).toBe("w:Ти святий | t | c:Am F");
+    at(A, 0, 0, 9);
+    Editor.insertText(A.view, "!");
+    expect(layout(net.B)[0].words).toBe("Ти святий!");
+    // Слова вище за акорди: акорди під словами — той самий рядок пісні.
+    change(net.A, () => insertPlainText(net.A, { line: 2, lane: "words", offset: 7 }, "\nДуше моя\nD  G"));
+    expect(layout(net.B).slice(3).map((l) => [l.words, chordsOf(l.line).toString()])).toEqual([["Душе моя", "D  G"]]);
   });
 });
 

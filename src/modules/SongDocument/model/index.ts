@@ -12,7 +12,7 @@ export * from "./rules/enter";
 export * from "./rules/merge";
 export * from "./rules/deleteRange";
 export * from "./rules/paste";
-export { addNote, ALL, canSee, moveNoteTo, noteRange, notesOf, othersSeeing, removeNote, STRIKE, updateNote } from "./notes/marks";
+export { addNote, ALL, canSee, isTimeRange, moveNoteTo, noteRange, notesOf, othersSeeing, removeNote, STRIKE, updateNote } from "./notes/marks";
 export type { Audience, NoteRange, NoteRecord, TextAt } from "./notes/marks";
 export { noteCounts, resolveNotes } from "./notes/show";
 export type { NoteView } from "./notes/show";

@@ -51,6 +51,12 @@ export function textSlotsOf(line: Line): string[] {
   line.forEach((_, id) => laneText(line, id) && out.push(id));
   return out;
 }
+/** id клітинкових доріжок рядка (слоти з клітинками). */
+export function cellSlotsOf(line: Line): string[] {
+  const out: string[] = [];
+  line.forEach((slot, id) => slot instanceof Y.Map && slot.has("cells") && out.push(id));
+  return out;
+}
 export const laneOf = (l: LineAt, lane: LaneType) => (lane === "words" ? l.words : laneText(l.line, lane)?.toString() ?? "");
 export const laneString = (song: Song, ln: number, lane: LaneType) => laneOf(lineAt(song, ln), lane);
 

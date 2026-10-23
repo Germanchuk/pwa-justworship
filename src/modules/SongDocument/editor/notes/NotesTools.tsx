@@ -5,7 +5,8 @@
  *  - виділив текст в ОДНІЙ доріжці одного рядка — палітра: тап по кольору
  *    (чи закресленню) ставить позначку й одразу обирає її (`NOTE-7`).
  *    Виділення через кілька рядків чи доріжок позначкою не стає (`NOTE-46`) —
- *    палітри тоді немає;
+ *    палітри тоді немає. Клітинкова доріжка — псевдо-текст: виділені в ній
+ *    кроки (`bridge/cells.ts`) — так само одна доріжка одного рядка;
  *  - тап по позначеному тексту обирає позначки під пальцем — їхнє меню:
  *    колір, область, хто бачить, додати чи прибрати текст, видалити.
  *
@@ -41,7 +42,7 @@ import {
 } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/colors";
 import { setPendingFocus } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/pendingFocus";
 import { useBandMembers } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/useBandMembers";
-import { addNote, ALL, moveNoteTo, othersSeeing, removeNote, updateNote, type NoteView, type Pos, type Song } from "../../model";
+import { addNote, ALL, isTimeRange, layout, moveNoteTo, othersSeeing, removeNote, updateNote, type NoteView, type Pos, type Song } from "../../model";
 import type { LaneView } from "../../bridge/laneView";
 
 /** Позначає інтерфейс приміток: тап по ньому не скидає ні виділення, ні обрану позначку. */
@@ -54,14 +55,18 @@ const keep = (e: React.MouseEvent) => e.preventDefault(); // тап по кно�
 /**
  * Вузол — текст пісні, а не острівець усередині редактора (картка примітки,
  * смужка динаміки). У читанні сам корінь `contenteditable="false"`, тож
- * острівець — найближчий такий предок, що не корінь.
+ * острівець — найближчий такий предок, що не корінь. Кроки клітинкової
+ * доріжки — теж текст пісні (псевдо-текст), хоч і острівець для Slate.
  */
 function isSongText(root: HTMLElement, node: Node | null) {
   if (!node || !root.contains(node)) return false;
   const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
   const island = el?.closest('[contenteditable="false"]');
-  return !island || island === root;
+  return !island || island === root || island.hasAttribute(CELL_STEPS);
 }
+/** Кроки клітинкової доріжки (`CellLane`). */
+const CELL_STEPS = "data-cell-steps";
+const inSteps = (target: EventTarget | null) => !!(target as Element | null)?.closest?.(`[${CELL_STEPS}]`);
 
 /** Виділення браузера в пісні й позначки, обрані тапом. */
 function useNotesSelection(lanes: LaneView) {
@@ -77,6 +82,7 @@ function useNotesSelection(lanes: LaneView) {
       if (!isSongText(root, sel.anchorNode) || !isSongText(root, sel.focusNode)) return;
       const next = ReactEditor.toSlateRange(view, sel, { exactMatch: false, suppressThrow: true });
       if (!next || Range.isCollapsed(next)) return;
+      lanes.cells.select(null); // виділений текст — кроки вже не виділені
       setRange((prev) => (prev && Range.equals(prev, next) ? prev : next));
       setPicked([]);
     };
@@ -85,6 +91,7 @@ function useNotesSelection(lanes: LaneView) {
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed) return; // протягування — уже підхопив selectionchange
       setRange(null);
+      if (!inSteps(e.target)) lanes.cells.select(null); // кроки виділяє й знімає сама доріжка
       const ids = (e.target as Element).closest?.("[data-notes]")?.getAttribute("data-notes");
       setPicked(ids ? ids.split(" ") : []);
     };
@@ -93,6 +100,8 @@ function useNotesSelection(lanes: LaneView) {
       if (!isSongText(root, e.target as Node)) return;
       setRange(null);
       setPicked([]);
+      // Курсор у клітинковій доріжці — її клавіші самі вирішують долю виділених кроків (Backspace їх стирає).
+      if (!lanes.cells.cursor()) lanes.cells.select(null);
     };
     const onClickOutside = (e: MouseEvent) => {
       // Шлях, а не `closest`: кнопка палітри, що зникла від свого ж тапу, вже відірвана від сторінки.
@@ -103,7 +112,10 @@ function useNotesSelection(lanes: LaneView) {
       if (sel && !sel.isCollapsed) return; // протягування мишею закінчилось поза піснею
       setRange(null);
       setPicked([]);
+      lanes.cells.select(null);
     };
+    // Виділили кроки — виділений текст уже не той.
+    const offCells = lanes.cells.listen(() => lanes.cells.selection() && setRange(null));
     document.addEventListener("selectionchange", onSelectionChange);
     document.addEventListener("click", onClickOutside);
     root.addEventListener("click", onClick);
@@ -113,8 +125,9 @@ function useNotesSelection(lanes: LaneView) {
       document.removeEventListener("click", onClickOutside);
       root.removeEventListener("click", onClick);
       root.removeEventListener("keydown", onKeyDown);
+      offCells();
     };
-  }, [view]);
+  }, [view, lanes]);
 
   /** Шматки виділення в моделі: доріжка рядка — один шматок. */
   const pieces = (): { anchor: Pos; focus: Pos }[] => {
@@ -128,6 +141,7 @@ function useNotesSelection(lanes: LaneView) {
   const pick = (ids: string[]) => {
     window.getSelection()?.removeAllRanges();
     setRange(null);
+    lanes.cells.select(null);
     setPicked(ids);
   };
   return { range, picked, pieces, pick };
@@ -142,7 +156,9 @@ const span = (p: { anchor: Pos; focus: Pos }) => {
 const pickedCss = (views: NoteView[]) =>
   views
     .map(({ note }) => {
-      const sel = `[data-notes~="${CSS.escape(note.id)}"]`;
+      // Крок клітинкової доріжки підсвічує не сам себе (його фон — риска й смуга долі), а шар позначки.
+      const id = CSS.escape(note.id);
+      const sel = `[data-notes~="${id}"]:not([data-step]), [data-note-fill~="${id}"]`;
       return `${sel} { background: ${selectedBg(note.color)} !important; box-shadow: inset 0 -2px 0 ${cardBorder(note.color)}; }`;
     })
     .join("\n");
@@ -164,13 +180,17 @@ export function NotesTools({ song, lanes, me, viewers, notes, addDraft, dropDraf
   const [resizing, setResizing] = useState<string | null>(null);
 
   const one = !resizing && range ? pieces() : [];
-  const palette = one.length === 1;
+  const steps = lanes.cells.selection();
+  const palette = !resizing && (one.length === 1 || !!steps);
   const pickedViews = resizing ? [] : notes.filter((n) => picked.includes(n.note.id) && n.status === "visible" && !n.foreign);
   const visible = !!resizing || palette || pickedViews.length > 0;
 
+  /** Номер рядка моделі, де виділені кроки (−1 — рядок зник). */
+  const stepsLine = (s: NonNullable<typeof steps>) => layout(song).findIndex((l) => l.line === s.line);
   const apply = (color: string) => {
     if (!palette) return;
-    const { line, lane, from, to } = span(one[0]);
+    const { line, lane, from, to } = steps ? { ...steps, line: stepsLine(steps) } : span(one[0]);
+    if (line < 0) return;
     const id = newId();
     // Адресати — ті, чиїми очима дивлюсь, одним записом (`NOTE-21`); автор — я.
     song.doc.transact(() => addNote(song, line, lane, from, to, { id, author: me, visibleFor: [...viewers], color, body: "" }));
@@ -178,6 +198,14 @@ export function NotesTools({ song, lanes, me, viewers, notes, addDraft, dropDraf
   };
 
   const startResize = (n: NoteView) => {
+    // Позначка на кроках — нова область теж кроками: виділення стає на її кроки.
+    if (isTimeRange(n.note)) {
+      if (!n.at) return;
+      window.getSelection()?.removeAllRanges();
+      lanes.cells.select({ line: layout(song)[n.at.line].line, lane: n.lane, from: n.at.from, to: n.at.to });
+      setResizing(n.note.id);
+      return;
+    }
     const sel = window.getSelection();
     const anchor = n.at && lanes.toView({ line: n.at.line, lane: n.lane, offset: n.at.from });
     const focus = n.at && lanes.toView({ line: n.at.line, lane: n.lane, offset: n.at.to });
@@ -195,7 +223,9 @@ export function NotesTools({ song, lanes, me, viewers, notes, addDraft, dropDraf
   const finishResize = () => {
     const n = notes.find((v) => v.note.id === resizing);
     const now = range ? pieces() : [];
-    if (n && now.length === 1) {
+    if (n && steps && stepsLine(steps) >= 0) {
+      song.doc.transact(() => moveNoteTo(song, n.holder, n.lane, n.note.id, stepsLine(steps), steps.lane, steps.from, steps.to));
+    } else if (n && now.length === 1) {
       const { line, lane, from, to } = span(now[0]);
       song.doc.transact(() => moveNoteTo(song, n.holder, n.lane, n.note.id, line, lane, from, to));
     }

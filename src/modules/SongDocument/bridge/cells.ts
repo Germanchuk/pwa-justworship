@@ -1,14 +1,23 @@
 /**
  * Курсор у клітинковій доріжці (ADR-0008). Для Slate доріжка — атомний вузол;
  * усередині нього в кожного свій курсор-крок: стрілки ходять по кроках (у табах
- * ↑↓ — по струнах), символ пишеться за синтаксисом виду, Backspace стирає крок.
+ * і кахоні ↑↓ — по лініях), символ пишеться за синтаксисом виду, Backspace стирає крок.
  * Дійшли до краю — стрілку обробляє Slate: курсор виходить у сусідню доріжку.
+ *
+ * Доріжка — псевдо-текст, і кроки в ній виділяються, як символи: протяг
+ * мишею, довгий натиск і протяг пальцем, Shift+стрілки. Виділене — проміжок
+ * часу рядка (тіки, `cellSpan`), у будь-якому режимі: на ньому ставлять
+ * примітку, а в правці — стирають (Backspace/Delete).
  */
 import * as Y from "yjs";
 import { Editor, Path, Range, Transforms } from "slate";
 import {
   allLanes,
-  barsOf,
+  barSizes,
+  cellSpan,
+  endOf,
+  eraseSpan,
+  lineLength,
   CellAt,
   CellKind,
   eraseCell,
@@ -17,7 +26,8 @@ import {
   parseCells,
   readMeta,
   renderCells,
-  stepsPerBar,
+  rowsOf,
+  scaleOf,
   typeCell,
   writeParsed,
 } from "../model";
@@ -26,6 +36,8 @@ import { isCellsNode, laneOfNode } from "./projection";
 import { COMMAND, TYPING, ViewState } from "./state";
 
 export type CellCursor = { line: Line; lane: string; kind: CellKind; at: CellAt; prev: string | null };
+/** Виділені кроки доріжки `lane` рядка `line`: `from…to` — тіки від початку рядка (кінець не входить). */
+export type CellSelection = { line: Line; lane: string; from: number; to: number };
 
 export type Cells = {
   /** Курсор цього учасника в клітинковій доріжці; `null` — він не в ній. */
@@ -33,17 +45,30 @@ export type Cells = {
   /** Поставити курсор на крок доріжки-вузла `path` (клік по кроку). */
   place: (path: Path, at: CellAt) => void;
   /** Клавіша, поки курсор у доріжці: `true` — оброблено (не пускати далі в Slate). */
-  key: (e: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean }) => boolean;
+  key: (e: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; shiftKey?: boolean }) => boolean;
   /** Друк тексту в доріжку (з клавіатури телефона — через Slate); `false` — курсор не в доріжці. */
   type: (text: string) => boolean;
   /** Вставка тексту доріжки з буфера; `false` — курсор не в доріжці. */
   paste: (text: string) => boolean;
-  /** Підписатися на рух курсора; повертає відписку. */
+  /** Виділені кроки (в будь-якому режимі); `null` — нічого не виділено. */
+  selection: () => CellSelection | null;
+  /**
+   * Виділити кроки (`null` — зняти). `anchor` — комірка, від якої тягнуть
+   * (Shift+стрілки ведуть від неї); у правці курсор стає на `focus`.
+   */
+  select: (sel: CellSelection | null, ends?: { anchor: number; focus: number; string: number }) => void;
+  /** Підписатися на рух курсора й виділення; повертає відписку. */
   listen: (fn: () => void) => () => void;
 };
 
 const kindOf = (s: ViewState, id: string) => allLanes(s.song.doc).find((l) => l.id === id)?.kind;
-const stepsOf = (s: ViewState) => stepsPerBar(readMeta(s.song.doc).timeSignature);
+/** Масштаб доріжки виду `kind` для цієї людини. */
+export const scaleIn = (s: ViewState, kind: CellKind) => scaleOf(kind, readMeta(s.song.doc).timeSignature, s.display.zoom);
+/** Такти рядка в комірках масштабу виду `kind` (довжина рядка спільна для всіх його доріжок). */
+const sizesIn = (s: ViewState, line: Line, kind: CellKind) => {
+  const { timeSignature } = readMeta(s.song.doc);
+  return barSizes(lineLength(line, timeSignature), timeSignature, scaleIn(s, kind));
+};
 const slotOf = (c: CellCursor) => c.line.get(c.lane) as Y.Map<unknown> | undefined;
 
 /** Доріжка текстом (для буфера) — так само, як її показує редактор. */
@@ -52,12 +77,15 @@ export function cellText(s: ViewState, line: Line, id: string): string[] {
   const slot = line.get(id) as Y.Map<unknown> | undefined;
   if (!kind || isTextKind(kind) || !slot) return [];
   const cells = slot.get("cells") as Y.Map<string>;
-  return renderCells(kind, (k) => cells.get(k), barsOf(slot), stepsOf(s));
+  return renderCells(kind, cells.entries(), sizesIn(s, line, kind), scaleIn(s, kind));
 }
 
 export function installCells(s: ViewState, history: History): Cells {
   const { view } = s;
   let cursor: CellCursor | null = null;
+  let selected: CellSelection | null = null;
+  /** Комірка, від якої тягнуть виділення (у масштабі людини). */
+  let anchor: number | null = null;
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((fn) => fn());
 
@@ -106,11 +134,24 @@ export function installCells(s: ViewState, history: History): Cells {
     notify();
     return true;
   };
+  const select = (sel: CellSelection | null, from: number | null = null) => {
+    selected = sel;
+    anchor = sel ? from : null;
+    notify();
+  };
+  /** Кроки `a…b` (комірки масштабу, у будь-якому порядку) доріжки під курсором. */
+  const span = (c: CellCursor, a: number, b: number): CellSelection => {
+    const scale = scaleIn(s, c.kind);
+    return { line: c.line, lane: c.lane, from: cellSpan(scale, Math.min(a, b))[0], to: cellSpan(scale, Math.max(a, b))[1] };
+  };
+  /** Виділене — у доріжці під курсором. */
+  const selectedHere = (c: CellCursor) => (selected && selected.line === c.line && selected.lane === c.lane ? selected : null);
   const type = (text: string) => {
     if (!current()) return false;
+    if (selected) select(null);
     edit(TYPING, (c, slot) => {
       for (const ch of text) {
-        c.at = typeCell(c.kind, slot, stepsOf(s), c.at, ch, c.prev);
+        c.at = typeCell(c.kind, slot, scaleIn(s, c.kind), c.at, ch, c.prev, endOf(sizesIn(s, c.line, c.kind), scaleIn(s, c.kind)));
         c.prev = ch;
       }
     });
@@ -127,18 +168,37 @@ export function installCells(s: ViewState, history: History): Cells {
     key: (e) => {
       const c = current();
       if (!c || e.metaKey || e.ctrlKey || e.altKey) return false;
-      const slot = slotOf(c);
-      const total = barsOf(slot) * stepsOf(s);
+      const total = endOf(sizesIn(s, c.line, c.kind), scaleIn(s, c.kind));
       const { step, string } = c.at;
+      const sel = selectedHere(c);
+      // Shift+←/→ — виділення від комірки, де почали, до курсора.
+      if (e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        const to = Math.max(0, Math.min(total - 1, step + (e.key === "ArrowLeft" ? -1 : 1)));
+        const from = sel && anchor !== null ? anchor : step;
+        move({ step: to, string });
+        select(span(c, from, to), from);
+        return true;
+      }
+      if (e.key === "Escape") {
+        if (!selected) return false;
+        select(null);
+        return true;
+      }
+      if (sel && (e.key === "Backspace" || e.key === "Delete")) {
+        edit(COMMAND, (cur, slot) => eraseSpan(cur.kind, slot, sel.from, sel.to, readMeta(s.song.doc).timeSignature));
+        select(null);
+        return true;
+      }
+      if (selected) select(null); // будь-яка інша клавіша — виділення вже не те
       switch (e.key) {
         case "ArrowLeft":
           return step > 0 && move({ step: step - 1, string });
         case "ArrowRight":
           return step < total - 1 && move({ step: step + 1, string });
         case "ArrowUp":
-          return c.kind === "tab" && string > 0 && move({ step, string: string - 1 });
+          return string > 0 && move({ step, string: string - 1 });
         case "ArrowDown":
-          return c.kind === "tab" && string < 5 && move({ step, string: string + 1 });
+          return string < rowsOf(c.kind).length - 1 && move({ step, string: string + 1 });
         case "Home":
           return move({ step: 0, string });
         case "End":
@@ -146,7 +206,7 @@ export function installCells(s: ViewState, history: History): Cells {
         case "Backspace":
         case "Delete":
           edit(COMMAND, (cur, sl) => {
-            cur.at = eraseCell(cur.kind, sl, stepsOf(s), cur.at, e.key === "Backspace");
+            cur.at = eraseCell(cur.kind, sl, scaleIn(s, cur.kind), cur.at, e.key === "Backspace");
             cur.prev = null;
           });
           return true;
@@ -157,11 +217,17 @@ export function installCells(s: ViewState, history: History): Cells {
       }
     },
     type,
+    selection: () => selected,
+    select: (sel, ends) => {
+      select(sel, ends?.anchor ?? null);
+      // У правці курсор стає туди, куди дотягли (як у тексті).
+      if (sel && ends && cursor && cursor.line === sel.line && cursor.lane === sel.lane) move({ step: ends.focus, string: ends.string });
+    },
     paste: (text) => {
       const c = current();
       if (!c) return false;
-      const parsed = parseCells(c.kind, text.split(/\r?\n/).filter((l) => l.trim()), stepsOf(s));
-      if (parsed) edit(COMMAND, (_, slot) => writeParsed(slot, parsed));
+      const parsed = parseCells(c.kind, text.split(/\r?\n/).filter((l) => l.trim()), scaleIn(s, c.kind));
+      if (parsed) edit(COMMAND, (cur, slot) => writeParsed(cur.line, slot, parsed, readMeta(s.song.doc).timeSignature));
       return true;
     },
     listen: (fn) => {

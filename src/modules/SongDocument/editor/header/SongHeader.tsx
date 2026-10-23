@@ -13,7 +13,20 @@ import { keyDisplayName, keyForCapo } from "#modules/SingleSong/components/Slate
 import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/model";
 import "#modules/SingleSong/components/SlateLyricsPlayground/elements/SongMetaRow/SongMetaRow.css";
 import "#modules/SingleSong/components/SlateLyricsPlayground/display/DisplayToggles.css";
-import { readCapo, readHiddenLanes, readMeta, Song, songLanes, writeCapo, writeHiddenLanes, writeMeta } from "../../model";
+import {
+  readCapo,
+  readHiddenLanes,
+  readMeta,
+  readZoom,
+  Song,
+  songLanes,
+  writeCapo,
+  writeHiddenLanes,
+  writeMeta,
+  writeZoom,
+  ZOOM_NAMES,
+  ZOOMS,
+} from "../../model";
 import { LanesPanel } from "./LanesPanel";
 import { transposeSong } from "./transposeSong";
 
@@ -113,6 +126,25 @@ export function SongHeader({ song, me, canEdit, capoApplies, change }: Props) {
                 aria-label="Капо"
               />
             </span>
+          </div>
+        )}
+        {me && songLanes(doc).some((l) => l.kind === "tab" || l.kind === "cajon") && (
+          // Масштаб показу табів і кахона — особистий, як капо; запис від нього не залежить.
+          <div className="song-meta-line">
+            <label className="song-meta-badge" title="Сітка показу табів і кахона — лише для вас">
+              <span className="song-meta-badge__label">Сітка:</span>
+              <select
+                className="bg-transparent font-semibold outline-none cursor-pointer"
+                value={readZoom(doc, me)}
+                onChange={(e) => writeZoom(doc, me, Number(e.target.value))}
+              >
+                {ZOOMS.map((z) => (
+                  <option key={z} value={z}>
+                    {ZOOM_NAMES[z]}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         )}
         {me && (

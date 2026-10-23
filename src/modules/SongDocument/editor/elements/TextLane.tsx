@@ -5,7 +5,9 @@ import { transposeChordTextForCapo } from "#modules/SingleSong/components/SlateL
 import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/model";
 import { allLanes, layout, lineKind } from "../../model";
 import { useEditorCtx, useModelLine } from "../context";
+import { LaneDynamics } from "../dynamics/DynamicsZone";
 import { NoteCard } from "../notes/NoteCard";
+import { GUTTER, MARGIN_LINE } from "./gutter";
 
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
 type Look = "words" | "chords" | "text";
@@ -39,7 +41,8 @@ export function TextLane({ attributes, children, element, lane }: RenderElementP
       // Праворуч — місце під смужку особистої динаміки (DynamicsZone).
       className="relative whitespace-pre-wrap pr-2 md:pr-3"
       style={{
-        paddingLeft: 16,
+        ...MARGIN_LINE,
+        paddingLeft: GUTTER,
         fontSize: 16,
         lineHeight: 1.6,
         minHeight: "1.6em",
@@ -49,6 +52,7 @@ export function TextLane({ attributes, children, element, lane }: RenderElementP
         fontStyle: look === "text" ? "italic" : undefined,
       }}
     >
+      <LaneDynamics element={element} lane={lane} />
       {cards.map((c) => (
         <NoteCard key={c.note.id} view={c} />
       ))}

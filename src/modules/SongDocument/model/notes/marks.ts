@@ -10,16 +10,31 @@
  *  - акорди — у рядку акордів свого рядка.
  * Початок прив'язаний до першого позначеного символу, кінець — до
  * останнього: дописане по краях у позначку не входить.
+ *
+ * Клітинкова доріжка (таби, кахон, прямокутники) — псевдо-текст, де «символ»
+ * — крок (у табах — усі шість струн кроку разом). Її позначка — проміжок часу
+ * від початку рядка в тіках (`cellSpan`): масштаб показу її не зсуває, а
+ * склеювання зсуває на довжину першого рядка, як і клітинки.
  */
 import * as Y from "yjs";
+import { cellsQuote, lineTicks } from "../cells";
+import { allLanes, type CellKind } from "../lanes";
+import { readMeta } from "../meta";
 import { laneMap, laneOf, laneText, layout, lineOfIndex } from "../read";
 import type { LaneType, Line, LineAt, Song } from "../song";
 
 /** Кому видно примітку: `ALL` — усім, інакше ніки (автор і адресати). */
 export const ALL = "all";
 
-export type NoteRange = { anchor: unknown; focus: unknown; quote: string };
-export type NoteRecord = NoteRange & {
+/** Позначка в тексті — відносні позиції Yjs. */
+export type TextRange = { anchor: unknown; focus: unknown; quote: string };
+/** Позначка на клітинковій доріжці — `from…to` у тіках від початку рядка. */
+export type TimeRange = { from: number; to: number; quote: string };
+export type NoteRange = TextRange | TimeRange;
+export const isTimeRange = (range: NoteRange): range is TimeRange => typeof (range as TimeRange).from === "number";
+export type NoteRecord = NoteRange & NoteFields;
+/** Поля примітки, крім позначки. */
+export type NoteFields = {
   id: string;
   author: string;
   visibleFor: string[];
@@ -46,14 +61,23 @@ export const canSee = (note: NoteRecord, audience: Audience) =>
 export const rel = (type: Y.AbstractType<unknown>, index: number, assoc: number) =>
   Y.relativePositionToJSON(Y.createRelativePositionFromTypeIndex(type, index, assoc));
 
-/** Позначка на символах `from…to` доріжки рядка `ln`. */
+/** Клітинкова доріжка рядка: її вид і слот; `null` — доріжка текстова. */
+function cellSlot(song: Song, line: Line, lane: LaneType) {
+  const slot = line.get(lane);
+  const kind = allLanes(song.doc).find((l) => l.id === lane)?.kind;
+  return slot instanceof Y.Map && slot.has("cells") && kind ? { slot: slot as Y.Map<unknown>, kind: kind as CellKind } : null;
+}
+
+/** Позначка на символах `from…to` доріжки рядка `ln` (клітинкова — на тіках `from…to`). */
 export function noteRange(song: Song, ln: number, lane: LaneType, from: number, to: number): NoteRange {
   const l = layout(song)[ln];
+  const cells = cellSlot(song, l.line, lane);
+  if (cells) return { from, to, quote: cellsQuote(cells.kind, cells.slot, from, to, readMeta(song.doc).timeSignature) };
   const [type, base] = lane === "words" ? [song.text, l.at + 1] : [laneText(l.line, lane)!, 0];
   return { anchor: rel(type, base + from, 0), focus: rel(type, base + to, -1), quote: laneOf(l, lane).slice(from, to) };
 }
 
-/** Де зараз позначене: рядок і символи в доріжці, або null — позначене зникло. */
+/** Де зараз позначене: рядок і символи в доріжці (у клітинковій — тіки), або null — позначене зникло. */
 export type TextAt = { line: number; from: number; to: number };
 
 /**
@@ -62,6 +86,11 @@ export type TextAt = { line: number; from: number; to: number };
  * Акорди — у рядку `owner`, де лежить запис.
  */
 export function resolveRange(song: Song, lines: readonly LineAt[], owner: number, lane: LaneType, range: NoteRange): TextAt | null {
+  if (isTimeRange(range)) {
+    // Рядок укоротили — позначене за кінцем сховане разом із клітинками; подовжать — повернеться.
+    const end = lineTicks(lines[owner].line, readMeta(song.doc).timeSignature);
+    return range.from < end && range.to > range.from ? { line: owner, from: range.from, to: Math.min(range.to, end) } : null;
+  }
   const at = (json: unknown) => Y.createAbsolutePositionFromRelativePosition(Y.createRelativePositionFromJSON(json), song.doc);
   const a = at(range.anchor);
   const f = at(range.focus);
@@ -87,7 +116,7 @@ export function addNote(
   lane: LaneType,
   from: number,
   to: number,
-  note: Omit<NoteRecord, keyof NoteRange>,
+  note: NoteFields,
 ) {
   notesOf(layout(song)[ln].line, lane).set(note.id, { ...note, ...noteRange(song, ln, lane, from, to) });
 }
