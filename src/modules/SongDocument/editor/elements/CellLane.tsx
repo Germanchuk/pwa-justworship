@@ -38,6 +38,7 @@ import { highlightBg, isStrike, OTHERS_NEUTRAL_COLOR, STRIKE_INK } from "#module
 import {
   allLanes,
   barSizes,
+  barTicks,
   cellSpan,
   eighthsPerBar,
   hiddenPastEnd,
@@ -55,6 +56,7 @@ import {
   scaleOf,
   setLineLength,
   stepsPerBeat,
+  TICKS,
 } from "../../model";
 import { isCellsNode } from "../../bridge/projection";
 import { useEditorCtx, useModelLine } from "../context";
@@ -404,8 +406,19 @@ function Steps({ attributes, children, element, ln, id, kind, line, slot }: Step
             </div>
           ))}
         </div>
-        <div ref={scroller} data-cell-scroll="" className="min-w-0 overflow-x-auto" onScroll={onScroll} onMouseDown={onMouseDown}>
+        <div
+          ref={scroller}
+          data-cell-scroll=""
+          // Геометрія для голки програвання (`Transport`): комірок у такті, тіків у комірці й у такті.
+          data-cells={steps}
+          data-cell-ticks={(scale.tick * TICKS) / scale.grid}
+          data-bar-ticks={barTicks(timeSignature)}
+          className="relative min-w-0 overflow-x-auto"
+          onScroll={onScroll}
+          onMouseDown={onMouseDown}
+        >
           {body}
+          <div data-needle="" className="pointer-events-none absolute top-0 bottom-0 z-[3] w-0.5 -ml-px bg-red-500/80" style={{ display: "none" }} />
         </div>
       </div>
       {children}

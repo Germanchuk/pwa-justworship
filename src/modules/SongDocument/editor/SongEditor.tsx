@@ -39,6 +39,7 @@ import { renderElement } from "./elements/renderElement";
 import { SongHeader } from "./header/SongHeader";
 import { LostNotes } from "./notes/LostNotes";
 import { NotesTools } from "./notes/NotesTools";
+import { Transport } from "./playback/Transport";
 import { RemovalWarning } from "./RemovalWarning";
 import { useColumnsRelayout } from "./layout/useColumnsRelayout";
 import { useFillViewportHeight } from "./layout/useFillViewportHeight";
@@ -239,6 +240,7 @@ function LoadedEditor({ song }: { song: Song }) {
           />
         )}
         {painting && <DynamicsPalette brush={brush} setBrush={setBrush} />}
+        <Transport song={song} lanes={lanes} me={me} canEdit={canEdit} cursorLine={cursorLine} />
         {canEdit && <RemovalWarning />}
       </div>
     </Ctx.Provider>
