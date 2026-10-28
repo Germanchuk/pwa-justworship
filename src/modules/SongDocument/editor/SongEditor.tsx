@@ -7,7 +7,7 @@
  * динаміка (поки відкрита її панель) — в обох режимах. Особистий вибір
  * доріжок діє в усіх режимах (ADR-0006).
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { createEditor, Editor, Node, NodeEntry, Range, Text, Transforms } from "slate";
 import { Editable, ReactEditor, Slate, withReact } from "slate-react";
 import { useCanAnnotate, useCanEditContent, useCapoApplies } from "#modules/SingleSong/mode";
@@ -41,11 +41,10 @@ import { LostNotes } from "./notes/LostNotes";
 import { NotesTools } from "./notes/NotesTools";
 import { Transport } from "./playback/Transport";
 import { RemovalWarning } from "./RemovalWarning";
-import { useColumnsRelayout } from "./layout/useColumnsRelayout";
-import { useFillViewportHeight } from "./layout/useFillViewportHeight";
 import { useDocVersion, useLinesDoc } from "./useLinesDoc";
-// Колонки на широких екранах і решта вигляду записничка — спільні зі
-// статичним показом (зібрання), що ще на старому редакторі.
+// Вигляд записничка — спільний зі статичним показом (зібрання), що ще на
+// старому редакторі. Газетних колонок, як там, тут немає: одна колонка на всю
+// ширину, щоб влазили додані доріжки (рішення Германа 2026-10-28, поки що).
 import "#modules/SingleSong/components/SlateLyricsPlayground/SlateLyricsPlayground.css";
 
 export function SongEditor({ songId }: { songId: string | number }) {
@@ -130,9 +129,6 @@ function LoadedEditor({ song }: { song: Song }) {
   // Примітки без тексту, яким щойно «додали нотатку» — їхня картка порожня, але показана.
   const [drafts, setDrafts] = useState<string[]>([]);
   const [cursorLine, setCursorLine] = useState<number | null>(null);
-  const editableRef = useRef<HTMLDivElement | null>(null);
-  useFillViewportHeight(editableRef);
-  const relayoutColumns = useColumnsRelayout(editableRef);
 
   const meta = readMeta(song.doc);
   const capo = me ? readCapo(song.doc, me) : { fret: 0, off: false };
@@ -211,11 +207,9 @@ function LoadedEditor({ song }: { song: Song }) {
           editor={view}
           initialValue={view.children}
           onChange={() => setCursorLine(view.selection ? lanes.modelLine(view.selection.anchor.path[0]) : null)}
-          onValueChange={relayoutColumns}
         >
           <Editable
-            ref={editableRef}
-            className="slate-editable outline-none pb-24"
+            className="slate-editable slate-editable--one-column outline-none pb-24"
             readOnly={!canEdit}
             renderElement={renderElement}
             renderLeaf={Leaf}

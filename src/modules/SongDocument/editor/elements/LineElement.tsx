@@ -16,7 +16,7 @@ export function LineElement({ attributes, children, element }: RenderElementProp
   const mark = usePlayMark();
   const playable = !ctx.canEdit && kind === "segment" && songLanes(ctx.song.doc).some((l) => (CELL_KINDS as readonly string[]).includes(l.kind));
   return (
-    <div {...attributes} data-kind={kind} data-line={ln} className="song-row relative break-inside-avoid-column">
+    <div {...attributes} data-kind={kind} data-line={ln} className="song-row relative">
       {playable && (
         <button
           type="button"
