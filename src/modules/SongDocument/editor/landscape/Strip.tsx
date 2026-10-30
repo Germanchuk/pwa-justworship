@@ -52,6 +52,7 @@ import { setPlayMark, usePlayMark } from "../playback/mark";
 export const STRIP_GUTTER = 64;
 const SECTION_PX = 20;
 const RULER_PX = 16;
+const DYN_PX = 4;
 const PAPER = "#f8f5eb";
 const LINE_EDGE = "inset 1px 0 0 rgba(120, 95, 50, 0.22)";
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.14)";
@@ -106,6 +107,10 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
   const items: ReactNode[] = [];
   // Таймлайн — під самою панеллю; ряд структурних приміток — під ним і лише коли вони є.
   const sectionPx = sections.length ? SECTION_PX : 0;
+  // Смужки динаміки: спільна, під нею моя.
+  const dynPx = me ? DYN_PX * 2 : DYN_PX;
+  /** Висота всього, що тримається згори: таймлайн, примітка, динаміка. */
+  const headPx = RULER_PX + sectionPx + dynPx;
 
   // Кут: над полем — порожньо, але непрозоро (під ним їдуть таймлайн і примітки).
   items.push(<div key="corner" style={{ gridColumn: 1, gridRow: "1 / 4", ...sticky({ top: 0, zIndex: 5 }) }} />);
@@ -115,7 +120,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
   items.push(
     <div
       key="backdrop"
-      style={{ gridColumn: "2 / -1", gridRow: "1 / 3", position: "sticky", top: 0, zIndex: 1, height: RULER_PX + sectionPx, background: PAPER }}
+      style={{ gridColumn: "2 / -1", gridRow: "1 / 4", position: "sticky", top: 0, zIndex: 1, height: headPx, background: PAPER }}
     />,
   );
 
@@ -169,9 +174,9 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
         <span className="shrink-0" style={{ width: BAR_PX }} />
       </button>,
     );
-    // Динаміка рядка: спільна, під нею моя.
+    // Динаміка рядка: спільна, під нею моя; тримається згори під таймлайном і приміткою.
     items.push(
-      <div key={`d${col}`} style={at(col, 3, edge)}>
+      <div key={`d${col}`} style={at(col, 3, { position: "sticky", top: RULER_PX + sectionPx, zIndex: 2, background: PAPER })}>
         <DynBand at={c.at} layer={null} />
         {me && <DynBand at={c.at} layer={me} />}
       </div>,
@@ -258,7 +263,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
       data-strip=""
       className="relative grid w-max min-w-full content-start pb-6"
       // Ряди примітки й таймлайну — сталої висоти: на них стоять липкі відступи (`top`).
-      style={{ gridTemplateColumns: `${STRIP_GUTTER}px repeat(${cols.length}, max-content)`, gridTemplateRows: `${RULER_PX}px ${sectionPx}px`, gridAutoRows: "auto" }}
+      style={{ gridTemplateColumns: `${STRIP_GUTTER}px repeat(${cols.length}, max-content)`, gridTemplateRows: `${RULER_PX}px ${sectionPx}px ${dynPx}px`, gridAutoRows: "auto" }}
     >
       {items}
       <div data-strip-needle="" className="pointer-events-none absolute top-0 bottom-0 z-[4] w-0.5 -ml-px bg-red-500/80" style={{ display: "none" }} />
@@ -292,7 +297,7 @@ function Marked({ text, marks }: { text: string; marks: NoteView[] }) {
 /** Смужка динаміки рядка (тиша — темна риска). */
 function DynBand({ at, layer }: { at: LineAt; layer: DynamicsLayer }) {
   const key = shownDynamics(at, layer);
-  if (!key) return <div style={{ height: 4 }} />;
+  if (!key) return <div style={{ height: DYN_PX }} />;
   const color = getDynamicsStepColor(key);
-  return <div style={{ height: 4, background: key === SILENCE ? `repeating-linear-gradient(90deg, ${color} 0 6px, transparent 6px 9px)` : color }} />;
+  return <div style={{ height: DYN_PX, background: key === SILENCE ? `repeating-linear-gradient(90deg, ${color} 0 6px, transparent 6px 9px)` : color }} />;
 }
