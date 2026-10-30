@@ -107,6 +107,9 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
   // Поле доріжок: межа з піснею — його права лінія, тож при прокрутці вбік вона лишається.
   const sticky = (extra: CSSProperties = {}): CSSProperties => ({ position: "sticky", left: 0, zIndex: 3, background: PAPER, boxShadow: GUTTER_EDGE, ...extra });
   const items: ReactNode[] = [];
+  /** Лінія між рядками пісні — ліворуч від колонки; у першої її немає: там межа поля доріжок. */
+  const edgeOf = (col: number) => (col === 0 ? [] : [LINE_EDGE]);
+  const shadow = (col: number, ...more: string[]) => [...edgeOf(col), ...more].join(", ") || undefined;
   // Згори вниз: таймлайн під самою панеллю, впритул під ним динаміка, далі ряд
   // структурних приміток — лише коли вони є.
   const sectionPx = sections.length ? SECTION_PX : 0;
@@ -132,7 +135,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
     items.push(
       <div
         key={`s${i}`}
-        style={{ gridColumn: `${s.from + 2} / ${s.to + 2}`, gridRow: 3, position: "sticky", top: RULER_PX + dynPx, zIndex: 2, height: SECTION_PX, background: PAPER, boxShadow: `${LINE_EDGE}, ${RULE}` }}
+        style={{ gridColumn: `${s.from + 2} / ${s.to + 2}`, gridRow: 3, position: "sticky", top: RULER_PX + dynPx, zIndex: 2, height: SECTION_PX, background: PAPER, boxShadow: shadow(s.from, RULE) }}
       >
         <span className="sticky inline-block whitespace-nowrap px-1.5 text-xs font-bold text-stone-700" style={{ left: STRIP_GUTTER, lineHeight: `${SECTION_PX}px` }}>
           {s.name}
@@ -142,7 +145,6 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
   );
 
   cols.forEach((c, col) => {
-    const edge = { boxShadow: LINE_EDGE };
     if (c.empty) {
       // Порожній рядок — щілина між частинами.
       items.push(<div key={`gap${col}`} style={{ gridColumn: col + 2, gridRow: `2 / span ${lanes.length * 2 + 2}`, width: 14 }} />);
@@ -161,7 +163,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
         title="Грати звідси"
         onClick={() => setPlayMark(c.ln)}
         className="flex items-stretch text-left text-[9px] text-stone-400"
-        style={at(col, 1, { position: "sticky", top: 0, zIndex: 1, height: RULER_PX, background: PAPER, ...edge, boxShadow: `${LINE_EDGE}, ${RULE}` })}
+        style={at(col, 1, { position: "sticky", top: 0, zIndex: 1, height: RULER_PX, background: PAPER, boxShadow: shadow(col, RULE) })}
       >
         {sizes.map((size, b) => {
           const eighth = c.start + b * per;
@@ -241,7 +243,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
         );
       }
       items.push(
-        <div key={`c${id}:${col}`} className="flex flex-col justify-end" style={at(col, cardsRow, { boxShadow: LINE_EDGE, paddingRight: 8 })}>
+        <div key={`c${id}:${col}`} className="flex flex-col justify-end" style={at(col, cardsRow, { boxShadow: shadow(col), paddingRight: 8 })}>
           {cards.map((n) => (
             <div
               key={n.note.id}
@@ -254,7 +256,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
         </div>,
       );
       items.push(
-        <div key={`${id}:${col}`} style={at(col, row, { boxShadow: `${LINE_EDGE}, ${RULE}`, paddingRight: 8 })}>
+        <div key={`${id}:${col}`} style={at(col, row, { boxShadow: shadow(col, RULE), paddingRight: 8 })}>
           {body}
         </div>,
       );
