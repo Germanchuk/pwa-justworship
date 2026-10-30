@@ -126,7 +126,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
     const edge = { boxShadow: LINE_EDGE };
     if (c.empty) {
       // Порожній рядок — щілина між частинами.
-      items.push(<div key={`gap${col}`} style={{ gridColumn: col + 2, gridRow: `2 / span ${lanes.length + 2}`, width: 14 }} />);
+      items.push(<div key={`gap${col}`} style={{ gridColumn: col + 2, gridRow: `2 / span ${lanes.length * 2 + 2}`, width: 14 }} />);
       return;
     }
     const sizes = barSizes(lineLength(c.at.line, timeSignature), timeSignature, hits);
@@ -166,11 +166,15 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
     );
   });
 
+  // Кожна доріжка — два ряди: картки приміток і сам вміст. Картки — окремим
+  // рядом над доріжкою, тож вміст усіх рядків пісні завжди на одному рівні.
   lanes.forEach((id, r) => {
-    const row = r + 4;
+    const cardsRow = 4 + r * 2;
+    const row = cardsRow + 1;
     const kind = kindOf(id);
     const cells = (CELL_KINDS as readonly string[]).includes(kind ?? "");
     const name = id === "words" ? "Слова" : id === "chords" ? "Акорди" : (defs.find((l) => l.id === id)?.name ?? "");
+    items.push(<div key={`gc${id}`} style={{ gridColumn: 1, gridRow: cardsRow, ...sticky() }} />);
     items.push(
       <div key={`g${id}`} className="flex items-start justify-between gap-1 pl-1 pr-1" style={{ gridColumn: 1, gridRow: row, ...sticky({ boxShadow: RULE }) }}>
         <span className="min-w-0 truncate pt-1 text-[9px] font-semibold uppercase tracking-tight text-stone-400">{name}</span>
@@ -217,7 +221,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
         );
       }
       items.push(
-        <div key={`${id}:${col}`} style={at(col, row, { boxShadow: `${LINE_EDGE}, ${RULE}`, paddingRight: 8 })}>
+        <div key={`c${id}:${col}`} className="flex flex-col justify-end" style={at(col, cardsRow, { boxShadow: LINE_EDGE, paddingRight: 8 })}>
           {cards.map((n) => (
             <div
               key={n.note.id}
@@ -227,6 +231,10 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
               {n.note.body} <span className="text-[10px] text-stone-500">{n.note.author}</span>
             </div>
           ))}
+        </div>,
+      );
+      items.push(
+        <div key={`${id}:${col}`} style={at(col, row, { boxShadow: `${LINE_EDGE}, ${RULE}`, paddingRight: 8 })}>
           {body}
         </div>,
       );
