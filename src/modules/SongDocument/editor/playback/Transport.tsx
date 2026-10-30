@@ -172,7 +172,6 @@ export function Transport({ song, lanes, me, canEdit, cursorLine }: Props) {
   if (!songLanes(song.doc).some((l) => (CELL_KINDS as readonly string[]).includes(l.kind))) return null;
 
   const playing = state !== "idle";
-  const tempo = percent();
   const toggleLoop = () => {
     if (loop) return lanePlayer.setLoop(null);
     // Виділені кроки — їх по колу; інакше — рядок, що грає.
@@ -213,22 +212,7 @@ export function Transport({ song, lanes, me, canEdit, cursorLine }: Props) {
           >
             <Repeat className="size-5" />
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger className={cn(MENU_GROUP_ITEM, "inline-flex items-center justify-center text-xs font-semibold")} aria-label={`Темп: ${tempo} %`} title="Темп">
-              {tempo}%
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="top" align="end" className="min-w-36">
-              <DropdownMenuLabel>Темп програвання</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup value={String(tempo)} onValueChange={(v) => me && song.doc.transact(() => writeTempo(song.doc, me, Number(v)))}>
-                {TEMPOS.map((t) => (
-                  <DropdownMenuRadioItem key={t} value={String(t)} onSelect={(e) => e.preventDefault()}>
-                    {t} %
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <TempoMenu song={song} me={me} className={MENU_GROUP_ITEM} side="top" />
         </div>
       )}
       <Button
@@ -257,4 +241,27 @@ function needleX(sc: HTMLElement, tick: number): number | null {
   if (!step) return null;
   const [r, box] = [step.getBoundingClientRect(), sc.getBoundingClientRect()];
   return r.left - box.left + sc.scrollLeft + ((within % cellTicks) / cellTicks) * r.width;
+}
+
+/** Темп програвання у відсотках — особисте в пісні (`PLAY-55`). */
+export function TempoMenu({ song, me, className, side }: { song: Song; me: string | null; className: string; side: "top" | "bottom" }) {
+  const tempo = me ? readTempo(song.doc, me) : 100;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className={cn(className, "inline-flex items-center justify-center text-xs font-semibold")} aria-label={`Темп: ${tempo} %`} title="Темп">
+        {tempo}%
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side={side} align="end" className="min-w-36">
+        <DropdownMenuLabel>Темп програвання</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup value={String(tempo)} onValueChange={(v) => me && song.doc.transact(() => writeTempo(song.doc, me, Number(v)))}>
+          {TEMPOS.map((t) => (
+            <DropdownMenuRadioItem key={t} value={String(t)} onSelect={(e) => e.preventDefault()}>
+              {t} %
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }

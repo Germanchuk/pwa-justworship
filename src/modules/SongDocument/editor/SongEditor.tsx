@@ -16,10 +16,7 @@ import { useCurrentUsername } from "#modules/SingleSong/components/SlateLyricsPl
 import DronePlayer from "#modules/SingleSong/services/DronePlayer/DronePlayer";
 import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/model";
 import {
-  ensureSlots,
   isTimeRange,
-  linesOf,
-  missingSlots,
   readCapo,
   readHiddenLanes,
   readMeta,
@@ -42,6 +39,9 @@ import { NotesTools } from "./notes/NotesTools";
 import { Transport } from "./playback/Transport";
 import { RemovalWarning } from "./RemovalWarning";
 import { useDocVersion, useLinesDoc } from "./useLinesDoc";
+import { useHealSlots } from "./useHealSlots";
+import { LandscapeSong } from "./landscape/LandscapeSong";
+import { useLandscapePhone } from "./landscape/useLandscapePhone";
 // Вигляд записничка — спільний зі статичним показом (зібрання), що ще на
 // старому редакторі. Газетних колонок, як там, тут немає: одна колонка на всю
 // ширину, щоб влазили додані доріжки (рішення Германа 2026-10-28, поки що).
@@ -49,6 +49,7 @@ import "#modules/SingleSong/components/SlateLyricsPlayground/SlateLyricsPlaygrou
 
 export function SongEditor({ songId }: { songId: string | number }) {
   const { song, synced } = useLinesDoc(songId);
+  const landscape = useLandscapePhone();
   const status = useConnectionStatus();
   if (status === "error") {
     return (
@@ -58,7 +59,8 @@ export function SongEditor({ songId }: { songId: string | number }) {
     );
   }
   if (!synced) return <div className="text-gray-400 text-sm p-4">Підключення до сервера…</div>;
-  return <LoadedEditor song={song} />;
+  // Телефон лежачи — пісня однією смугою, окремим виглядом (`SONG-98`).
+  return landscape ? <LandscapeSong song={song} /> : <LoadedEditor song={song} />;
 }
 
 function LoadedEditor({ song }: { song: Song }) {
@@ -88,26 +90,7 @@ function LoadedEditor({ song }: { song: Song }) {
   }, [lanes, hidden.join(), zoom]); // eslint-disable-line react-hooks/exhaustive-deps
   const view = lanes.view;
 
-  // Рядок, що народився одночасно з новою доріжкою, — без її слота: дописати (ADR-0008);
-  // клітинки на старій сітці — перерахувати. У будь-якому режимі: інакше читання показало б старі як є.
-  useEffect(() => {
-    const heal = () => {
-      const lines = linesOf(song);
-      if (missingSlots(song, lines).length) song.doc.transact(() => ensureSlots(song, lines), "heal");
-    };
-    let queued = false;
-    const onTransaction = () => {
-      if (queued) return;
-      queued = true;
-      queueMicrotask(() => {
-        queued = false;
-        heal();
-      });
-    };
-    heal();
-    song.doc.on("afterTransaction", onTransaction);
-    return () => song.doc.off("afterTransaction", onTransaction);
-  }, [song]);
+  useHealSlots(song);
 
   // Курсор-крок у клітинковій доріжці живе поза Slate — перемальовуватись на його рух.
   const [, cellMoved] = useState(0);

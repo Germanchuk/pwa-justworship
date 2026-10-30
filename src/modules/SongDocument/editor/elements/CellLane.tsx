@@ -23,7 +23,7 @@
  * одній комірці — буквально одна на одній. Правиться лише точне (`cells.ts`).
  */
 import * as Y from "yjs";
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { Node } from "slate";
 import {
   DropdownMenu,
@@ -34,10 +34,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { RenderElementProps, ReactEditor, useSlateStatic } from "slate-react";
-import { highlightBg, isStrike, OTHERS_NEUTRAL_COLOR, STRIKE_INK } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/colors";
 import {
   allLanes,
-  barSizes,
   barTicks,
   cellSpan,
   eighthsPerBar,
@@ -48,14 +46,11 @@ import {
   CellAt,
   CellKind,
   Line,
-  NoteView,
-  placeCells,
   readMeta,
   readZoom,
   rowsOf,
   scaleOf,
   setLineLength,
-  stepsPerBeat,
   TICKS,
 } from "../../model";
 import { isCellsNode } from "../../bridge/projection";
@@ -63,29 +58,10 @@ import { useEditorCtx, useModelLine } from "../context";
 import { LaneDynamics } from "../dynamics/DynamicsZone";
 import { NoteCard } from "../notes/NoteCard";
 import { GUTTER, MARGIN_LINE } from "./gutter";
+import { INK, ROW_PX, STEP_PX } from "./stepGeometry";
+import { StepRows } from "./StepRows";
 
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
-const INK: Record<CellKind, string> = { tab: "#57534e", cajon: "#92400e", blocks: "#1e40af" };
-/**
- * Крок на екрані — комірка сталої ширини `STEP_PX`, однакова в усіх видів,
- * для риски, ладу до 24, удару й шматка прямокутника, на будь-якому екрані
- * (не тягнеться й не стискається; не влазить — прокрутка вбік). Риска такту
- * теж сталої ширини, тож такти доріжок стоять одне під одним.
- * Двозначний лад стискається по горизонталі, щоб уміститись у крок. Текстом
- * (буфер) — як `renderCells`.
- */
-const STEP_PX = 12;
-const ROW_PX = 17;
-const BAR_PX = 8;
-const DASH = "linear-gradient(currentColor, currentColor) center / calc(100% - 2px) 1px no-repeat";
-/** Фон кольором — шаром, щоб лягати під риску й під прямокутник. */
-const fill = (color: string) => `linear-gradient(${color}, ${color})`;
-/** Подія не на долі своєї комірки (дрібніша за сітку перегляду). */
-const OFF_GRID_INK = "#f87171";
-/** Кожна друга доля такту трохи темніша — як смуги в FL Studio. */
-const BEAT_TINT = "rgba(120, 95, 50, 0.09)";
-/** Виділені кроки — як виділений текст. */
-const SELECTED = "rgba(59, 130, 246, 0.28)";
 /** Довгий натиск пальцем на крок починає виділення (коротший дотик — прокрутка чи тап). */
 const LONG_PRESS_MS = 450;
 
@@ -119,15 +95,6 @@ function Steps({ attributes, children, element, ln, id, kind, line, slot }: Step
   const zoom = ctx.me ? readZoom(ctx.song.doc, ctx.me) : undefined;
   const scale = scaleOf(kind, timeSignature, zoom);
   const steps = scale.cells;
-  // Доля — у кроках запису: смуги лягають за часом, а не за номером комірки.
-  const beatTicks = (stepsPerBeat(timeSignature) * scale.grid) / 16;
-  // Прямокутники без масштабу: їхня комірка ширша чи вужча, щоб такт був завширшки як у ударів.
-  const stepPx = kind === "blocks" ? (STEP_PX * scaleOf("tab", timeSignature, zoom).cells) / steps : STEP_PX;
-  const length = lineLength(line, timeSignature);
-  const sizes = barSizes(length, timeSignature, scale);
-  const placed = placeCells(kind, (slot.get("cells") as Y.Map<string>).entries(), sizes, scale);
-  const shown = (at: CellAt) => placed.get(`${at.step}/${at.string}`);
-  const read = (at: CellAt) => shown(at)?.value;
   const cursor = ctx.canEdit ? ctx.lanes.cells.cursor() : null;
   const here = cursor && cursor.line === line && cursor.lane === id ? cursor.at : null;
   const sel = ctx.lanes.cells.selection();
@@ -254,134 +221,6 @@ function Steps({ attributes, children, element, ln, id, kind, line, slot }: Step
     document.addEventListener("mouseup", onUp, { once: true });
   };
 
-  /** Позначки приміток, що лягають на крок `step` (за часом — і в іншому масштабі). */
-  const marksAt = (step: number): NoteView[] => {
-    const [a, b] = cellSpan(scale, step);
-    return marks.filter((n) => n.at!.from < b && n.at!.to > a);
-  };
-  const stepSpan = (at: CellAt, content: ReactNode, style: React.CSSProperties = {}) => {
-    const tinted = Math.floor(((at.step % steps) * scale.tick) / beatTicks) % 2 === 1;
-    const background = [style.background, tinted && fill(BEAT_TINT)].filter(Boolean).join(", ") || undefined;
-    const [a, b] = cellSpan(scale, at.step);
-    const inSelection = !!selected && selected.from < b && selected.to > a;
-    const on = marksAt(at.step);
-    const own = on.filter((n) => !n.foreign);
-    const colors = own.map((n) => n.note.color);
-    // Позначка — шаром під значенням (кілька — шарами), чужа — сірим; закреслення — рисою поверх.
-    const fills = [...colors.filter((c) => !isStrike(c)), ...(on.some((n) => n.foreign) ? [OTHERS_NEUTRAL_COLOR] : [])].map((c) => fill(highlightBg(c)));
-    const ids = own.map((n) => n.note.id).join(" ") || undefined;
-    return (
-      <span
-        key={`${at.step}/${at.string}`}
-        data-step={at.step}
-        data-row={at.string}
-        data-notes={ids}
-        className={ctx.canEdit ? "cursor-pointer" : undefined}
-        // Курсор — тінню всередині, а не фоном: фон кроку — риска й смуга долі.
-        style={{
-          ...style,
-          position: "relative",
-          background,
-          ...(here && here.step === at.step && here.string === at.string ? { boxShadow: "inset 0 0 0 99px rgba(59,130,246,0.3)", outline: "1px solid #3b82f6" } : {}),
-        }}
-      >
-        {(fills.length > 0 || inSelection) && (
-          <span
-            data-note-fill={ids}
-            className="pointer-events-none absolute inset-0"
-            style={{ background: [...(inSelection ? [fill(SELECTED)] : []), ...fills].join(", ") }}
-          />
-        )}
-        {content}
-        {colors.some(isStrike) && (
-          <span className="pointer-events-none absolute inset-x-0 z-[2]" style={{ top: "50%", height: 2, marginTop: -1, background: STRIKE_INK }} />
-        )}
-      </span>
-    );
-  };
-  const fixed = (width: number): React.CSSProperties => ({ flex: "none", width, textAlign: "center" });
-  /** Лінія доріжки: такти з кроками (назва лінії — до лінії поля). */
-  const row = (key: string, fn: (step: number) => ReactNode) => (
-    <div key={key} className="whitespace-pre flex items-stretch" style={{ lineHeight: `${ROW_PX}px` }}>
-      {sizes.flatMap((size, b) => [
-        <span key={`bar${b}`} className="text-stone-400" style={fixed(BAR_PX)}>
-          |
-        </span>,
-        ...Array.from({ length: size }, (_, s) => fn(b * steps + s)),
-      ])}
-      <span key="end" className="text-stone-400" style={fixed(BAR_PX)}>
-        |
-      </span>
-    </div>
-  );
-  /**
-   * Крок лінії: риска, коли порожньо, інакше — значення по центру; не на долі
-   * — сіріше й прозоріше, що далі. Кілька подій у комірці (дрібна партія в
-   * грубій сітці) — буквально одна на одній: так видно, що їх там кілька.
-   */
-  const lineStep = (at: CellAt) => {
-    const cell = shown(at);
-    return stepSpan(
-      at,
-      cell?.all.map(({ value, off }, i) => (
-        <span
-          key={i}
-          className="absolute inset-0 flex items-center justify-center"
-          // Не на своїй долі — блідо-червона; що далі від долі, то трохи прозоріша.
-          style={off ? { color: OFF_GRID_INK, opacity: 1 - off * 0.6 } : undefined}
-        >
-          {/* Двозначний лад стискається, щоб уміститись у крок. */}
-          {value.length > 1 ? <span style={{ display: "inline-block", transform: "scaleX(0.7)" }}>{value}</span> : value}
-        </span>
-      )),
-      {
-        ...fixed(STEP_PX),
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center", // ширший за крок лад виходить на обидва боки порівну
-        height: ROW_PX,
-        fontSize: 10,
-        fontWeight: 600,
-        color: cell ? INK[kind] : "#a8a29e",
-        background: cell ? undefined : DASH,
-      },
-    );
-  };
-
-  let body: ReactNode;
-  if (kind !== "blocks") {
-    // Таби — струна на лінію, кахон — вид удару на лінію.
-    body = rowsOf(kind).map((name, string) => row(name, (step) => lineStep({ step, string })));
-  } else {
-    // Прямокутники: назва відкриває блок, «-» його тягне; порожній крок — «·».
-    body = row("blocks", (step) => {
-      const v = read({ step, string: 0 });
-      const start = !!v && v !== "-";
-      const prevV = step > 0 && step % steps !== 0 ? read({ step: step - 1, string: 0 }) : undefined;
-      const inBlock = start || (v === "-" && !!prevV);
-      const lastInBar = (step % steps) + 1 >= sizes[Math.floor(step / steps)];
-      const nextV = !lastInBar ? read({ step: step + 1, string: 0 }) : undefined;
-      const ends = inBlock && nextV !== "-";
-      return stepSpan(
-        { step, string: 0 },
-        start ? <span className="relative z-[1] font-bold">{v}</span> : inBlock ? " " : "·",
-        {
-          ...fixed(stepPx),
-          display: "inline-block",
-          textAlign: "left",
-          color: inBlock ? INK.blocks : "#a8a29e",
-          background: inBlock ? fill("rgba(59,130,246,0.12)") : undefined,
-          borderTop: inBlock ? "1px solid rgba(30,64,175,0.4)" : undefined,
-          borderBottom: inBlock ? "1px solid rgba(30,64,175,0.4)" : undefined,
-          borderLeft: start ? "1px solid rgba(30,64,175,0.6)" : undefined,
-          borderRight: ends ? "1px solid rgba(30,64,175,0.6)" : undefined,
-          borderRadius: start && ends ? 3 : start ? "3px 0 0 3px" : ends ? "0 3px 3px 0" : undefined,
-          overflow: "visible",
-        },
-      );
-    });
-  }
-
   // Кнопка довжини рядка — одна на рядок, перед його прямокутниками.
   const lengthHere = ctx.canEdit && lengthAnchor(editor, element, (lane) => allLanes(ctx.song.doc).find((l) => l.id === lane)?.kind);
 
@@ -417,7 +256,7 @@ function Steps({ attributes, children, element, ln, id, kind, line, slot }: Step
           onScroll={onScroll}
           onMouseDown={onMouseDown}
         >
-          {body}
+          <StepRows kind={kind} slot={slot} line={line} timeSignature={timeSignature} zoom={zoom} marks={marks} selected={selected} here={here} clickable={ctx.canEdit} />
           <div data-needle="" className="pointer-events-none absolute top-0 bottom-0 z-[3] w-0.5 -ml-px bg-red-500/80" style={{ display: "none" }} />
         </div>
       </div>
