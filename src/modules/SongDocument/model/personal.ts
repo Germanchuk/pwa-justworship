@@ -5,6 +5,7 @@
  *   capoOff:     нік → true — капо тимчасово вимкнене (значення пам'ятаємо)
  *   hiddenLanes: нік → id доріжок (`lanes.ts`), яких людина не бачить
  *   zoom:        нік → масштаб показу ударів, комірок у цілій ноті (`cells.ts`, `ZOOMS`)
+ *   tempo:       нік → темп програвання доріжок у відсотках (ADR-0009)
  * Особиста динаміка — на самому рядку (`dynamics.ts`).
  */
 import * as Y from "yjs";
@@ -14,6 +15,7 @@ const capoMap = (doc: Y.Doc) => doc.getMap<number>("capo");
 const capoOffMap = (doc: Y.Doc) => doc.getMap<boolean>("capoOff");
 const hiddenMap = (doc: Y.Doc) => doc.getMap<string[]>("hiddenLanes");
 const zoomMap = (doc: Y.Doc) => doc.getMap<number>("zoom");
+const tempoMap = (doc: Y.Doc) => doc.getMap<number>("tempo");
 
 export type Capo = { fret: number; off: boolean };
 
@@ -48,4 +50,12 @@ export const readZoom = (doc: Y.Doc, nick: string): number => zoomMap(doc).get(n
 export function writeZoom(doc: Y.Doc, nick: string, zoom: number) {
   if (zoom === DEFAULT_ZOOM) zoomMap(doc).delete(nick);
   else zoomMap(doc).set(nick, zoom);
+}
+
+/** Темп програвання доріжок — у відсотках від темпу пісні (особисте, ADR-0009); без запису — 100. */
+export const readTempo = (doc: Y.Doc, nick: string): number => tempoMap(doc).get(nick) ?? 100;
+
+export function writeTempo(doc: Y.Doc, nick: string, percent: number) {
+  if (percent === 100) tempoMap(doc).delete(nick);
+  else tempoMap(doc).set(nick, percent);
 }

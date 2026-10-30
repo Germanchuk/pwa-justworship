@@ -279,22 +279,32 @@ export function cellSpan(scale: Scale, i: number): [number, number] {
   return [(bar + at) * per, (bar + Math.min(at + scale.tick, scale.ticks)) * per];
 }
 
-/** Записане в слоті на проміжку `from…to` (тіки позначок) — коротко, «3 5 7» чи «B T», для «було на …» втраченої примітки. */
-export function cellsQuote(kind: CellKind, slot: Y.Map<unknown>, from: number, to: number, timeSignature: string): string {
+/** Клітинка слота в часі: `time` — тіки позначок від початку рядка, `string` — лінія (з 1). */
+export type TimedCell = { time: number; string: number; value: string };
+
+/** Усі клітинки слота в часі рядка, за часом і лінією (програвання, цитата примітки). */
+export function timedCells(kind: CellKind, slot: Y.Map<unknown>, timeSignature: string): TimedCell[] {
   const grid = Number(slot.get("grid")) || gridOf(kind);
   const [n, d] = meter(timeSignature);
   const perBar = Math.max(1, Math.round((n * grid) / d));
   return Array.from((slot.get("cells") as Y.Map<string>).entries())
     .flatMap(([key, value]) => {
       const k = parseKey(key);
-      const time = k ? (((k.bar - 1) * perBar + k.step - 1) * TICKS) / grid : -1;
-      if (!k || time < from || time >= to || value === "-") return [];
-      return [{ time, string: k.string, text: kind === "cajon" ? (CAJON_ROWS[k.string - 1] ?? value) : value }];
+      return k ? [{ time: (((k.bar - 1) * perBar + k.step - 1) * TICKS) / grid, string: k.string, value }] : [];
     })
-    .sort((a, b) => a.time - b.time || a.string - b.string)
-    .map((c) => c.text)
+    .sort((a, b) => a.time - b.time || a.string - b.string);
+}
+
+/** Записане в слоті на проміжку `from…to` (тіки позначок) — коротко, «3 5 7» чи «B T», для «було на …» втраченої примітки. */
+export function cellsQuote(kind: CellKind, slot: Y.Map<unknown>, from: number, to: number, timeSignature: string): string {
+  return timedCells(kind, slot, timeSignature)
+    .filter((c) => c.time >= from && c.time < to && c.value !== "-")
+    .map((c) => (kind === "cajon" ? (CAJON_ROWS[c.string - 1] ?? c.value) : c.value))
     .join(" ");
 }
+
+/** Тіків позначок у повному такті розміру. */
+export const barTicks = (timeSignature: string) => eighthsPerBar(timeSignature) * EIGHTH_TICKS;
 
 /**
  * Стерти записане в слоті на проміжку `from…to` (тіки позначок) — видалення
