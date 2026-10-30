@@ -55,6 +55,7 @@ const RULER_PX = 16;
 const DYN_PX = 4;
 const PAPER = "#f8f5eb";
 const LINE_EDGE = "inset 1px 0 0 rgba(120, 95, 50, 0.22)";
+const GUTTER_EDGE = "inset -1px 0 0 rgba(120, 95, 50, 0.22)";
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.14)";
 const TEXT_INK: Record<string, string> = { words: "#1e3a8a", chords: "#3b82f6", text: "#7c3aed" };
 
@@ -103,7 +104,8 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
   const per = eighthsPerBar(timeSignature);
 
   const at = (col: number, row: number, extra: CSSProperties = {}): CSSProperties => ({ gridColumn: col + 2, gridRow: row, ...extra });
-  const sticky = (extra: CSSProperties = {}): CSSProperties => ({ position: "sticky", left: 0, zIndex: 3, background: PAPER, ...extra });
+  // Поле доріжок: межа з піснею — його права лінія, тож при прокрутці вбік вона лишається.
+  const sticky = (extra: CSSProperties = {}): CSSProperties => ({ position: "sticky", left: 0, zIndex: 3, background: PAPER, boxShadow: GUTTER_EDGE, ...extra });
   const items: ReactNode[] = [];
   // Згори вниз: таймлайн під самою панеллю, впритул під ним динаміка, далі ряд
   // структурних приміток — лише коли вони є.
@@ -194,7 +196,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
     const name = id === "words" ? "Слова" : id === "chords" ? "Акорди" : (defs.find((l) => l.id === id)?.name ?? "");
     items.push(<div key={`gc${id}`} style={{ gridColumn: 1, gridRow: cardsRow, ...sticky() }} />);
     items.push(
-      <div key={`g${id}`} className="flex items-start justify-between gap-1 pl-1 pr-1" style={{ gridColumn: 1, gridRow: row, ...sticky({ boxShadow: RULE }) }}>
+      <div key={`g${id}`} className="flex items-start justify-between gap-1 pl-1 pr-1" style={{ gridColumn: 1, gridRow: row, ...sticky({ boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
         <span className="min-w-0 truncate pt-1 text-[9px] font-semibold uppercase tracking-tight text-stone-400">{name}</span>
         {cells && (
           <span className="shrink-0 pt-0.5 text-right font-mono text-[11px] text-stone-400">
