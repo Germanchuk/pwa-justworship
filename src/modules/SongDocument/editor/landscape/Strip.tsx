@@ -3,12 +3,12 @@
  * одним уздовж осі часу, кожна доріжка — один довгий трек через усю пісню,
  * як у DAW. Сітка: колонка — рядок пісні, ряд — доріжка.
  *
- *   [поле] | 1    2    | 3    4      (таймлайн під самою панеллю: такти пісні наскрізно)
- *          | ▀▀▀▀▀▀▀▀▀ | ▀▀▀▀▀▀▀     (динаміка впритул: спільна, під нею моя)
- *          | Приспів ───────────────▶ (структурна примітка пливе, поки триває)
- *   Таби e | -3---5--- | ---7----
- *   Акорди | Am   F    | C   G
- *   Слова  | Ти святий | Господь
+ *     | 1    2    | 3    4      (таймлайн під самою панеллю: такти пісні наскрізно)
+ *     | ▀▀▀▀▀▀▀▀▀ | ▀▀▀▀▀▀▀     (динаміка впритул: спільна, під нею моя)
+ *     | Приспів ───────────────▶ (структурна примітка пливе, поки триває)
+ *   e | -3---5--- | ---7----    (таби — назви струн, кахон — ударів)
+ *   ♪ | Am   F    | C   G       (решта — іконкою)
+ *   … | Ти святий | Господь
  *
  * Ширина колонки — найдовша її частина (кроки чи слова), а в часі рядок
  * триває стільки, скільки прописано (`lineLength`). Порожній рядок —
@@ -18,6 +18,7 @@
  * Лише перегляд: правка — у звичайному вигляді (поки що).
  */
 import * as Y from "yjs";
+import { ChatBubbleBottomCenterTextIcon, MegaphoneIcon, MusicalNoteIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/utils";
 import type { CSSProperties, ReactNode } from "react";
 import { transposeChordTextForCapo } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/transposeChords";
@@ -49,8 +50,13 @@ import { INK, BAR_PX, ROW_PX, STEP_PX } from "../elements/stepGeometry";
 import { StepRows } from "../elements/StepRows";
 import { setPlayMark, usePlayMark } from "../playback/mark";
 
-/** Поле зліва: назва доріжки й назви її ліній — не прокручується. */
-export const STRIP_GUTTER = 64;
+/**
+ * Поле зліва — не прокручується, і воно вузьке, щоб пісні лишалось місце:
+ * таби й кахон підписані самими назвами ліній (струни, удари — і так ясно,
+ * що це), решта доріжок — іконкою, як у шапці пісні (назва — підказкою).
+ */
+export const STRIP_GUTTER = 22;
+const LANE_ICON = { words: ChatBubbleBottomCenterTextIcon, chords: MusicalNoteIcon, text: MegaphoneIcon, blocks: Squares2X2Icon } as const;
 const SECTION_PX = 20;
 const RULER_PX = 16;
 const DYN_PX = 4;
@@ -199,11 +205,13 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
     const cells = (CELL_KINDS as readonly string[]).includes(kind ?? "");
     const name = id === "words" ? "Слова" : id === "chords" ? "Акорди" : (defs.find((l) => l.id === id)?.name ?? "");
     items.push(<div key={`gc${id}`} style={{ gridColumn: 1, gridRow: cardsRow, ...sticky() }} />);
+    const Icon = !cells || kind === "blocks" ? LANE_ICON[(kind ?? "text") as keyof typeof LANE_ICON] : null;
     items.push(
-      <div key={`g${id}`} className="flex items-start justify-between gap-1 pl-1 pr-1" style={{ gridColumn: 1, gridRow: row, ...sticky({ boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
-        <span className="min-w-0 truncate pt-1 text-[9px] font-semibold uppercase tracking-tight text-stone-400">{name}</span>
-        {cells && (
-          <span className="shrink-0 pt-0.5 text-right font-mono text-[11px] text-stone-400">
+      <div key={`g${id}`} title={name} className="flex justify-end pr-1" style={{ gridColumn: 1, gridRow: row, ...sticky({ boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
+        {Icon ? (
+          <Icon aria-label={name} className="mt-1 size-3.5 shrink-0 text-stone-400" />
+        ) : (
+          <span aria-label={name} className="pt-0.5 text-right font-mono text-[11px] text-stone-400">
             {rowsOf(kind as CellKind).map((n, i) => (
               <div key={i} style={{ height: ROW_PX, lineHeight: `${ROW_PX}px` }}>
                 {n}
