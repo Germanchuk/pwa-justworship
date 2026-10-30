@@ -3,8 +3,8 @@
  * одним уздовж осі часу, кожна доріжка — один довгий трек через усю пісню,
  * як у DAW. Сітка: колонка — рядок пісні, ряд — доріжка.
  *
- *   [поле] | Приспів ───────────────▶ (структурна примітка пливе, поки триває)
- *          | 1    2    | 3    4      (таймлайн: такти пісні наскрізно)
+ *   [поле] | 1    2    | 3    4      (таймлайн під самою панеллю: такти пісні наскрізно)
+ *          | Приспів ───────────────▶ (структурна примітка пливе, поки триває)
  *          | ▀▀▀▀▀▀▀▀▀ | ▀▀▀▀▀▀▀     (динаміка: спільна, під нею моя)
  *   Таби e | -3---5--- | ---7----
  *   Акорди | Am   F    | C   G
@@ -104,6 +104,8 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
   const at = (col: number, row: number, extra: CSSProperties = {}): CSSProperties => ({ gridColumn: col + 2, gridRow: row, ...extra });
   const sticky = (extra: CSSProperties = {}): CSSProperties => ({ position: "sticky", left: 0, zIndex: 3, background: PAPER, ...extra });
   const items: ReactNode[] = [];
+  // Таймлайн — під самою панеллю; ряд структурних приміток — під ним і лише коли вони є.
+  const sectionPx = sections.length ? SECTION_PX : 0;
 
   // Кут: над полем — порожньо, але непрозоро (під ним їдуть таймлайн і примітки).
   items.push(<div key="corner" style={{ gridColumn: 1, gridRow: "1 / 4", ...sticky({ top: 0, zIndex: 5 }) }} />);
@@ -113,7 +115,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
   items.push(
     <div
       key="backdrop"
-      style={{ gridColumn: "2 / -1", gridRow: "1 / 3", position: "sticky", top: 0, zIndex: 1, height: SECTION_PX + RULER_PX, background: PAPER }}
+      style={{ gridColumn: "2 / -1", gridRow: "1 / 3", position: "sticky", top: 0, zIndex: 1, height: RULER_PX + sectionPx, background: PAPER }}
     />,
   );
 
@@ -122,7 +124,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
     items.push(
       <div
         key={`s${i}`}
-        style={{ gridColumn: `${s.from + 2} / ${s.to + 2}`, gridRow: 1, position: "sticky", top: 0, zIndex: 2, height: SECTION_PX, background: PAPER, boxShadow: LINE_EDGE }}
+        style={{ gridColumn: `${s.from + 2} / ${s.to + 2}`, gridRow: 2, position: "sticky", top: RULER_PX, zIndex: 2, height: SECTION_PX, background: PAPER, boxShadow: `${LINE_EDGE}, ${RULE}` }}
       >
         <span className="sticky inline-block whitespace-nowrap px-1.5 text-xs font-bold text-stone-700" style={{ left: STRIP_GUTTER, lineHeight: `${SECTION_PX}px` }}>
           {s.name}
@@ -151,7 +153,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
         title="Грати звідси"
         onClick={() => setPlayMark(c.ln)}
         className="flex items-stretch text-left text-[9px] text-stone-400"
-        style={at(col, 2, { position: "sticky", top: SECTION_PX, zIndex: 1, height: RULER_PX, background: PAPER, ...edge, boxShadow: `${LINE_EDGE}, ${RULE}` })}
+        style={at(col, 1, { position: "sticky", top: 0, zIndex: 1, height: RULER_PX, background: PAPER, ...edge, boxShadow: `${LINE_EDGE}, ${RULE}` })}
       >
         {sizes.map((size, b) => {
           const eighth = c.start + b * per;
@@ -255,7 +257,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
       data-strip=""
       className="relative grid w-max min-w-full content-start pb-6"
       // Ряди примітки й таймлайну — сталої висоти: на них стоять липкі відступи (`top`).
-      style={{ gridTemplateColumns: `${STRIP_GUTTER}px repeat(${cols.length}, max-content)`, gridTemplateRows: `${SECTION_PX}px ${RULER_PX}px`, gridAutoRows: "auto" }}
+      style={{ gridTemplateColumns: `${STRIP_GUTTER}px repeat(${cols.length}, max-content)`, gridTemplateRows: `${RULER_PX}px ${sectionPx}px`, gridAutoRows: "auto" }}
     >
       {items}
       <div data-strip-needle="" className="pointer-events-none absolute top-0 bottom-0 z-[4] w-0.5 -ml-px bg-red-500/80" style={{ display: "none" }} />
