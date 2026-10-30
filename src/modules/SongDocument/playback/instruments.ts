@@ -8,6 +8,7 @@
  *  - кахон — бас (мембрана), тон (шум у середині й коротка мембрана), гост
  *    (тихий сухий шум);
  *  - прямокутники — акорд м'яким синтом, розкладений як піаніст (`voiceChord`);
+ *  - піаніно — нота клавішним синтом, поки ваншот (згасає сама);
  *  - відлік — дерев'яний клац.
  */
 import * as Tone from "tone";
@@ -22,6 +23,7 @@ export type Kit = {
   tab: (string: number, fret: number | "x", time: number) => void;
   cajon: (hit: CajonHit, time: number) => void;
   chord: (name: string, seconds: number, time: number) => void;
+  note: (midi: number, time: number) => void;
   click: (time: number) => void;
   dispose: () => void;
 };
@@ -83,6 +85,13 @@ export function createKit(): Kit {
     }).connect(out),
   );
   let prevUpper: number[] | null = null;
+  const keys = add(
+    new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: "triangle" },
+      envelope: { attack: 0.004, decay: 0.9, sustain: 0.08, release: 0.5 },
+      volume: -8,
+    }).connect(out),
+  );
 
   const clickFilter = add(new Tone.Filter({ type: "bandpass", frequency: 2200, Q: 2.5 }).connect(out));
   const tick = add(new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.015, sustain: 0 }, volume: -2 }).connect(clickFilter));
@@ -111,6 +120,7 @@ export function createKit(): Kit {
         prevUpper = voiced.upper;
         pad.triggerAttackRelease([voiced.bass, ...voiced.upper].map(hz), Math.max(0.05, seconds - 0.02), time);
       }),
+    note: (midi, time) => safely(() => keys.triggerAttackRelease(hz(midi), 0.5, time)),
     click: (time) => safely(() => tick.triggerAttackRelease(0.015, at(tick, time))),
     dispose: () => nodes.forEach((n) => safely(() => n.dispose())),
   };

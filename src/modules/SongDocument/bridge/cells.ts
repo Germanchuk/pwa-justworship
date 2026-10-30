@@ -17,6 +17,7 @@ import {
   cellSpan,
   endOf,
   eraseSpan,
+  toggleCell,
   lineLength,
   CellAt,
   CellKind,
@@ -44,6 +45,8 @@ export type Cells = {
   cursor: () => CellCursor | null;
   /** Поставити курсор на крок доріжки-вузла `path` (клік по кроку). */
   place: (path: Path, at: CellAt) => void;
+  /** Тап по кроку піаніно: нота є — прибрати, немає — поставити (курсор — туди ж). */
+  toggle: (path: Path, at: CellAt) => void;
   /** Клавіша, поки курсор у доріжці: `true` — оброблено (не пускати далі в Slate). */
   key: (e: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; shiftKey?: boolean }) => boolean;
   /** Друк тексту в доріжку (з клавіатури телефона — через Slate); `false` — курсор не в доріжці. */
@@ -217,6 +220,13 @@ export function installCells(s: ViewState, history: History): Cells {
       }
     },
     type,
+    toggle: (path, at) => {
+      Transforms.select(view, Editor.start(view, path));
+      sync();
+      if (!cursor) return;
+      move(at);
+      edit(COMMAND, (c, slot) => toggleCell(c.kind, slot, scaleIn(s, c.kind), at));
+    },
     selection: () => selected,
     select: (sel, ends) => {
       select(sel, ends?.anchor ?? null);

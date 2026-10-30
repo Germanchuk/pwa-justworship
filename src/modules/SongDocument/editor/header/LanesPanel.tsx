@@ -111,7 +111,7 @@ export function LanesPanel({ song, change, onClose }: Props) {
         </>
       )}
 
-      <div className="mt-2 text-xs text-stone-400">Вигуки — текстом, як акорди. Прямокутники, таби й кахон — прототип.</div>
+      <div className="mt-2 text-xs text-stone-400">Вигуки — текстом, як акорди. Прямокутники, таби, кахон і піаніно — прототип.</div>
       <div className="flex justify-end mt-3">
         <button type="button" className="px-3 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50" onClick={onClose}>
           Готово

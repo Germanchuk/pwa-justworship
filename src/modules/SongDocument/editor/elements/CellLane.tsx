@@ -23,7 +23,8 @@
  * одній комірці — буквально одна на одній. Правиться лише точне (`cells.ts`).
  */
 import * as Y from "yjs";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 import { Node } from "slate";
 import {
   DropdownMenu,
@@ -48,6 +49,8 @@ import {
   Line,
   readMeta,
   readZoom,
+  isBlackKey,
+  PIANO_ROWS,
   rowsOf,
   scaleOf,
   setLineLength,
@@ -58,7 +61,7 @@ import { useEditorCtx, useModelLine } from "../context";
 import { LaneDynamics } from "../dynamics/DynamicsZone";
 import { NoteCard } from "../notes/NoteCard";
 import { GUTTER, MARGIN_LINE } from "./gutter";
-import { INK, ROW_PX, STEP_PX } from "./stepGeometry";
+import { INK, PIANO_ROW_PX, ROW_PX, STEP_PX } from "./stepGeometry";
 import { StepRows } from "./StepRows";
 
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
@@ -191,6 +194,14 @@ function Steps({ attributes, children, element, ln, id, kind, line, slot }: Step
     const [box, c] = [el.getBoundingClientRect(), cell.getBoundingClientRect()];
     if (c.left < box.left) el.scrollLeft -= box.left - c.left + STEP_PX;
     else if (c.right > box.right) el.scrollLeft += c.right - box.right + STEP_PX;
+    // Піаніно: клавіша курсора за вікном — прокрутити вікно до неї.
+    const win = el.closest<HTMLElement>("[data-piano-scroll]");
+    const key = win && el.querySelector<HTMLElement>(`[data-step="${here!.step}"][data-row="${here!.string}"]`);
+    if (win && key) {
+      const [w, k] = [win.getBoundingClientRect(), key.getBoundingClientRect()];
+      if (k.top < w.top) win.scrollTop -= w.top - k.top + PIANO_ROW_PX;
+      else if (k.bottom > w.bottom) win.scrollTop += k.bottom - w.bottom + PIANO_ROW_PX;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hereKey]);
 
@@ -215,11 +226,31 @@ function Steps({ attributes, children, element, ln, id, kind, line, slot }: Step
     };
     const onUp = () => {
       document.removeEventListener("mousemove", onMove);
-      if (!moved) ctx.lanes.cells.select(null);
+      if (moved) return;
+      ctx.lanes.cells.select(null);
+      // Піаніно: тап без протягу ставить ноту чи прибирає її.
+      if (kind === "piano" && ctx.canEdit) ctx.lanes.cells.toggle(ReactEditor.findPath(editor, element), hit);
     };
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp, { once: true });
   };
+
+  const stepsView = (
+    <div
+      ref={scroller}
+      data-cell-scroll=""
+      // Геометрія для голки програвання (`Transport`): комірок у такті, тіків у комірці й у такті.
+      data-cells={steps}
+      data-cell-ticks={(scale.tick * TICKS) / scale.grid}
+      data-bar-ticks={barTicks(timeSignature)}
+      className={cn("relative min-w-0 overflow-x-auto", kind === "piano" && "flex-1")}
+      onScroll={onScroll}
+      onMouseDown={onMouseDown}
+    >
+      <StepRows kind={kind} slot={slot} line={line} timeSignature={timeSignature} zoom={zoom} marks={marks} selected={selected} here={here} clickable={ctx.canEdit} />
+      <div data-needle="" className="pointer-events-none absolute top-0 bottom-0 z-[3] w-0.5 -ml-px bg-red-500/80" style={{ display: "none" }} />
+    </div>
+  );
 
   // Кнопка довжини рядка — одна на рядок, перед його прямокутниками.
   const lengthHere = ctx.canEdit && lengthAnchor(editor, element, (lane) => allLanes(ctx.song.doc).find((l) => l.id === lane)?.kind);
@@ -236,29 +267,33 @@ function Steps({ attributes, children, element, ln, id, kind, line, slot }: Step
         className="relative select-none py-0.5"
         style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, lineHeight: 1.35, color: INK[kind], WebkitTouchCallout: "none" }}
       >
-        {/* До лінії поля: назви ліній і кнопка довжини — не прокручуються. */}
-        <div className="absolute text-stone-400" style={{ left: -GUTTER, top: 2, width: GUTTER - 4, textAlign: "right" }}>
-          {lengthHere && <LengthMenu line={line} timeSignature={timeSignature} />}
-          {rowsOf(kind).map((name, i) => (
-            <div key={i} style={{ height: ROW_PX, lineHeight: `${ROW_PX}px` }}>
-              {name}
+        {kind === "piano" ? (
+          // Піаніно: 88 клавіш — вікном із прокруткою вгору-вниз; назви клавіш їдуть разом із ними.
+          <>
+            {lengthHere && (
+              <div className="absolute z-[2]" style={{ left: -GUTTER, top: 2 }}>
+                <LengthMenu line={line} timeSignature={timeSignature} />
+              </div>
+            )}
+            <PianoWindow lane={id}>
+              <PianoKeys />
+              {stepsView}
+            </PianoWindow>
+          </>
+        ) : (
+          <>
+            {/* До лінії поля: назви ліній і кнопка довжини — не прокручуються. */}
+            <div className="absolute text-stone-400" style={{ left: -GUTTER, top: 2, width: GUTTER - 4, textAlign: "right" }}>
+              {lengthHere && <LengthMenu line={line} timeSignature={timeSignature} />}
+              {rowsOf(kind).map((name, i) => (
+                <div key={i} style={{ height: ROW_PX, lineHeight: `${ROW_PX}px` }}>
+                  {name}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <div
-          ref={scroller}
-          data-cell-scroll=""
-          // Геометрія для голки програвання (`Transport`): комірок у такті, тіків у комірці й у такті.
-          data-cells={steps}
-          data-cell-ticks={(scale.tick * TICKS) / scale.grid}
-          data-bar-ticks={barTicks(timeSignature)}
-          className="relative min-w-0 overflow-x-auto"
-          onScroll={onScroll}
-          onMouseDown={onMouseDown}
-        >
-          <StepRows kind={kind} slot={slot} line={line} timeSignature={timeSignature} zoom={zoom} marks={marks} selected={selected} here={here} clickable={ctx.canEdit} />
-          <div data-needle="" className="pointer-events-none absolute top-0 bottom-0 z-[3] w-0.5 -ml-px bg-red-500/80" style={{ display: "none" }} />
-        </div>
+            {stepsView}
+          </>
+        )}
       </div>
       {children}
     </div>
@@ -319,5 +354,57 @@ function LengthMenu({ line, timeSignature }: { line: Line; timeSignature: string
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** Скільки клавіш піаніно видно у вікні — півтори октави. */
+const PIANO_VISIBLE = 18;
+/** Де стоїть вікно піаніно кожної доріжки — однаково в усіх рядках пісні й для нових рядків. */
+const pianoScroll = new Map<string, number>();
+
+/**
+ * Вікно клавіш піаніно: прокрутка вгору-вниз, спільна для доріжки в усіх
+ * рядках пісні (прокрутив в одному — інші стали так само). Спершу — довкола C4.
+ */
+function PianoWindow({ lane, children }: { lane: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el) el.scrollTop = pianoScroll.get(lane) ?? Math.max(0, (PIANO_ROWS.indexOf("C4") + 1) * PIANO_ROW_PX - el.clientHeight / 2);
+  }, [lane]);
+  const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    pianoScroll.set(lane, el.scrollTop);
+    document.querySelectorAll<HTMLElement>(`[data-piano-scroll="${CSS.escape(lane)}"]`).forEach((o) => {
+      if (o !== el && o.scrollTop !== el.scrollTop) o.scrollTop = el.scrollTop;
+    });
+  };
+  return (
+    <div
+      ref={ref}
+      data-piano-scroll={lane}
+      onScroll={onScroll}
+      className="overflow-y-auto overflow-x-hidden overscroll-contain"
+      style={{ height: PIANO_VISIBLE * PIANO_ROW_PX, marginLeft: -GUTTER }}
+    >
+      <div className="flex">{children}</div>
+    </div>
+  );
+}
+
+/** Клавіші в полі: чорні — темніші, підписані лише C (межі октав). */
+function PianoKeys() {
+  return (
+    <div className="shrink-0 text-right font-sans text-[8px] leading-none text-stone-400" style={{ width: GUTTER - 2 }}>
+      {PIANO_ROWS.map((name, row) => (
+        <div
+          key={name}
+          className="flex items-center justify-end pr-0.5"
+          style={{ height: PIANO_ROW_PX, background: isBlackKey(row) ? "rgba(60, 50, 40, 0.22)" : undefined }}
+        >
+          {name.startsWith("C") && !name.startsWith("C#") ? name : ""}
+        </div>
+      ))}
+    </div>
   );
 }

@@ -128,7 +128,7 @@ export function SongHeader({ song, me, canEdit, capoApplies, change }: Props) {
             </span>
           </div>
         )}
-        {me && songLanes(doc).some((l) => l.kind === "tab" || l.kind === "cajon") && (
+        {me && songLanes(doc).some((l) => l.kind === "tab" || l.kind === "cajon" || l.kind === "piano") && (
           // Масштаб показу табів і кахона — особистий, як капо; запис від нього не залежить.
           <div className="song-meta-line">
             <label className="song-meta-badge" title="Сітка показу табів і кахона — лише для вас">

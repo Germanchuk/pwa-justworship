@@ -40,13 +40,14 @@ import {
   LineAt,
   NoteView,
   readMeta,
+  PIANO_ROWS,
   rowsOf,
   scaleOf,
   shownDynamics,
   SILENCE,
   Song,
 } from "../../model";
-import { INK, BAR_PX, ROW_PX, STEP_PX } from "../elements/stepGeometry";
+import { INK, BAR_PX, PIANO_ROW_PX, ROW_PX, STEP_PX } from "../elements/stepGeometry";
 import { StepRows } from "../elements/StepRows";
 import { LANE_ICON } from "../laneIcons";
 import { setPlayMark, usePlayMark } from "../playback/mark";
@@ -206,15 +207,20 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
     const name = id === "words" ? "Слова" : id === "chords" ? "Акорди" : (defs.find((l) => l.id === id)?.name ?? "");
     items.push(<div key={`gc${id}`} style={{ gridColumn: 1, gridRow: cardsRow, ...sticky() }} />);
     const Icon = kind && (!cells || kind === "blocks") ? LANE_ICON[kind as LaneKind] : null;
+    // Піаніно лише для перегляду: клавіші від найнижчої до найвищої вживаної в пісні (із запасом), без нот — октава від C4.
+    const pianoRows = kind === "piano" ? usedKeys(song, id) : undefined;
+    const labels = pianoRows ? pianoRows.map((row) => PIANO_ROWS[row]) : rowsOf(kind as CellKind);
+    const labelPx = kind === "piano" ? PIANO_ROW_PX : ROW_PX;
     items.push(
       <div key={`g${id}`} title={name} className="flex justify-end pr-1" style={{ gridColumn: 1, gridRow: row, ...sticky({ boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
         {Icon ? (
           <Icon aria-label={name} className="mt-1 size-3.5 shrink-0 text-stone-400" />
         ) : (
-          <span aria-label={name} className="pt-0.5 text-right font-mono text-[11px] text-stone-400">
-            {rowsOf(kind as CellKind).map((n, i) => (
-              <div key={i} style={{ height: ROW_PX, lineHeight: `${ROW_PX}px` }}>
-                {n}
+          <span aria-label={name} className={cn("pt-0.5 text-right font-mono text-stone-400", kind === "piano" ? "text-[8px]" : "text-[11px]")}>
+            {labels.map((n, i) => (
+              <div key={i} style={{ height: labelPx, lineHeight: `${labelPx}px` }}>
+                {/* Піаніно — підписані лише межі октав (C). */}
+                {kind !== "piano" || (n.startsWith("C") && !n.startsWith("C#")) ? n : ""}
               </div>
             ))}
           </span>
@@ -230,7 +236,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
       if (cells && slot instanceof Y.Map && slot.has("cells")) {
         body = (
           <div className="py-0.5" style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, lineHeight: 1.35, color: INK[kind as CellKind] }}>
-            <StepRows kind={kind as CellKind} slot={slot as Y.Map<unknown>} line={c.at.line} timeSignature={timeSignature} zoom={zoom} marks={marks} />
+            <StepRows kind={kind as CellKind} slot={slot as Y.Map<unknown>} line={c.at.line} timeSignature={timeSignature} zoom={zoom} marks={marks} rows={pianoRows} />
           </div>
         );
       } else if (!cells) {
@@ -284,6 +290,16 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
       <div data-strip-needle="" className="pointer-events-none absolute top-0 bottom-0 z-[4] w-0.5 -ml-px bg-red-500/80" style={{ display: "none" }} />
     </div>
   );
+}
+
+/** Клавіші піаніно доріжки `lane`, на яких у пісні є ноти, — суцільним проміжком із запасом у дві; без нот — октава від C4. */
+function usedKeys(song: Song, lane: string): number[] {
+  const rows = layout(song).flatMap((l) => {
+    const cells = (l.line.get(lane) as Y.Map<unknown> | undefined)?.get?.("cells");
+    return cells instanceof Y.Map ? Array.from(cells.keys(), (key) => Number(String(key).split("/")[1]) - 1).filter((r) => r >= 0) : [];
+  });
+  const [top, bottom] = rows.length ? [Math.max(0, Math.min(...rows) - 2), Math.min(PIANO_ROWS.length - 1, Math.max(...rows) + 2)] : [PIANO_ROWS.indexOf("C5"), PIANO_ROWS.indexOf("C4")];
+  return Array.from({ length: bottom - top + 1 }, (_, i) => top + i);
 }
 
 /** Текст доріжки з позначками приміток — шарами їхніх кольорів, закреслення — рисою. */

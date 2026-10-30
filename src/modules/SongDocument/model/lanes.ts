@@ -15,12 +15,12 @@ import type { Line, Song } from "./song";
 import { gridOf, staleCajon, staleGrid, upgradeCajon, upgradeGrid } from "./cells";
 
 /** `text` — додана текстова доріжка (вигуки, бек-вокал): правиться як акорди, текстом у Slate. */
-export type LaneKind = "words" | "chords" | "text" | "blocks" | "tab" | "cajon";
-export type CellKind = "blocks" | "tab" | "cajon";
+export type LaneKind = "words" | "chords" | "text" | "blocks" | "tab" | "cajon" | "piano";
+export type CellKind = "blocks" | "tab" | "cajon" | "piano";
 export type LaneDef = { id: string; kind: LaneKind; name: string; order: number; removed: boolean };
 
 /** Види, які можна додати в пісню (слова й акорди є завжди). */
-export const CELL_KINDS: readonly CellKind[] = ["blocks", "tab", "cajon"];
+export const CELL_KINDS: readonly CellKind[] = ["blocks", "tab", "cajon", "piano"];
 export const KIND_NAMES: Record<LaneKind, string> = {
   words: "Слова",
   chords: "Акорди",
@@ -28,6 +28,7 @@ export const KIND_NAMES: Record<LaneKind, string> = {
   blocks: "Прямокутники",
   tab: "Таби",
   cajon: "Кахон",
+  piano: "Піаніно",
 };
 /** Текстові доріжки правляться в Slate: слова, акорди й додані `text`. */
 export const isTextKind = (kind: LaneKind) => kind === "words" || kind === "chords" || kind === "text";

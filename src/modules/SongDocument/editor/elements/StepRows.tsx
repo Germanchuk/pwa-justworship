@@ -18,8 +18,8 @@
 import * as Y from "yjs";
 import type { ReactNode } from "react";
 import { highlightBg, isStrike, OTHERS_NEUTRAL_COLOR, STRIKE_INK } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/colors";
-import { CellAt, CellKind, cellSpan, Line, NoteView, placeCells, rowsOf, stepsPerBeat } from "../../model";
-import { BAR_PX, INK, ROW_PX, STEP_PX, stepGeometry } from "./stepGeometry";
+import { CellAt, CellKind, cellSpan, isBlackKey, Line, NoteView, placeCells, rowsOf, stepsPerBeat } from "../../model";
+import { BAR_PX, INK, rowPxOf, STEP_PX, stepGeometry } from "./stepGeometry";
 
 const DASH = "linear-gradient(currentColor, currentColor) center / calc(100% - 2px) 1px no-repeat";
 /** Фон кольором — шаром, щоб лягати під риску й під прямокутник. */
@@ -45,9 +45,16 @@ type Props = {
   here?: CellAt | null;
   /** Кроки клікабельні (правка). */
   clickable?: boolean;
+  /** Які лінії показати (з 0); за замовчуванням — усі (піаніно в смузі — лише вживані клавіші). */
+  rows?: readonly number[];
 };
 
-export function StepRows({ kind, slot, line, timeSignature, zoom, marks, selected, here, clickable }: Props) {
+/** Чорні клавіші піаніно — трохи темніші, межа октави — лінією під C. */
+const BLACK_KEY = "rgba(60, 50, 40, 0.07)";
+const OCTAVE_EDGE = "inset 0 -1px 0 rgba(120, 95, 50, 0.22)";
+
+export function StepRows({ kind, slot, line, timeSignature, zoom, marks, selected, here, clickable, rows }: Props) {
+  const ROW_PX = rowPxOf(kind);
   const { scale, stepPx, sizes } = stepGeometry(kind, line, timeSignature, zoom);
   const steps = scale.cells;
   // Доля — у кроках запису: смуги лягають за часом, а не за номером комірки.
@@ -103,8 +110,8 @@ export function StepRows({ kind, slot, line, timeSignature, zoom, marks, selecte
   };
   const fixed = (width: number): React.CSSProperties => ({ flex: "none", width, textAlign: "center" });
   /** Лінія доріжки: такти з кроками (назва лінії — до лінії поля). */
-  const row = (key: string, fn: (step: number) => ReactNode) => (
-    <div key={key} className="whitespace-pre flex items-stretch" style={{ lineHeight: `${ROW_PX}px` }}>
+  const row = (key: string, fn: (step: number) => ReactNode, lineStyle: React.CSSProperties = {}) => (
+    <div key={key} className="whitespace-pre flex items-stretch" style={{ lineHeight: `${ROW_PX}px`, ...lineStyle }}>
       {sizes.flatMap((size, b) => [
         <span key={`bar${b}`} className="text-stone-400" style={fixed(BAR_PX)}>
           |
@@ -123,19 +130,29 @@ export function StepRows({ kind, slot, line, timeSignature, zoom, marks, selecte
    */
   const lineStep = (at: CellAt) => {
     const cell = shown(at);
+    const piano = kind === "piano";
     return stepSpan(
       at,
-      cell?.all.map(({ value, off }, i) => (
-        <span
-          key={i}
-          className="absolute inset-0 flex items-center justify-center"
-          // Не на своїй долі — блідо-червона; що далі від долі, то трохи прозоріша.
-          style={off ? { color: OFF_GRID_INK, opacity: 1 - off * 0.6 } : undefined}
-        >
-          {/* Двозначний лад стискається, щоб уміститись у крок. */}
-          {value.length > 1 ? <span style={{ display: "inline-block", transform: "scaleX(0.7)" }}>{value}</span> : value}
-        </span>
-      )),
+      cell?.all.map(({ value, off }, i) =>
+        // Піаніно, як piano roll: нота — заповнений прямокутник, порожня клітинка — без риски.
+        piano ? (
+          <span
+            key={i}
+            className="absolute rounded-[2px]"
+            style={{ inset: 1, background: off ? OFF_GRID_INK : INK.piano, opacity: off ? 1 - off * 0.6 : 1 }}
+          />
+        ) : (
+          <span
+            key={i}
+            className="absolute inset-0 flex items-center justify-center"
+            // Не на своїй долі — блідо-червона; що далі від долі, то трохи прозоріша.
+            style={off ? { color: OFF_GRID_INK, opacity: 1 - off * 0.6 } : undefined}
+          >
+            {/* Двозначний лад стискається, щоб уміститись у крок. */}
+            {value.length > 1 ? <span style={{ display: "inline-block", transform: "scaleX(0.7)" }}>{value}</span> : value}
+          </span>
+        ),
+      ),
       {
         ...fixed(STEP_PX),
         display: "flex",
@@ -145,12 +162,25 @@ export function StepRows({ kind, slot, line, timeSignature, zoom, marks, selecte
         fontSize: 10,
         fontWeight: 600,
         color: cell ? INK[kind] : "#a8a29e",
-        background: cell ? undefined : DASH,
+        background: cell || piano ? undefined : DASH,
       },
     );
   };
 
   // Таби — струна на лінію, кахон — вид удару на лінію.
+  if (kind === "piano") {
+    const names = rowsOf(kind);
+    return (
+      <>
+        {(rows ?? names.map((_, i) => i)).map((string) =>
+          row(names[string], (step) => lineStep({ step, string }), {
+            background: isBlackKey(string) ? BLACK_KEY : undefined,
+            boxShadow: names[string].startsWith("C") && !names[string].startsWith("C#") ? OCTAVE_EDGE : undefined,
+          }),
+        )}
+      </>
+    );
+  }
   if (kind !== "blocks") return <>{rowsOf(kind).map((name, string) => row(name, (step) => lineStep({ step, string })))}</>;
   // Прямокутники: назва відкриває блок, «-» його тягне; порожній крок — «·».
   return row("blocks", (step) => {
