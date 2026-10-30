@@ -18,6 +18,7 @@
  * Лише перегляд: правка — у звичайному вигляді (поки що).
  */
 import * as Y from "yjs";
+import { cn } from "@/lib/utils";
 import type { CSSProperties, ReactNode } from "react";
 import { transposeChordTextForCapo } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/transposeChords";
 import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/model";
@@ -168,8 +169,9 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
         {sizes.map((size, b) => {
           const eighth = c.start + b * per;
           return (
-            // Номер такту — посередині по висоті: відступ над ним такий самий, як під ним (нижня лінія — 1px).
-            <span key={b} className="relative flex shrink-0 items-center border-l border-stone-300 pb-px pl-0.5 leading-none" style={{ width: BAR_PX + size * STEP_PX }}>
+            // Номер такту — посередині по висоті (над ним відступ, як під ним; нижня лінія — 1px).
+            // Риска — перед кожним тактом, крім першого: там уже межа рядка чи поля доріжок.
+            <span key={b} className={cn("relative flex shrink-0 items-center pb-px pl-0.5 leading-none", b > 0 && "border-l border-stone-300")} style={{ width: BAR_PX + size * STEP_PX }}>
               {Math.floor(eighth / per) + 1}
               {eighth % per ? `.${eighth % per}` : ""}
               {b === 0 && mark === c.ln && <span className="ml-0.5 text-red-500">▶</span>}
