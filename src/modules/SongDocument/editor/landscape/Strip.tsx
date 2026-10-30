@@ -18,7 +18,6 @@
  * Лише перегляд: правка — у звичайному вигляді (поки що).
  */
 import * as Y from "yjs";
-import { ChatBubbleBottomCenterTextIcon, MegaphoneIcon, MusicalNoteIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/utils";
 import type { CSSProperties, ReactNode } from "react";
 import { transposeChordTextForCapo } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/transposeChords";
@@ -33,6 +32,7 @@ import {
   eighthsPerBar,
   getDynamicsStepColor,
   isTimeRange,
+  LaneKind,
   laneText,
   layout,
   lineKind,
@@ -48,15 +48,15 @@ import {
 } from "../../model";
 import { INK, BAR_PX, ROW_PX, STEP_PX } from "../elements/stepGeometry";
 import { StepRows } from "../elements/StepRows";
+import { LANE_ICON } from "../laneIcons";
 import { setPlayMark, usePlayMark } from "../playback/mark";
 
 /**
  * Поле зліва — не прокручується, і воно вузьке, щоб пісні лишалось місце:
  * таби й кахон підписані самими назвами ліній (струни, удари — і так ясно,
- * що це), решта доріжок — іконкою, як у шапці пісні (назва — підказкою).
+ * що це), решта доріжок — іконкою, як у шапці пісні (`LANE_ICON`; назва — підказкою).
  */
 export const STRIP_GUTTER = 22;
-const LANE_ICON = { words: ChatBubbleBottomCenterTextIcon, chords: MusicalNoteIcon, text: MegaphoneIcon, blocks: Squares2X2Icon } as const;
 const SECTION_PX = 20;
 const RULER_PX = 16;
 const DYN_PX = 4;
@@ -205,7 +205,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
     const cells = (CELL_KINDS as readonly string[]).includes(kind ?? "");
     const name = id === "words" ? "Слова" : id === "chords" ? "Акорди" : (defs.find((l) => l.id === id)?.name ?? "");
     items.push(<div key={`gc${id}`} style={{ gridColumn: 1, gridRow: cardsRow, ...sticky() }} />);
-    const Icon = !cells || kind === "blocks" ? LANE_ICON[(kind ?? "text") as keyof typeof LANE_ICON] : null;
+    const Icon = kind && (!cells || kind === "blocks") ? LANE_ICON[kind as LaneKind] : null;
     items.push(
       <div key={`g${id}`} title={name} className="flex justify-end pr-1" style={{ gridColumn: 1, gridRow: row, ...sticky({ boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
         {Icon ? (

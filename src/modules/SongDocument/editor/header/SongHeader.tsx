@@ -3,7 +3,8 @@
  * режимі правки); капо й видимі доріжки — особисте кожного.
  */
 import { useState, type ReactNode } from "react";
-import { MusicalNoteIcon, ChatBubbleBottomCenterTextIcon, Squares2X2Icon, AdjustmentsHorizontalIcon } from "@heroicons/react/24/outline";
+import { AdjustmentsHorizontalIcon } from "@heroicons/react/24/outline";
+import { LANE_ICON } from "../laneIcons";
 import { Switch } from "@/components/ui/switch";
 import { BpmModal } from "#modules/SingleSong/components/SlateLyricsPlayground/elements/Bpm/BpmModal";
 import { CapoModal } from "#modules/SingleSong/components/SlateLyricsPlayground/elements/Capo/CapoModal";
@@ -39,7 +40,6 @@ type Props = {
   change: (fn: () => void) => void;
 };
 
-const LANE_ICONS = { words: ChatBubbleBottomCenterTextIcon, chords: MusicalNoteIcon } as const;
 
 function Badge(props: { label: string; value: ReactNode; readonly: boolean; muted?: boolean; title?: string; onOpen: () => void }) {
   return (
@@ -150,7 +150,7 @@ export function SongHeader({ song, me, canEdit, capoApplies, change }: Props) {
         {me && (
           <span className="display-toggles">
             {songLanes(doc).map(({ id: lane, kind, name: label }) => {
-              const Icon = kind === "words" || kind === "chords" ? LANE_ICONS[kind] : kind === "text" ? LANE_ICONS.words : Squares2X2Icon;
+              const Icon = LANE_ICON[kind];
               return (
               <span key={lane} className="song-meta-line">
                 <span
