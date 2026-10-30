@@ -158,7 +158,8 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
         {sizes.map((size, b) => {
           const eighth = c.start + b * per;
           return (
-            <span key={b} className="relative shrink-0 border-l border-stone-300 pl-0.5" style={{ width: BAR_PX + size * STEP_PX }}>
+            // Номер такту — посередині по висоті: відступ над ним такий самий, як під ним (нижня лінія — 1px).
+            <span key={b} className="relative flex shrink-0 items-center border-l border-stone-300 pb-px pl-0.5 leading-none" style={{ width: BAR_PX + size * STEP_PX }}>
               {Math.floor(eighth / per) + 1}
               {eighth % per ? `.${eighth % per}` : ""}
               {b === 0 && mark === c.ln && <span className="ml-0.5 text-red-500">▶</span>}
