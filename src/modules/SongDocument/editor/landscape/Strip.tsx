@@ -108,6 +108,15 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
   // Кут: над полем — порожньо, але непрозоро (під ним їдуть таймлайн і примітки).
   items.push(<div key="corner" style={{ gridColumn: 1, gridRow: "1 / 4", ...sticky({ top: 0, zIndex: 5 }) }} />);
 
+  // Підкладка під примітки й таймлайн на всю ширину: де примітки немає (до першої,
+  // порожній рядок), між таймлайном і панеллю згори не просвічує пісня.
+  items.push(
+    <div
+      key="backdrop"
+      style={{ gridColumn: "2 / -1", gridRow: "1 / 3", position: "sticky", top: 0, zIndex: 1, height: SECTION_PX + RULER_PX, background: PAPER }}
+    />,
+  );
+
   // Структурні примітки: напис пливе вздовж своїх колонок, поки вони на екрані.
   sections.forEach((s, i) =>
     items.push(
@@ -245,7 +254,8 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
     <div
       data-strip=""
       className="relative grid w-max min-w-full content-start pb-6"
-      style={{ gridTemplateColumns: `${STRIP_GUTTER}px repeat(${cols.length}, max-content)`, gridAutoRows: "auto" }}
+      // Ряди примітки й таймлайну — сталої висоти: на них стоять липкі відступи (`top`).
+      style={{ gridTemplateColumns: `${STRIP_GUTTER}px repeat(${cols.length}, max-content)`, gridTemplateRows: `${SECTION_PX}px ${RULER_PX}px`, gridAutoRows: "auto" }}
     >
       {items}
       <div data-strip-needle="" className="pointer-events-none absolute top-0 bottom-0 z-[4] w-0.5 -ml-px bg-red-500/80" style={{ display: "none" }} />
