@@ -67,7 +67,11 @@ export function LandscapeSong({ song }: { song: Song }) {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "#f8f5eb", paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }}>
-      <header className={cn("relative flex shrink-0 items-center gap-1.5 px-1.5 py-1", SMALL_TILES)}>
+      {/* Межа панелі — явна: лінія й легка тінь на пісню, що прокручується під нею. */}
+      <header
+        className={cn("relative z-[6] flex shrink-0 items-center gap-1.5 border-b border-stone-300 px-1.5 py-1", SMALL_TILES)}
+        style={{ background: "#f8f5eb", boxShadow: "0 2px 6px -2px rgba(59, 47, 26, 0.18)" }}
+      >
         <BackButton />
         <button
           type="button"
