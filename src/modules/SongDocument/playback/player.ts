@@ -8,7 +8,8 @@
  * перечитується на кожному колі. Темп і сховані доріжки теж читаються
  * порядково: зміна діє з наступного рядка.
  *
- * Перед стартом — відлік в один такт. Програвання глушить мій локальний дрон
+ * Перед стартом — відлік в один такт; перший ▶ ще й чекає семпли гітари
+ * (`loadGuitar`), без них таби мовчать. Програвання глушить мій локальний дрон
  * (у навушниках був би другий клік); хоста звуку не чіпає.
  *
  * Синглтон: звук один на пристрій, а кнопки й голка живуть у різних місцях.
@@ -17,7 +18,7 @@ import * as Tone from "tone";
 import DronePlayer from "#modules/SingleSong/services/DronePlayer/DronePlayer";
 import { DEFAULT_BPM } from "#modules/SingleSong/services/songChords/songDefaults";
 import { barTicks, readMeta, Song, TICKS } from "../model";
-import { createKit, type Kit } from "./instruments";
+import { createKit, loadGuitar, type Kit } from "./instruments";
 import { linePlan, nextLine, Span, tickSeconds } from "./timeline";
 
 export type PlayState = "idle" | "count" | "playing";
@@ -74,7 +75,10 @@ class LanePlayer {
   start = async (start: Start) => {
     this.stop();
     const generation = ++this.generation;
-    await Tone.start();
+    const [, guitar] = await Promise.all([
+      Tone.start(),
+      loadGuitar().catch((error) => (console.warn("lane playback: guitar samples", error), null)),
+    ]);
     if (generation !== this.generation) return;
     DronePlayer.getInstance().stop();
 
@@ -84,7 +88,7 @@ class LanePlayer {
     const unitTicks = TICKS / (Number(timeSignature.split("/")[1]) || 4);
     const beats = Math.max(1, Math.round(barTicks(timeSignature) / unitTicks));
     const t0 = ctx.currentTime + 0.12;
-    const kit = createKit();
+    const kit = createKit(guitar);
     for (let i = 0; i < beats; i++) kit.click(t0 + i * unitTicks * spt);
     const countEnd = t0 + beats * unitTicks * spt;
     this.session = {

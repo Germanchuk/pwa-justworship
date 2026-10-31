@@ -1,10 +1,10 @@
 /**
- * Тембри програвання доріжок (ADR-0009) — спершу найдешевші, синтезовані, без
- * семплів; судить вухо. Кожен виклик — подія в момент `time` (секунди
- * аудіоконтексту), тож звучить точно, навіть якщо запланована наперед.
+ * Тембри програвання доріжок (ADR-0009) — дешеві, синтезовані, крім гітари;
+ * судить вухо. Кожен виклик — подія в момент `time` (секунди аудіоконтексту),
+ * тож звучить точно, навіть якщо запланована наперед.
  *
- *  - таби — щипок Karplus-Strong (`PluckSynth`), м'який, з дещицею кімнати, по
- *    синту на струну: новий щипок тієї ж струни глушить попередній, як на
+ *  - таби — семпли електрогітари (`loadGuitar`), трохи овердрайву й кімнати, по
+ *    семплеру на струну: новий щипок тієї ж струни глушить попередній, як на
  *    гітарі; `x` — глухий клац;
  *  - кахон — бас (мембрана), тон (шум у середині й коротка мембрана), гост
  *    (тихий сухий шум);
@@ -19,10 +19,32 @@ import { voiceChord } from "./voiceChord";
 
 /** Відкриті струни (MIDI) згори донизу, як рядки табів: e B G D A E. */
 const OPEN = [64, 59, 55, 50, 45, 40];
-/** Скільки секунд дзвенить щипок струни (до −60 дБ). */
-const RING_S = 1.8;
 
-const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+// Електрогітара Karoryfer Samples з набору tonejs-instruments (Nicholaus Brosowsky), CC-BY 3.0.
+// Семпл на кожну малу терцію E2–C6, тож Sampler розтягує ≤ ±1.5 півтона; обрізані до 3 с.
+const GUITAR_URLS = import.meta.glob<string>("./guitar/*.mp3", { eager: true, query: "?url", import: "default" });
+
+/** Семпли гітари за MIDI. */
+export type GuitarSamples = Record<number, AudioBuffer>;
+let guitar: Promise<GuitarSamples> | null = null;
+
+/** Семпли гітари вантажаться раз на запуск застосунку; перший ▶ чекає на них. */
+export const loadGuitar = () =>
+  (guitar ??= Promise.all(
+    Object.entries(GUITAR_URLS).map(async ([path, url]) => {
+      const note = /(\w+)\.mp3$/.exec(path)![1].replace("s", "#"); // Fs2 → F#2
+      return [Midi.toMidi(note)!, trimLead(await Tone.ToneAudioBuffer.fromUrl(url))] as const;
+    }),
+  ).then(Object.fromEntries, (error) => {
+    guitar = null; // наступний ▶ спробує ще раз
+    throw error;
+  }));
+
+/** Тиша перед щипком (затримка кодека mp3) запізнила б його проти долі. */
+function trimLead(buffer: Tone.ToneAudioBuffer) {
+  const first = buffer.getChannelData(0).findIndex((v) => Math.abs(v) > 0.01);
+  return (first > 0 ? buffer.slice(first / buffer.sampleRate) : buffer).get()!;
+}
 
 export type Kit = {
   tab: (string: number, fret: number | "x", time: number) => void;
@@ -48,7 +70,8 @@ function chordNotes(name: string, prevUpper: number[] | null) {
   return voiceChord({ chordPcs: pcs, bassPc, prevUpper });
 }
 
-export function createKit(): Kit {
+/** `samples` — з `loadGuitar`; без них таби мовчать. */
+export function createKit(samples: GuitarSamples | null): Kit {
   const out = new Tone.Volume(-10).toDestination(); // удари кахона й акорд разом не перевантажують вихід
   const nodes: { dispose: () => unknown }[] = [out];
   const add = <T extends { dispose: () => unknown }>(node: T) => (nodes.push(node), node);
@@ -71,17 +94,13 @@ export function createKit(): Kit {
     }
   };
 
-  // Гітара (2026-10-31: була різка, низи дзижчали). У `PluckSynth` Tone 15 фільтр стоїть лише
-  // на шумі атаки, а не в петлі струни: усі гармоніки згасають разом, і низька нота довго
-  // дзижчить «пилкою». Тож верхи гасимо самі — фільтр струни після щипка за мить темніє до
-  // кількох гармонік (`tab`), — а дзвін рівняємо в секундах, не в періодах. Плюс трохи кімнати.
-  const guitar = add(new Tone.Volume(4).connect(out));
-  const room = add(new Tone.Reverb({ decay: 1.5, preDelay: 0.01, wet: 0.2 }).connect(guitar));
-  // Басові струни трохи гучніші: без дзизку їм бракує ваги поруч із верхніми.
-  const strings = OPEN.map((_, i) => {
-    const tone = add(new Tone.Filter({ type: "lowpass", frequency: 3000, rolloff: -12, Q: 0.3 }).connect(room));
-    return { synth: add(new Tone.PluckSynth({ attackNoise: 0.5, dampening: 2200, release: 1, volume: i * 0.8 }).connect(tone)), tone };
-  });
+  // Гітара (2026-10-31: синтезований щипок звучав противно — Герман попросив семпли).
+  // Струни → трохи овердрайву → «кабінет» (без зрізу верхів овердрайв дзижчить) → кімната.
+  const level = add(new Tone.Volume(-3).connect(out));
+  const room = add(new Tone.Reverb({ decay: 1.5, preDelay: 0.01, wet: 0.2 }).connect(level));
+  const cabinet = add(new Tone.Filter({ type: "lowpass", frequency: 4000, rolloff: -24 }).connect(room));
+  const drive = add(new Tone.Distortion({ distortion: 0.2, oversample: "4x" }).connect(cabinet));
+  const strings = samples ? OPEN.map(() => add(new Tone.Sampler({ urls: samples, release: 0.08 }).connect(drive))) : [];
   const muteFilter = add(new Tone.Filter({ type: "bandpass", frequency: 1400, Q: 1.2 }).connect(out));
   const mute = add(new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.001, decay: 0.04, sustain: 0 }, volume: -10 }).connect(muteFilter));
 
@@ -119,13 +138,8 @@ export function createKit(): Kit {
         if (fret === "x") return mute.triggerAttackRelease(0.04, at(mute, time));
         const s = strings[string - 1];
         if (!s) return;
-        const f = hz(OPEN[string - 1] + fret);
-        const t = at(s.synth, time);
-        s.synth.resonance = 10 ** (-3 / (RING_S * f)); // −60 дБ за RING_S секунд на будь-якій висоті
-        s.tone.frequency.cancelScheduledValues(t);
-        s.tone.frequency.setValueAtTime(clamp(f * 14, 2500, 6000), t);
-        s.tone.frequency.exponentialRampToValueAtTime(clamp(f * 6, 800, 3000), t + 0.4);
-        s.synth.triggerAttack(f, t);
+        s.releaseAll(time);
+        s.triggerAttack(hz(OPEN[string - 1] + fret), time);
       }),
     cajon: (hit, time) =>
       safely(() => {
