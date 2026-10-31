@@ -3,13 +3,18 @@ import * as Y from "yjs";
 import { barSizes, CellAt, CellKind, Line, lineLength, scaleOf } from "../../model";
 
 export const INK: Record<CellKind, string> = { tab: "#57534e", cajon: "#92400e", blocks: "#1e40af", piano: "#6d28d9" };
-export const STEP_PX = 12;
-export const ROW_PX = 17;
+// Сітка — у 1,5 раза більша, ніж була (12 / 17 / 8 / 11 px, шрифт 13 і 10; рішення
+// Германа 2026-10-31); дробове округлено до цілих px, щоб лінії не розмивались.
+export const STEP_PX = 18;
+export const ROW_PX = 26;
 /** Лінія-клавіша піаніно нижча за струну: 88 клавіш і так довгі. */
-export const PIANO_ROW_PX = 11;
+export const PIANO_ROW_PX = 16;
 /** Висота лінії доріжки виду `kind`. */
 export const rowPxOf = (kind: CellKind) => (kind === "piano" ? PIANO_ROW_PX : ROW_PX);
-export const BAR_PX = 8;
+export const BAR_PX = 12;
+/** Шрифт смуги кроків (риски тактів, назви прямокутників) і знака в кроці (лад, удар). */
+export const STEPS_FONT_PX = 19.5;
+export const STEP_GLYPH_PX = 15;
 /**
  * Геометрія рядка доріжки виду `kind`: масштаб, такти в комірках і ширина
  * кроку. Прямокутники без масштабу: їхня комірка ширша чи вужча, щоб такт був

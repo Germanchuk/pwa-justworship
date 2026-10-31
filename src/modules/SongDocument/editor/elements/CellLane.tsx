@@ -61,7 +61,7 @@ import { useEditorCtx, useModelLine } from "../context";
 import { LaneDynamics } from "../dynamics/DynamicsZone";
 import { NoteCard } from "../notes/NoteCard";
 import { GUTTER, MARGIN_LINE } from "./gutter";
-import { INK, PIANO_ROW_PX, ROW_PX, rowPxOf, STEP_PX, stepAtPoint, stepGeometry, stepsVersion, stepX } from "./stepGeometry";
+import { INK, PIANO_ROW_PX, ROW_PX, rowPxOf, STEP_PX, STEPS_FONT_PX, stepAtPoint, stepGeometry, stepsVersion, stepX } from "./stepGeometry";
 import { StepRows } from "./StepRows";
 
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.18)";
@@ -253,7 +253,7 @@ function Steps({ attributes, children, element, ln, id, kind, line, slot }: Step
         contentEditable={false}
         data-cell-steps=""
         className="relative select-none py-0.5"
-        style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, lineHeight: 1.35, color: INK[kind], WebkitTouchCallout: "none" }}
+        style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: STEPS_FONT_PX, lineHeight: 1.35, color: INK[kind], WebkitTouchCallout: "none" }}
       >
         {kind === "piano" ? (
           // Піаніно: 88 клавіш — вікном із прокруткою вгору-вниз; назви клавіш їдуть разом із ними.
@@ -271,7 +271,8 @@ function Steps({ attributes, children, element, ln, id, kind, line, slot }: Step
         ) : (
           <>
             {/* До лінії поля: назви ліній і кнопка довжини — не прокручуються. */}
-            <div className="absolute text-stone-400" style={{ left: -GUTTER, top: 2, width: GUTTER - 4, textAlign: "right" }}>
+            {/* Назви ліній — шрифтом, як до збільшення сітки: поле вузьке. */}
+            <div className="absolute text-stone-400" style={{ left: -GUTTER, top: 2, width: GUTTER - 4, textAlign: "right", fontSize: 13 }}>
               {lengthHere && <LengthMenu line={line} timeSignature={timeSignature} />}
               {rowsOf(kind).map((name, i) => (
                 <div key={i} style={{ height: ROW_PX, lineHeight: `${ROW_PX}px` }}>
@@ -325,7 +326,8 @@ function LengthMenu({ line, timeSignature }: { line: Line; timeSignature: string
       <DropdownMenuTrigger
         aria-label={`Довжина рядка: ${label}`}
         title={`Довжина рядка: ${label}`}
-        className="absolute left-0 top-0 z-[2] flex h-[17px] min-w-[14px] max-w-[22px] items-center justify-center whitespace-nowrap rounded border border-stone-300 bg-white/90 px-0.5 font-sans text-[9px] font-semibold leading-none tracking-tight text-stone-600 hover:text-stone-900"
+        style={{ height: ROW_PX }}
+        className="absolute left-0 top-0 z-[2] flex min-w-[14px] max-w-[22px] items-center justify-center whitespace-nowrap rounded border border-stone-300 bg-white/90 px-0.5 font-sans text-[9px] font-semibold leading-none tracking-tight text-stone-600 hover:text-stone-900"
       >
         {short}
       </DropdownMenuTrigger>
