@@ -13,8 +13,6 @@ import { Editable, ReactEditor, Slate, withReact } from "slate-react";
 import { useCanAnnotate, useCanEditContent, useCapoApplies } from "#modules/SingleSong/mode";
 import { useConnectionStatus, useNotesViewers } from "#modules/SingleSong/redux/selectors";
 import { useCurrentUsername } from "#modules/SingleSong/components/SlateLyricsPlayground/elements/hooks";
-import DronePlayer from "#modules/SingleSong/services/DronePlayer/DronePlayer";
-import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/model";
 import {
   isTimeRange,
   readCapo,
@@ -27,9 +25,8 @@ import {
 } from "../model";
 import { createLaneView, type LaneDisplay } from "../bridge/laneView";
 import { Ctx, type EditorCtx } from "./context";
-import { setActiveSong } from "./activeSong";
 import { DynamicsPalette } from "./dynamics/DynamicsPalette";
-import { setDynamicsPanel, useDynamicsPanel } from "./dynamics/panel";
+import { useDynamicsPanel } from "./dynamics/panel";
 import { useStroke, type Brush } from "./dynamics/useStroke";
 import { FOREIGN_KEY, Leaf, NOTE_KEY } from "./elements/Leaf";
 import { renderElement } from "./elements/renderElement";
@@ -39,17 +36,19 @@ import { NotesTools } from "./notes/NotesTools";
 import { Transport } from "./playback/Transport";
 import { RemovalWarning } from "./RemovalWarning";
 import { useDocVersion, useLinesDoc } from "./useLinesDoc";
-import { useHealSlots } from "./useHealSlots";
+import { useSongSession } from "./useSongSession";
 import { LandscapeSong } from "./landscape/LandscapeSong";
-import { useLandscapePhone } from "./landscape/useLandscapePhone";
+import { DesktopSong } from "./strip/DesktopSong";
+import { useSongFormat } from "./useSongFormat";
 // Вигляд записничка — спільний зі статичним показом (зібрання), що ще на
 // старому редакторі. Газетних колонок, як там, тут немає: одна колонка на всю
 // ширину, щоб влазили додані доріжки (рішення Германа 2026-10-28, поки що).
+// На ПК замість редактора — смуга (з 2026-10-31).
 import "#modules/SingleSong/components/SlateLyricsPlayground/SlateLyricsPlayground.css";
 
 export function SongEditor({ songId }: { songId: string | number }) {
   const { song, synced } = useLinesDoc(songId);
-  const landscape = useLandscapePhone();
+  const format = useSongFormat();
   const status = useConnectionStatus();
   if (status === "error") {
     return (
@@ -59,8 +58,11 @@ export function SongEditor({ songId }: { songId: string | number }) {
     );
   }
   if (!synced) return <div className="text-gray-400 text-sm p-4">Підключення до сервера…</div>;
-  // Телефон лежачи — пісня однією смугою, окремим виглядом (`SONG-98`).
-  return landscape ? <LandscapeSong song={song} /> : <LoadedEditor song={song} />;
+  // Телефон лежачи — пісня однією смугою, окремим виглядом (`SONG-98`); ПК — та
+  // сама смуга, розрізана по рядках (`SONG-97`). Обидва поки лише показують.
+  if (format === "landscape") return <LandscapeSong song={song} />;
+  if (format === "desktop") return <DesktopSong song={song} />;
+  return <LoadedEditor song={song} />;
 }
 
 function LoadedEditor({ song }: { song: Song }) {
@@ -90,21 +92,12 @@ function LoadedEditor({ song }: { song: Song }) {
   }, [lanes, hidden.join(), zoom]); // eslint-disable-line react-hooks/exhaustive-deps
   const view = lanes.view;
 
-  useHealSlots(song);
+  useSongSession(song);
 
   // Курсор-крок у клітинковій доріжці живе поза Slate — перемальовуватись на його рух.
   const [, cellMoved] = useState(0);
   useEffect(() => lanes.cells.listen(() => cellMoved((n) => n + 1)), [lanes]);
   useEffect(() => lanes.removal.listen(() => cellMoved((n) => n + 1)), [lanes]);
-
-  // Пісня — для меню поза редактором; панель динаміки нової пісні — закрита.
-  useEffect(() => {
-    setActiveSong(song);
-    return () => {
-      setActiveSong(null);
-      setDynamicsPanel(false);
-    };
-  }, [song]);
 
   const [brush, setBrush] = useState<Brush>("calm");
   const stroke = useStroke(song, brush, lanes.paint);
@@ -120,17 +113,6 @@ function LoadedEditor({ song }: { song: Song }) {
   // У правці — ще й чужі, сірим (`NOTE-15`): правка зачепить чужий якір.
   const viewers = useNotesViewers();
   const notes = resolveNotes(song, viewers, lanes.isShown, { others: canEdit });
-
-  // Дрон грає ЦЮ пісню: тональність і темп — з документа на кожне «увімкнути».
-  useEffect(() => {
-    const player = DronePlayer.getInstance();
-    player.setSource(() => {
-      const m = readMeta(song.doc);
-      const [num, den] = m.timeSignature.split("/").map(Number);
-      return { name: m.name || null, bpm: m.bpm, timeSignature: [num || 4, den || 4], key: m.key as SongKeyValue };
-    });
-    return () => player.setSource(null);
-  }, [song]);
 
   // Поза правкою каретки немає — щоб після повернення не лишалось «привида».
   useEffect(() => {

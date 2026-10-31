@@ -1,7 +1,14 @@
 /**
- * Пісня однією смугою (горизонтальний формат телефона): рядки йдуть один за
- * одним уздовж осі часу, кожна доріжка — один довгий трек через усю пісню,
- * як у DAW. Сітка: колонка — рядок пісні, ряд — доріжка.
+ * Пісня смугою, як треки в DAW (`SONG-98`, `SONG-97`): сітка, де колонка —
+ * рядок пісні, ряд — доріжка. Один вигляд на два формати:
+ *
+ * - телефон лежачи — **одна смуга**: рядки йдуть один за одним уздовж осі
+ *   часу, кожна доріжка — один довгий трек через усю пісню;
+ * - ПК (`split`) — та сама смуга, **розрізана по рядках**: кожен рядок пісні —
+ *   своя смуга на всю ширину, згори донизу; структурна примітка — заголовок
+ *   над смугами своєї частини, порожній рядок — проміжок.
+ *
+ * Будь-яка зміна вигляду смуги — для обох форматів одразу.
  *
  *     | 1    2    | 3    4      (таймлайн під самою панеллю: такти пісні наскрізно)
  *     | ▀▀▀▀▀▀▀▀▀ | ▀▀▀▀▀▀▀     (динаміка впритул: спільна, під нею моя)
@@ -15,7 +22,7 @@
  * вузька щілина; структурна примітка колонки не має — вона заголовок усього,
  * що за нею, до наступної.
  *
- * Лише перегляд: правка — у звичайному вигляді (поки що).
+ * Лише перегляд: правка — у редакторі Slate (телефон стоячи, планшет), поки що.
  */
 import * as Y from "yjs";
 import { cn } from "@/lib/utils";
@@ -100,13 +107,62 @@ type Props = {
   /** Капо, що діє (акорди транспоновані). */
   capo: number;
   notes: NoteView[];
+  /** Розрізати по рядках пісні (ПК), а не однією смугою (телефон лежачи). */
+  split?: boolean;
 };
 
-export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
+export function Strip({ song, me, lanes, zoom, capo, notes, split = false }: Props) {
   const { timeSignature, key } = readMeta(song.doc);
+  const { cols, sections } = columnsOf(song, timeSignature);
   const defs = allLanes(song.doc);
   const kindOf = (id: string) => (id === "words" || id === "chords" ? id : defs.find((l) => l.id === id)?.kind);
-  const { cols, sections } = columnsOf(song, timeSignature);
+  const pianoRows = Object.fromEntries(lanes.filter((id) => kindOf(id) === "piano").map((id) => [id, usedKeys(song, id)]));
+  const ctx: Ctx = { me, lanes, zoom, capo, notes, timeSignature, key, defs, kindOf, pianoRows };
+  if (!split) return <StripGrid ctx={ctx} cols={cols} sections={sections} className="pb-6" />;
+
+  // По рядках: структурна примітка — заголовок над першою смугою своєї частини.
+  return (
+    <div data-strip-split="" className="flex flex-col pb-24">
+      {cols.map((c, col) => {
+        const heads = sections.filter((s) => s.from === col);
+        return (
+          <div key={c.ln}>
+            {heads.map((s, i) => (
+              <div key={i} className="mt-3 px-1.5 text-xs font-bold text-stone-700" style={{ paddingLeft: STRIP_GUTTER + 6, lineHeight: `${SECTION_PX}px` }}>
+                {s.name}
+              </div>
+            ))}
+            {c.empty ? (
+              <div style={{ height: 14 }} />
+            ) : (
+              <div className="overflow-x-auto overscroll-x-contain">
+                <StripGrid ctx={ctx} cols={[c]} sections={[]} className="pb-2" />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+type Ctx = {
+  me: string | null;
+  lanes: string[];
+  zoom: number | undefined;
+  capo: number;
+  notes: NoteView[];
+  timeSignature: string;
+  key: string;
+  defs: ReturnType<typeof allLanes>;
+  kindOf: (id: string) => string | undefined;
+  /** Клавіші, що видно в доріжках піаніно, — спільні для всіх рядків пісні. */
+  pianoRows: Record<string, number[]>;
+};
+
+/** Сітка смуги з колонок `cols` — однієї на всю пісню чи однієї на рядок. */
+function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[]; sections: Section[]; className: string }) {
+  const { me, lanes, zoom, capo, notes, timeSignature, key, defs, kindOf } = ctx;
   const mark = usePlayMark();
   const hits = scaleOf("tab", timeSignature, zoom);
   const per = eighthsPerBar(timeSignature);
@@ -208,7 +264,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
     items.push(<div key={`gc${id}`} style={{ gridColumn: 1, gridRow: cardsRow, ...sticky() }} />);
     const Icon = kind && (!cells || kind === "blocks") ? LANE_ICON[kind as LaneKind] : null;
     // Піаніно лише для перегляду: клавіші від найнижчої до найвищої вживаної в пісні (із запасом), без нот — октава від C4.
-    const pianoRows = kind === "piano" ? usedKeys(song, id) : undefined;
+    const pianoRows = kind === "piano" ? ctx.pianoRows[id] : undefined;
     const labels = pianoRows ? pianoRows.map((row) => PIANO_ROWS[row]) : rowsOf(kind as CellKind);
     const labelPx = kind === "piano" ? PIANO_ROW_PX : ROW_PX;
     items.push(
@@ -282,7 +338,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
   return (
     <div
       data-strip=""
-      className="relative grid w-max min-w-full content-start pb-6"
+      className={cn("relative grid w-max min-w-full content-start", className)}
       // Ряди примітки й таймлайну — сталої висоти: на них стоять липкі відступи (`top`).
       style={{ gridTemplateColumns: `${STRIP_GUTTER}px repeat(${cols.length}, max-content)`, gridTemplateRows: `${RULER_PX}px ${dynPx}px ${sectionPx}px`, gridAutoRows: "auto" }}
     >
