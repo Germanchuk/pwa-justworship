@@ -96,10 +96,10 @@ export function createKit(samples: GuitarSamples | null): Kit {
 
   // Гітара (2026-10-31: синтезований щипок звучав противно — Герман попросив семпли).
   // Струни → трохи овердрайву → «кабінет» (без зрізу верхів овердрайв дзижчить) → кімната.
-  const level = add(new Tone.Volume(-3).connect(out));
-  const room = add(new Tone.Reverb({ decay: 1.5, preDelay: 0.01, wet: 0.2 }).connect(level));
+  const level = add(new Tone.Volume(-1).connect(out));
+  const room = add(new Tone.Reverb({ decay: 1.5, preDelay: 0.01, wet: 0.1 }).connect(level));
   const cabinet = add(new Tone.Filter({ type: "lowpass", frequency: 4000, rolloff: -24 }).connect(room));
-  const drive = add(new Tone.Distortion({ distortion: 0.2, oversample: "4x" }).connect(cabinet));
+  const drive = add(new Tone.Distortion({ distortion: 0.1, oversample: "4x" }).connect(cabinet));
   const strings = samples ? OPEN.map(() => add(new Tone.Sampler({ urls: samples, release: 0.08 }).connect(drive))) : [];
   const muteFilter = add(new Tone.Filter({ type: "bandpass", frequency: 1400, Q: 1.2 }).connect(out));
   const mute = add(new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.001, decay: 0.04, sustain: 0 }, volume: -10 }).connect(muteFilter));
