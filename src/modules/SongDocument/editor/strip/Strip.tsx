@@ -70,10 +70,9 @@ const SECTION_PX = 20;
 const RULER_PX = 16;
 const DYN_PX = 4;
 const PAPER = "#f8f5eb";
-const LINE_EDGE = "inset 1px 0 0 rgba(120, 95, 50, 0.22)";
 const GUTTER_EDGE = "inset -1px 0 0 rgba(120, 95, 50, 0.22)";
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.14)";
-/** Розділювач тактів таймлайну — посередині місця риски такту доріжок (`BAR_PX`). */
+/** Розділювач тактів таймлайну (і початок частини) — посередині місця риски такту доріжок (`BAR_PX`). */
 const RULER_TICK = `linear-gradient(#d6d3d1, #d6d3d1) ${BAR_PX / 2 - 1}px 0 / 1px 100% no-repeat`;
 const TEXT_INK: Record<string, string> = { words: "#1e3a8a", chords: "#3b82f6", text: "#7c3aed" };
 
@@ -222,9 +221,10 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
     items.push(
       <div
         key={`s${i}`}
-        style={{ gridColumn: `${s.from + 2} / ${s.to + 2}`, gridRow: 3, position: "sticky", top: RULER_PX + dynPx, zIndex: 2, height: SECTION_PX, background: PAPER, boxShadow: s.from ? LINE_EDGE : undefined }}
+        // Початок частини — риска в одну вертикаль із рисками тактів, як на таймлайні.
+        style={{ gridColumn: `${s.from + 2} / ${s.to + 2}`, gridRow: 3, position: "sticky", top: RULER_PX + dynPx, zIndex: 2, height: SECTION_PX, background: `${RULER_TICK}, ${PAPER}` }}
       >
-        <span className="sticky inline-block whitespace-nowrap px-1.5 text-xs font-bold text-stone-700" style={{ left: STRIP_GUTTER, lineHeight: `${SECTION_PX}px` }}>
+        <span className="sticky inline-block whitespace-nowrap pr-1.5 text-xs font-bold text-stone-700" style={{ left: STRIP_GUTTER, paddingLeft: BAR_PX / 2 + 4, lineHeight: `${SECTION_PX}px` }}>
           {s.name}
         </span>
       </div>,
