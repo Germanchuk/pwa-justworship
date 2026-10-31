@@ -4,7 +4,7 @@
  * ліній, іконка — решті). Поки що з lucide; повний список іконок проєкту —
  * `justworship-meta/.scratch/icons/inventory.md`.
  */
-import { ChartNoAxesGantt, Drum, Guitar, Megaphone, MicVocal, Music2, Piano, type LucideIcon } from "lucide-react";
+import { ChartNoAxesGantt, Clock, Drum, Guitar, Megaphone, MicVocal, Milestone, Music2, Piano, type LucideIcon } from "lucide-react";
 import type { LaneKind } from "../model";
 
 export const LANE_ICON: Record<LaneKind, LucideIcon> = {
@@ -16,3 +16,8 @@ export const LANE_ICON: Record<LaneKind, LucideIcon> = {
   cajon: Drum,
   piano: Piano, // piano roll
 };
+
+/** Ряд структурних приміток у смузі — як доріжка: вказівник, звідки почалась частина пісні. */
+export const SECTION_ICON: LucideIcon = Milestone;
+/** Таймлайн смуги (такти пісні наскрізно) — теж як доріжка. */
+export const TIMELINE_ICON: LucideIcon = Clock;

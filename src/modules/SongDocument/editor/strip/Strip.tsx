@@ -56,7 +56,7 @@ import {
 } from "../../model";
 import { INK, BAR_PX, PIANO_ROW_PX, ROW_PX, STEP_PX, STEPS_FONT_PX, stepsVersion } from "../elements/stepGeometry";
 import { StepRows } from "../elements/StepRows";
-import { LANE_ICON } from "../laneIcons";
+import { LANE_ICON, SECTION_ICON, TIMELINE_ICON } from "../laneIcons";
 import { setPlayMark, usePlayMark } from "../playback/mark";
 
 /**
@@ -128,8 +128,12 @@ export function Strip({ song, me, lanes, zoom, capo, notes, split = false }: Pro
         return (
           <div key={c.ln}>
             {heads.map((s, i) => (
-              <div key={i} className="mt-3 px-1.5 text-xs font-bold text-stone-700" style={{ paddingLeft: STRIP_GUTTER + 6, lineHeight: `${SECTION_PX}px` }}>
-                {s.name}
+              // Як ряд приміток у смузі: іконка в полі доріжок, лінія під рядом.
+              <div key={i} className="mt-3 flex text-xs font-bold text-stone-700" style={{ height: SECTION_PX, boxShadow: RULE }}>
+                <RowMark Icon={SECTION_ICON} name="Структурні примітки" height={SECTION_PX} edge />
+                <span className="px-1.5" style={{ lineHeight: `${SECTION_PX}px` }}>
+                  {s.name}
+                </span>
               </div>
             ))}
             {c.empty ? (
@@ -178,12 +182,25 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
   // структурних приміток — лише коли вони є.
   const sectionPx = sections.length ? SECTION_PX : 0;
   // Смужки динаміки: спільна, під нею моя.
-  const dynPx = me ? DYN_PX * 2 : DYN_PX;
+  // +1 px — лінія під рядом, як під доріжкою.
+  const dynPx = (me ? DYN_PX * 2 : DYN_PX) + 1;
   /** Висота всього, що тримається згори: таймлайн, примітка, динаміка. */
   const headPx = RULER_PX + sectionPx + dynPx;
 
-  // Кут: над полем — порожньо, але непрозоро (під ним їдуть таймлайн і примітки).
-  items.push(<div key="corner" style={{ gridColumn: 1, gridRow: "1 / 4", ...sticky({ top: 0, zIndex: 5 }) }} />);
+  // Таймлайн і ряд структурних приміток у полі — як доріжки: іконка й лінія під
+  // нею; над динамікою поле порожнє, але непрозоре (під ним їде пісня).
+  items.push(
+    <div key="gruler" style={{ gridColumn: 1, gridRow: 1, height: RULER_PX, ...sticky({ top: 0, zIndex: 5, boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
+      <RowMark Icon={TIMELINE_ICON} name="Таймлайн" height={RULER_PX} />
+    </div>,
+  );
+  items.push(<div key="gdyn" style={{ gridColumn: 1, gridRow: 2, height: dynPx, ...sticky({ top: RULER_PX, zIndex: 5, boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }} />);
+  if (sectionPx)
+    items.push(
+      <div key="gsections" style={{ gridColumn: 1, gridRow: 3, height: SECTION_PX, ...sticky({ top: RULER_PX + dynPx, zIndex: 5, boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
+        <RowMark Icon={SECTION_ICON} name="Структурні примітки" height={SECTION_PX} />
+      </div>,
+    );
 
   // Підкладка під примітки й таймлайн на всю ширину: де примітки немає (до першої,
   // порожній рядок), між таймлайном і панеллю згори не просвічує пісня.
@@ -199,7 +216,7 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
     items.push(
       <div
         key={`s${i}`}
-        style={{ gridColumn: `${s.from + 2} / ${s.to + 2}`, gridRow: 3, position: "sticky", top: RULER_PX + dynPx, zIndex: 2, height: SECTION_PX, background: PAPER, boxShadow: shadow(s.from, RULE) }}
+        style={{ gridColumn: `${s.from + 2} / ${s.to + 2}`, gridRow: 3, position: "sticky", top: RULER_PX + dynPx, zIndex: 2, height: SECTION_PX, background: PAPER, boxShadow: shadow(s.from) }}
       >
         <span className="sticky inline-block whitespace-nowrap px-1.5 text-xs font-bold text-stone-700" style={{ left: STRIP_GUTTER, lineHeight: `${SECTION_PX}px` }}>
           {s.name}
@@ -207,6 +224,31 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
       </div>,
     ),
   );
+  // Лінії під таймлайном, динамікою й рядом приміток — самих рядів, а не окремих рядків чи
+  // приміток: суцільні й там, де нічого немає (порожній рядок, до першої примітки).
+  items.push(
+    <div
+      key="ruler-rule"
+      className="pointer-events-none"
+      style={{ gridColumn: "2 / -1", gridRow: 1, position: "sticky", top: 0, zIndex: 2, height: RULER_PX, boxShadow: RULE }}
+    />,
+  );
+  items.push(
+    <div
+      key="dyn-rule"
+      className="pointer-events-none"
+      // Над смужками рядків (вони теж липнуть, з тлом).
+      style={{ gridColumn: "2 / -1", gridRow: 2, position: "sticky", top: RULER_PX, zIndex: 3, height: dynPx, boxShadow: RULE }}
+    />,
+  );
+  if (sectionPx)
+    items.push(
+      <div
+        key="sections-rule"
+        className="pointer-events-none"
+        style={{ gridColumn: "2 / -1", gridRow: 3, position: "sticky", top: RULER_PX + dynPx, zIndex: 2, height: SECTION_PX, boxShadow: RULE }}
+      />,
+    );
 
   cols.forEach((c, col) => {
     if (c.empty) {
@@ -227,7 +269,7 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
         title="Грати звідси"
         onClick={() => setPlayMark(c.ln)}
         className="flex items-stretch text-left text-[9px] text-stone-400"
-        style={at(col, 1, { position: "sticky", top: 0, zIndex: 1, height: RULER_PX, background: PAPER, boxShadow: shadow(col, RULE) })}
+        style={at(col, 1, { position: "sticky", top: 0, zIndex: 1, height: RULER_PX, background: PAPER, boxShadow: shadow(col) })}
       >
         {sizes.map((size, b) => {
           const eighth = c.start + b * per;
@@ -378,6 +420,15 @@ function Marked({ text, marks }: { text: string; marks: NoteView[] }) {
         );
       })}
     </>
+  );
+}
+
+/** Іконка ряду смуги, що не доріжка (таймлайн, структурні примітки), у полі доріжок. */
+function RowMark({ Icon, name, height, edge = false }: { Icon: typeof SECTION_ICON; name: string; height: number; edge?: boolean }) {
+  return (
+    <span title={name} className="flex shrink-0 items-center justify-end pr-1" style={{ width: STRIP_GUTTER, height, boxShadow: edge ? GUTTER_EDGE : undefined }}>
+      <Icon aria-label={name} className={cn("text-stone-400", height < SECTION_PX ? "size-3" : "size-3.5")} />
+    </span>
   );
 }
 
