@@ -177,9 +177,12 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
   // Поле доріжок: межа з піснею — його права лінія, тож при прокрутці вбік вона лишається.
   const sticky = (extra: CSSProperties = {}): CSSProperties => ({ position: "sticky", left: 0, zIndex: 3, background: PAPER, boxShadow: GUTTER_EDGE, ...extra });
   const items: ReactNode[] = [];
-  /** Лінія між рядками пісні — ліворуч від колонки; у першої її немає: там межа поля доріжок. */
-  const edgeOf = (col: number) => (col === 0 ? [] : [LINE_EDGE]);
-  const shadow = (col: number, ...more: string[]) => [...edgeOf(col), ...more].join(", ") || undefined;
+  /**
+   * Межа рядків — як межа тактів (2026-10-31): рядок, за яким одразу наступний,
+   * не закриває себе рискою — нею стає риска на початку наступного. Закривають
+   * лише останній рядок і рядок перед порожнім (щілиною).
+   */
+  const closes = (col: number) => !cols[col + 1] || cols[col + 1].empty;
   // Згори вниз: таймлайн під самою панеллю, впритул під ним динаміка, далі ряд
   // структурних приміток — лише коли вони є.
   const sectionPx = sections.length ? SECTION_PX : 0;
@@ -218,7 +221,7 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
     items.push(
       <div
         key={`s${i}`}
-        style={{ gridColumn: `${s.from + 2} / ${s.to + 2}`, gridRow: 3, position: "sticky", top: RULER_PX + dynPx, zIndex: 2, height: SECTION_PX, background: PAPER, boxShadow: shadow(s.from) }}
+        style={{ gridColumn: `${s.from + 2} / ${s.to + 2}`, gridRow: 3, position: "sticky", top: RULER_PX + dynPx, zIndex: 2, height: SECTION_PX, background: PAPER, boxShadow: s.from ? LINE_EDGE : undefined }}
       >
         <span className="sticky inline-block whitespace-nowrap px-1.5 text-xs font-bold text-stone-700" style={{ left: STRIP_GUTTER, lineHeight: `${SECTION_PX}px` }}>
           {s.name}
@@ -271,18 +274,17 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
         title="Грати звідси"
         onClick={() => setPlayMark(c.ln)}
         className="flex items-stretch text-left text-xs text-stone-600"
-        style={at(col, 1, { position: "sticky", top: 0, zIndex: 1, height: RULER_PX, background: PAPER, boxShadow: shadow(col) })}
+        style={at(col, 1, { position: "sticky", top: 0, zIndex: 1, height: RULER_PX, background: PAPER })}
       >
         {sizes.map((size, b) => {
           const eighth = c.start + b * per;
           return (
             // Номер такту — посередині по висоті (над ним відступ, як під ним; нижня лінія — 1px).
-            // Риска — в одну вертикаль із рискою такту доріжок, перед кожним тактом, крім першого:
-            // там уже межа рядка чи поля доріжок.
+            // Риска — перед кожним тактом, в одну вертикаль із рискою такту доріжок.
             <span
               key={b}
               className="relative flex shrink-0 items-center pb-px leading-none"
-              style={{ width: BAR_PX + size * STEP_PX, paddingLeft: BAR_PX / 2 + 4, background: b > 0 ? RULER_TICK : undefined }}
+              style={{ width: BAR_PX + size * STEP_PX, paddingLeft: BAR_PX / 2 + 4, background: RULER_TICK }}
             >
               {Math.floor(eighth / per) + 1}
               {eighth % per ? `.${eighth % per}` : ""}
@@ -290,7 +292,7 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
             </span>
           );
         })}
-        <span className="shrink-0" style={{ width: BAR_PX }} />
+        {closes(col) && <span className="shrink-0" style={{ width: BAR_PX }} />}
       </button>,
     );
     // Динаміка рядка: спільна, під нею моя; тримається згори впритул під таймлайном.
@@ -342,7 +344,7 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
         body = (
           <div className="py-0.5" style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: STEPS_FONT_PX, lineHeight: 1.35, color: INK[kind as CellKind] }}>
             <StepsBox ln={c.ln} lane={id} kind={kind as CellKind} line={c.at.line} timeSignature={timeSignature} zoom={zoom} rows={pianoRows?.length}>
-              <StepRows version={stepsVersion(slot as Y.Map<unknown>, c.at.line, timeSignature)} kind={kind as CellKind} slot={slot as Y.Map<unknown>} line={c.at.line} timeSignature={timeSignature} zoom={zoom} marks={marks} rows={pianoRows} />
+              <StepRows version={stepsVersion(slot as Y.Map<unknown>, c.at.line, timeSignature)} kind={kind as CellKind} slot={slot as Y.Map<unknown>} line={c.at.line} timeSignature={timeSignature} zoom={zoom} marks={marks} rows={pianoRows} end={closes(col)} />
             </StepsBox>
           </div>
         );
@@ -366,7 +368,7 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
         );
       }
       items.push(
-        <div key={`c${id}:${col}`} className="flex flex-col justify-end" style={at(col, cardsRow, { boxShadow: shadow(col), paddingRight: 8 })}>
+        <div key={`c${id}:${col}`} className="flex flex-col justify-end" style={at(col, cardsRow, { paddingRight: closes(col) ? 8 : 0 })}>
           {cards.map((n) => (
             <div
               key={n.note.id}
@@ -379,7 +381,7 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
         </div>,
       );
       items.push(
-        <div key={`${id}:${col}`} style={at(col, row, { boxShadow: shadow(col, RULE), paddingRight: 8 })}>
+        <div key={`${id}:${col}`} style={at(col, row, { boxShadow: RULE, paddingRight: closes(col) ? 8 : 0 })}>
           {body}
         </div>,
       );
