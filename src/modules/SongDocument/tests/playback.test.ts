@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { change, makePair } from "./harness";
-import { addLane, linesOf, setLineLength } from "../model";
+import { addLane, linesOf, PIANO_ROWS, setLineLength } from "../model";
 import { linePlan, nextLine, tickSeconds } from "../playback/timeline";
 
 const cellsAt = (net: ReturnType<typeof makePair>, ln: number, id: string) => (linesOf(net.A)[ln].get(id) as Y.Map<unknown>).get("cells") as Y.Map<string>;
@@ -62,6 +62,14 @@ describe("програвання: що звучить у рядку", () => {
     expect(linePlan(net.B, 2, [])).toBe(null);
     expect(nextLine(net.B, 0, [])).toEqual({ line: 3, from: 0, to: 384 });
     expect(nextLine(net.B, 3, [])).toBe(null);
+  });
+
+  it("піаніно — нота за MIDI клавіші, у свій тік", () => {
+    const net = makePair([{ words: "Ти" }]);
+    let piano = "";
+    change(net.A, () => (piano = addLane(net.A, "piano", linesOf(net.A))));
+    change(net.A, () => cellsAt(net, 0, piano).set(`1.97/${PIANO_ROWS.indexOf("C4") + 1}`, "o"));
+    expect(linePlan(net.B, 0, [])!.hits).toEqual([{ tick: 96, lane: piano, kind: "note", midi: 60 }]);
   });
 
   it("тік у секундах: BPM рахує долю розміру, темп — у відсотках", () => {

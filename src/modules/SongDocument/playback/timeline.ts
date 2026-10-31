@@ -11,7 +11,7 @@
  * перемикачів звуку немає).
  */
 import * as Y from "yjs";
-import { barTicks, CAJON_ROWS, CellKind, CELL_KINDS, layout, lineKind, lineTicks, readMeta, songLanes, Song, timedCells, TICKS } from "../model";
+import { barTicks, CAJON_ROWS, pianoMidi, CellKind, CELL_KINDS, layout, lineKind, lineTicks, readMeta, songLanes, Song, timedCells, TICKS } from "../model";
 
 export type CajonHit = (typeof CAJON_ROWS)[number];
 
@@ -19,6 +19,8 @@ export type CajonHit = (typeof CAJON_ROWS)[number];
 export type Hit = { tick: number; lane: string } & (
   | { kind: "tab"; string: number; fret: number | "x" }
   | { kind: "cajon"; hit: CajonHit }
+  /** Нота піаніно — поки ваншот, як удар. */
+  | { kind: "note"; midi: number }
   /** Акорд прямокутника звучить до наступного акорду або до кінця такту. */
   | { kind: "chord"; name: string; length: number }
 );
@@ -44,6 +46,8 @@ export function linePlan(song: Song, ln: number, hidden: readonly string[]): Lin
           const fret = value === "x" || value === "X" ? "x" : Number(value);
           if (fret === "x" || Number.isFinite(fret)) hits.push({ tick: time, lane: id, kind: "tab", string, fret });
         });
+      } else if (kind === "piano") {
+        cells.forEach(({ time, string }) => hits.push({ tick: time, lane: id, kind: "note", midi: pianoMidi(string - 1) }));
       } else if (kind === "cajon") {
         cells.forEach(({ time, string }) => {
           const hit = CAJON_ROWS[string - 1];

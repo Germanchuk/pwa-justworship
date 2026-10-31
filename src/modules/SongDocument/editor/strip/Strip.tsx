@@ -1,7 +1,14 @@
 /**
- * Пісня однією смугою (горизонтальний формат телефона): рядки йдуть один за
- * одним уздовж осі часу, кожна доріжка — один довгий трек через усю пісню,
- * як у DAW. Сітка: колонка — рядок пісні, ряд — доріжка.
+ * Пісня смугою, як треки в DAW (`SONG-98`, `SONG-97`): сітка, де колонка —
+ * рядок пісні, ряд — доріжка. Один вигляд на два формати:
+ *
+ * - телефон лежачи — **одна смуга**: рядки йдуть один за одним уздовж осі
+ *   часу, кожна доріжка — один довгий трек через усю пісню;
+ * - ПК (`split`) — та сама смуга, **розрізана по рядках**: кожен рядок пісні —
+ *   своя смуга на всю ширину, згори донизу; структурна примітка — заголовок
+ *   над смугами своєї частини, порожній рядок — проміжок.
+ *
+ * Будь-яка зміна вигляду смуги — для обох форматів одразу.
  *
  *     | 1    2    | 3    4      (таймлайн під самою панеллю: такти пісні наскрізно)
  *     | ▀▀▀▀▀▀▀▀▀ | ▀▀▀▀▀▀▀     (динаміка впритул: спільна, під нею моя)
@@ -15,7 +22,7 @@
  * вузька щілина; структурна примітка колонки не має — вона заголовок усього,
  * що за нею, до наступної.
  *
- * Лише перегляд: правка — у звичайному вигляді (поки що).
+ * Лише перегляд: правка — у редакторі Slate (телефон стоячи, планшет), поки що.
  */
 import * as Y from "yjs";
 import { cn } from "@/lib/utils";
@@ -40,13 +47,14 @@ import {
   LineAt,
   NoteView,
   readMeta,
+  PIANO_ROWS,
   rowsOf,
   scaleOf,
   shownDynamics,
   SILENCE,
   Song,
 } from "../../model";
-import { INK, BAR_PX, ROW_PX, STEP_PX } from "../elements/stepGeometry";
+import { INK, BAR_PX, PIANO_ROW_PX, ROW_PX, STEP_PX, stepsVersion } from "../elements/stepGeometry";
 import { StepRows } from "../elements/StepRows";
 import { LANE_ICON } from "../laneIcons";
 import { setPlayMark, usePlayMark } from "../playback/mark";
@@ -99,13 +107,62 @@ type Props = {
   /** Капо, що діє (акорди транспоновані). */
   capo: number;
   notes: NoteView[];
+  /** Розрізати по рядках пісні (ПК), а не однією смугою (телефон лежачи). */
+  split?: boolean;
 };
 
-export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
+export function Strip({ song, me, lanes, zoom, capo, notes, split = false }: Props) {
   const { timeSignature, key } = readMeta(song.doc);
+  const { cols, sections } = columnsOf(song, timeSignature);
   const defs = allLanes(song.doc);
   const kindOf = (id: string) => (id === "words" || id === "chords" ? id : defs.find((l) => l.id === id)?.kind);
-  const { cols, sections } = columnsOf(song, timeSignature);
+  const pianoRows = Object.fromEntries(lanes.filter((id) => kindOf(id) === "piano").map((id) => [id, usedKeys(song, id)]));
+  const ctx: Ctx = { me, lanes, zoom, capo, notes, timeSignature, key, defs, kindOf, pianoRows };
+  if (!split) return <StripGrid ctx={ctx} cols={cols} sections={sections} className="pb-6" />;
+
+  // По рядках: структурна примітка — заголовок над першою смугою своєї частини.
+  return (
+    <div data-strip-split="" className="flex flex-col pb-24">
+      {cols.map((c, col) => {
+        const heads = sections.filter((s) => s.from === col);
+        return (
+          <div key={c.ln}>
+            {heads.map((s, i) => (
+              <div key={i} className="mt-3 px-1.5 text-xs font-bold text-stone-700" style={{ paddingLeft: STRIP_GUTTER + 6, lineHeight: `${SECTION_PX}px` }}>
+                {s.name}
+              </div>
+            ))}
+            {c.empty ? (
+              <div style={{ height: 14 }} />
+            ) : (
+              <div className="overflow-x-auto overscroll-x-contain">
+                <StripGrid ctx={ctx} cols={[c]} sections={[]} className="pb-2" />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+type Ctx = {
+  me: string | null;
+  lanes: string[];
+  zoom: number | undefined;
+  capo: number;
+  notes: NoteView[];
+  timeSignature: string;
+  key: string;
+  defs: ReturnType<typeof allLanes>;
+  kindOf: (id: string) => string | undefined;
+  /** Клавіші, що видно в доріжках піаніно, — спільні для всіх рядків пісні. */
+  pianoRows: Record<string, number[]>;
+};
+
+/** Сітка смуги з колонок `cols` — однієї на всю пісню чи однієї на рядок. */
+function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[]; sections: Section[]; className: string }) {
+  const { me, lanes, zoom, capo, notes, timeSignature, key, defs, kindOf } = ctx;
   const mark = usePlayMark();
   const hits = scaleOf("tab", timeSignature, zoom);
   const per = eighthsPerBar(timeSignature);
@@ -206,15 +263,20 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
     const name = id === "words" ? "Слова" : id === "chords" ? "Акорди" : (defs.find((l) => l.id === id)?.name ?? "");
     items.push(<div key={`gc${id}`} style={{ gridColumn: 1, gridRow: cardsRow, ...sticky() }} />);
     const Icon = kind && (!cells || kind === "blocks") ? LANE_ICON[kind as LaneKind] : null;
+    // Піаніно лише для перегляду: клавіші від найнижчої до найвищої вживаної в пісні (із запасом), без нот — октава від C4.
+    const pianoRows = kind === "piano" ? ctx.pianoRows[id] : undefined;
+    const labels = pianoRows ? pianoRows.map((row) => PIANO_ROWS[row]) : rowsOf(kind as CellKind);
+    const labelPx = kind === "piano" ? PIANO_ROW_PX : ROW_PX;
     items.push(
       <div key={`g${id}`} title={name} className="flex justify-end pr-1" style={{ gridColumn: 1, gridRow: row, ...sticky({ boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
         {Icon ? (
           <Icon aria-label={name} className="mt-1 size-3.5 shrink-0 text-stone-400" />
         ) : (
-          <span aria-label={name} className="pt-0.5 text-right font-mono text-[11px] text-stone-400">
-            {rowsOf(kind as CellKind).map((n, i) => (
-              <div key={i} style={{ height: ROW_PX, lineHeight: `${ROW_PX}px` }}>
-                {n}
+          <span aria-label={name} className={cn("pt-0.5 text-right font-mono text-stone-400", kind === "piano" ? "text-[8px]" : "text-[11px]")}>
+            {labels.map((n, i) => (
+              <div key={i} style={{ height: labelPx, lineHeight: `${labelPx}px` }}>
+                {/* Піаніно — підписані лише межі октав (C). */}
+                {kind !== "piano" || (n.startsWith("C") && !n.startsWith("C#")) ? n : ""}
               </div>
             ))}
           </span>
@@ -230,7 +292,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
       if (cells && slot instanceof Y.Map && slot.has("cells")) {
         body = (
           <div className="py-0.5" style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, lineHeight: 1.35, color: INK[kind as CellKind] }}>
-            <StepRows kind={kind as CellKind} slot={slot as Y.Map<unknown>} line={c.at.line} timeSignature={timeSignature} zoom={zoom} marks={marks} />
+            <StepRows version={stepsVersion(slot as Y.Map<unknown>, c.at.line, timeSignature)} kind={kind as CellKind} slot={slot as Y.Map<unknown>} line={c.at.line} timeSignature={timeSignature} zoom={zoom} marks={marks} rows={pianoRows} />
           </div>
         );
       } else if (!cells) {
@@ -276,7 +338,7 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
   return (
     <div
       data-strip=""
-      className="relative grid w-max min-w-full content-start pb-6"
+      className={cn("relative grid w-max min-w-full content-start", className)}
       // Ряди примітки й таймлайну — сталої висоти: на них стоять липкі відступи (`top`).
       style={{ gridTemplateColumns: `${STRIP_GUTTER}px repeat(${cols.length}, max-content)`, gridTemplateRows: `${RULER_PX}px ${dynPx}px ${sectionPx}px`, gridAutoRows: "auto" }}
     >
@@ -284,6 +346,16 @@ export function Strip({ song, me, lanes, zoom, capo, notes }: Props) {
       <div data-strip-needle="" className="pointer-events-none absolute top-0 bottom-0 z-[4] w-0.5 -ml-px bg-red-500/80" style={{ display: "none" }} />
     </div>
   );
+}
+
+/** Клавіші піаніно доріжки `lane`, на яких у пісні є ноти, — суцільним проміжком із запасом у дві; без нот — октава від C4. */
+function usedKeys(song: Song, lane: string): number[] {
+  const rows = layout(song).flatMap((l) => {
+    const cells = (l.line.get(lane) as Y.Map<unknown> | undefined)?.get?.("cells");
+    return cells instanceof Y.Map ? Array.from(cells.keys(), (key) => Number(String(key).split("/")[1]) - 1).filter((r) => r >= 0) : [];
+  });
+  const [top, bottom] = rows.length ? [Math.max(0, Math.min(...rows) - 2), Math.min(PIANO_ROWS.length - 1, Math.max(...rows) + 2)] : [PIANO_ROWS.indexOf("C5"), PIANO_ROWS.indexOf("C4")];
+  return Array.from({ length: bottom - top + 1 }, (_, i) => top + i);
 }
 
 /** Текст доріжки з позначками приміток — шарами їхніх кольорів, закреслення — рисою. */

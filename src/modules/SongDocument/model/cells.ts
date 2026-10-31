@@ -26,6 +26,9 @@
  *   таби          e|---12---|          шість струн e B G D A E; лад 0–24, x;
  *                                      порожній крок — один «-», крок із
  *                                      двозначним ладом — два символи на всіх струнах
+ *   піаніно      C4|o---o---|          piano roll: 88 клавіш від C8 до A0, лінія на
+ *               E4|--o-----|          клавішу; «o» — нота (поки без тривалості,
+ *                                      як удар), текстом — лише лінії з нотами
  */
 import * as Y from "yjs";
 import type { CellKind } from "./lanes";
@@ -34,8 +37,22 @@ import type { Line } from "./song";
 export const TAB_STRINGS = ["e", "B", "G", "D", "A", "E"] as const;
 /** Лінії кахона згори донизу: бас, тон, гост. */
 export const CAJON_ROWS = ["B", "T", "g"] as const;
-/** Лінії доріжки згори донизу: струни табів, удари кахона; у прямокутників одна, без назви. */
-export const rowsOf = (kind: CellKind): readonly string[] => (kind === "tab" ? TAB_STRINGS : kind === "cajon" ? CAJON_ROWS : [""]);
+const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const;
+/** MIDI найвищої клавіші піаніно (C8); лінія `row` (з 0) — `PIANO_TOP - row`. */
+export const PIANO_TOP = 108;
+/** Клавіші піаніно згори донизу — 88, від C8 до A0 («C4» — до першої октави). */
+export const PIANO_ROWS: readonly string[] = Array.from({ length: 88 }, (_, row) => {
+  const midi = PIANO_TOP - row;
+  return `${NOTE_NAMES[midi % 12]}${Math.floor(midi / 12) - 1}`;
+});
+/** MIDI клавіші на лінії `row` (з 0) доріжки піаніно. */
+export const pianoMidi = (row: number) => PIANO_TOP - row;
+/** Чорна клавіша на лінії `row` — тінню, як у DAW. */
+export const isBlackKey = (row: number) => NOTE_NAMES[pianoMidi(row) % 12].includes("#");
+
+/** Лінії доріжки згори донизу: струни табів, удари кахона, клавіші піаніно; у прямокутників одна, без назви. */
+export const rowsOf = (kind: CellKind): readonly string[] =>
+  kind === "tab" ? TAB_STRINGS : kind === "cajon" ? CAJON_ROWS : kind === "piano" ? PIANO_ROWS : [""];
 /** Удар кахона в клітинці. */
 const HIT = "o";
 
@@ -299,7 +316,7 @@ export function timedCells(kind: CellKind, slot: Y.Map<unknown>, timeSignature: 
 export function cellsQuote(kind: CellKind, slot: Y.Map<unknown>, from: number, to: number, timeSignature: string): string {
   return timedCells(kind, slot, timeSignature)
     .filter((c) => c.time >= from && c.time < to && c.value !== "-")
-    .map((c) => (kind === "cajon" ? (CAJON_ROWS[c.string - 1] ?? c.value) : c.value))
+    .map((c) => (kind === "cajon" ? (CAJON_ROWS[c.string - 1] ?? c.value) : kind === "piano" ? (PIANO_ROWS[c.string - 1] ?? c.value) : c.value))
     .join(" ");
 }
 
@@ -348,6 +365,11 @@ export function renderCells(kind: CellKind, entries: Iterable<[string, string]>,
   const each = (b: number, fn: (s: number) => string) => Array.from({ length: sizes[b - 1] }, (_, s) => fn(s)).join("");
 
   if (kind === "cajon") return CAJON_ROWS.map((name, row) => name + barsText((b) => each(b, (s) => (at(b, s, row) ? HIT : "-"))));
+  if (kind === "piano") {
+    // Лише клавіші, на яких щось є (88 ліній у буфері нікому не потрібні); порожньо — одна C4.
+    const used = PIANO_ROWS.map((_, row) => row).filter((row) => sizes.some((size, b) => Array.from({ length: size }, (_, s) => at(b + 1, s, row)).some(Boolean)));
+    return (used.length ? used : [PIANO_ROWS.indexOf("C4")]).map((row) => PIANO_ROWS[row] + barsText((b) => each(b, (s) => (at(b, s, row) ? HIT : "-"))));
+  }
   if (kind === "blocks")
     return [
       barsText((b) => {
@@ -426,6 +448,13 @@ export function parseCells(kind: CellKind, lines: string[], scale: Scale): Parse
     }
     return { cells, bars, grid };
   }
+  if (kind === "piano") {
+    if (!lines.length || !lines.every(isPianoLine)) return null;
+    const rows = lines.map((line) => PIANO_ROWS.indexOf(line.trim().split("|")[0].trim()));
+    const perRow = lines.map(barsIn);
+    perRow.forEach((all, i) => all.forEach((text, b) => [...text].forEach((ch, s) => /[oxOX]/.test(ch) && put(b + 1, s, HIT, rows[i]))));
+    return { cells, bars: Math.max(1, ...perRow.map((b) => b.length)), grid };
+  }
   if (kind === "cajon" && lines.length === CAJON_ROWS.length) {
     if (!isCajonRows(lines)) return null;
     const perRow = lines.map(barsIn);
@@ -454,8 +483,19 @@ export const isCajonRows = (lines: string[]) =>
   lines.length === CAJON_ROWS.length && lines.every((line, i) => new RegExp(`^\\s*${CAJON_ROWS[i]}\\s*\\|([-oOxX]+\\|)+\\s*$`).test(line));
 export const isBlocksLine = (line: string) => !isCajonLine(line) && /^\s*\|([^\s|]+\|)+\s*$/.test(line) && /[A-H]/.test(line);
 
+/** Лінія піаніно: назва клавіші з октавою (`C4`, `F#3`) і такти з «o» та «-». */
+export const isPianoLine = (line: string) => {
+  const m = /^\s*([A-G]#?\d)\s*\|([-oOxX]+\|)+\s*$/.exec(line);
+  return !!m && PIANO_ROWS.includes(m[1]);
+};
+
 /** Вид клітинкової доріжки, текстом якої починається `lines[i]`, і скільки рядків тексту вона займає. */
 export function recognizeCells(lines: string[], i: number): { kind: CellKind; size: number } | null {
+  if (isPianoLine(lines[i] ?? "")) {
+    let size = 1;
+    while (i + size < lines.length && isPianoLine(lines[i + size])) size++;
+    return { kind: "piano", size };
+  }
   if (lines.slice(i, i + 6).length === 6 && lines.slice(i, i + 6).every(isTabLine)) return { kind: "tab", size: 6 };
   if (isCajonRows(lines.slice(i, i + CAJON_ROWS.length))) return { kind: "cajon", size: CAJON_ROWS.length };
   if (isCajonLine(lines[i])) return { kind: "cajon", size: 1 };
@@ -498,6 +538,11 @@ export function typeCell(
   const next = { ...at, step: Math.min(at.step + 1, total - 1) };
   const clearAndNext = () => (cells.delete(key(at)), next);
 
+  if (kind === "piano") {
+    if (/[ox]/i.test(ch)) cells.set(key(at), HIT);
+    else if (ch === "-" || ch === " " || ch === ".") cells.delete(key(at));
+    return at;
+  }
   if (kind === "cajon") {
     const row = { b: 0, t: 1, g: 2 }[ch.toLowerCase()];
     if (row !== undefined) cells.set(key({ ...at, string: row }), HIT);
@@ -530,6 +575,18 @@ export function typeCell(
   }
   cells.set(key(at), ch);
   return next;
+}
+
+/**
+ * Тап по комірці піаніно: порожньо — нота, нота точно на долі комірки — геть.
+ * Нота поруч (дрібніша за масштаб) не чіпається — як і в друку; тоді тап
+ * ставить ще одну на долю. Викликати в транзакції.
+ */
+export function toggleCell(kind: CellKind, slot: Y.Map<unknown>, scale: Scale, at: CellAt) {
+  const cells = slot.get("cells") as Y.Map<string>;
+  const key = cellKey(kind, scale, at);
+  if (cells.has(key)) cells.delete(key);
+  else cells.set(key, HIT);
 }
 
 /**

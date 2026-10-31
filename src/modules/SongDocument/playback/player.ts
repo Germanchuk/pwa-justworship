@@ -164,6 +164,7 @@ class LanePlayer {
         const time = s.cursor + (hit.tick - span.from) * spt;
         if (hit.kind === "tab") s.kit.tab(hit.string, hit.fret, time);
         else if (hit.kind === "cajon") s.kit.cajon(hit.hit, time);
+        else if (hit.kind === "note") s.kit.note(hit.midi, time);
         else s.kit.chord(hit.name, Math.min(hit.length, to - hit.tick) * spt, time);
       });
       const end = s.cursor + (to - span.from) * spt;

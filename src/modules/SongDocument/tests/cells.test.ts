@@ -8,6 +8,10 @@ import {
   ALL,
   barSizes,
   cellSpan,
+  PIANO_ROWS,
+  pianoMidi,
+  recognizeCells,
+  toggleCell,
   endOf,
   hiddenPastEnd,
   lengthLabel,
@@ -466,5 +470,35 @@ describe("примітки на кроках — проміжок часу ря�
     expect(shown(net.B)[0].status).toBe("lost");
     lengthTo(net.A, 0, 16);
     expect(shown(net.B)[0]).toMatchObject({ status: "visible", at: { from: 480, to: 528 } });
+  });
+});
+
+describe("піаніно (piano roll)", () => {
+  const C4 = PIANO_ROWS.indexOf("C4");
+  const E4 = PIANO_ROWS.indexOf("E4");
+
+  it("88 клавіш від C8 до A0; C4 — MIDI 60", () => {
+    expect([PIANO_ROWS.length, PIANO_ROWS[0], PIANO_ROWS[87]]).toEqual([88, "C8", "A0"]);
+    expect(pianoMidi(C4)).toBe(60);
+  });
+
+  it("тап ставить ноту, тап по ній — прибирає; друк «o» — теж нота", () => {
+    const { net, id, type } = withLane("piano");
+    change(net.A, () => toggleCell("piano", slotOf(net.A, 0, id), sc("piano"), { step: 2, string: C4 }));
+    expect(cellsJSON(net.B, 0, id)).toEqual({ [`1.49/${C4 + 1}`]: "o" });
+    change(net.A, () => toggleCell("piano", slotOf(net.A, 0, id), sc("piano"), { step: 2, string: C4 }));
+    expect(cellsJSON(net.B, 0, id)).toEqual({});
+    type("o", 0, { step: 4, string: E4 });
+    expect(cellsJSON(net.B, 0, id)).toEqual({ [`1.97/${E4 + 1}`]: "o" });
+  });
+
+  it("текстом — лише клавіші з нотами; вставка розбирає назад", () => {
+    const { net, id, type } = withLane("piano");
+    type("o", 0, { step: 0, string: C4 });
+    type("o", 0, { step: 2, string: E4 });
+    const lines = text(net.B, 0, id, "piano");
+    expect(lines).toEqual([`E4|--o${d(13)}|`, `C4|o${d(15)}|`]);
+    expect(recognizeCells(lines, 0)).toEqual({ kind: "piano", size: 2 });
+    expect(parseCells("piano", lines, sc("piano"))!.cells).toEqual({ [`1.1/${C4 + 1}`]: "o", [`1.49/${E4 + 1}`]: "o" });
   });
 });
