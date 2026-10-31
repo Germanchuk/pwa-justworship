@@ -173,7 +173,6 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
 
   const at = (col: number, row: number, extra: CSSProperties = {}): CSSProperties => ({ gridColumn: col + 2, gridRow: row, ...extra });
   // Поле доріжок: межа з піснею — його права лінія, тож при прокрутці вбік вона лишається.
-  // Його клітинки позначені `data-strip-gutter`: у правці лише по ньому смуга гортається вгору-вниз.
   const sticky = (extra: CSSProperties = {}): CSSProperties => ({ position: "sticky", left: 0, zIndex: 3, background: PAPER, boxShadow: GUTTER_EDGE, ...extra });
   const items: ReactNode[] = [];
   /** Лінія між рядками пісні — ліворуч від колонки; у першої її немає: там межа поля доріжок. */
@@ -191,14 +190,14 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
   // Таймлайн і ряд структурних приміток у полі — як доріжки: іконка й лінія під
   // нею; над динамікою поле порожнє, але непрозоре (під ним їде пісня).
   items.push(
-    <div key="gruler" data-strip-gutter="" style={{ gridColumn: 1, gridRow: 1, height: RULER_PX, ...sticky({ top: 0, zIndex: 5, boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
+    <div key="gruler" style={{ gridColumn: 1, gridRow: 1, height: RULER_PX, ...sticky({ top: 0, zIndex: 5, boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
       <RowMark Icon={TIMELINE_ICON} name="Таймлайн" height={RULER_PX} />
     </div>,
   );
-  items.push(<div key="gdyn" data-strip-gutter="" style={{ gridColumn: 1, gridRow: 2, height: dynPx, ...sticky({ top: RULER_PX, zIndex: 5, boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }} />);
+  items.push(<div key="gdyn" style={{ gridColumn: 1, gridRow: 2, height: dynPx, ...sticky({ top: RULER_PX, zIndex: 5, boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }} />);
   if (sectionPx)
     items.push(
-      <div key="gsections" data-strip-gutter="" style={{ gridColumn: 1, gridRow: 3, height: SECTION_PX, ...sticky({ top: RULER_PX + dynPx, zIndex: 5, boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
+      <div key="gsections" style={{ gridColumn: 1, gridRow: 3, height: SECTION_PX, ...sticky({ top: RULER_PX + dynPx, zIndex: 5, boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
         <RowMark Icon={SECTION_ICON} name="Структурні примітки" height={SECTION_PX} />
       </div>,
     );
@@ -304,14 +303,14 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
     const kind = kindOf(id);
     const cells = (CELL_KINDS as readonly string[]).includes(kind ?? "");
     const name = id === "words" ? "Слова" : id === "chords" ? "Акорди" : (defs.find((l) => l.id === id)?.name ?? "");
-    items.push(<div key={`gc${id}`} data-strip-gutter="" style={{ gridColumn: 1, gridRow: cardsRow, ...sticky() }} />);
+    items.push(<div key={`gc${id}`} style={{ gridColumn: 1, gridRow: cardsRow, ...sticky() }} />);
     const Icon = kind && (!cells || kind === "blocks") ? LANE_ICON[kind as LaneKind] : null;
     // Піаніно лише для перегляду: клавіші від найнижчої до найвищої вживаної в пісні (із запасом), без нот — октава від C4.
     const pianoRows = kind === "piano" ? ctx.pianoRows[id] : undefined;
     const labels = pianoRows ? pianoRows.map((row) => PIANO_ROWS[row]) : rowsOf(kind as CellKind);
     const labelPx = kind === "piano" ? PIANO_ROW_PX : ROW_PX;
     items.push(
-      <div key={`g${id}`} data-strip-gutter="" title={name} className="flex justify-end pr-1" style={{ gridColumn: 1, gridRow: row, ...sticky({ boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
+      <div key={`g${id}`} title={name} className="flex justify-end pr-1" style={{ gridColumn: 1, gridRow: row, ...sticky({ boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
         {Icon ? (
           <Icon aria-label={name} className="mt-1 size-3.5 shrink-0 text-stone-400" />
         ) : (
@@ -389,8 +388,8 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
     >
       {items}
       <div data-strip-needle="" className="pointer-events-none absolute top-0 bottom-0 z-[4] w-0.5 -ml-px bg-red-500/80" style={{ display: "none" }} />
-      {/* Виділена комірка правки (`StripCellEditor` ставить її сам, поза React); під липкими рядами. */}
-      <div data-strip-cursor="" className="pointer-events-none absolute" style={{ display: "none", boxShadow: "inset 0 0 0 99px rgba(59,130,246,0.3)", outline: "2px solid #3b82f6" }} />
+      {/* Виділена комірка правки (`StripCellEditor` ставить її сам, поза React); під липкими рядами — їхня висота в `data-head-px`. */}
+      <div data-strip-cursor="" data-head-px={headPx} className="pointer-events-none absolute" style={{ display: "none", boxShadow: "inset 0 0 0 99px rgba(59,130,246,0.3)", outline: "2px solid #3b82f6" }} />
     </div>
   );
 }
