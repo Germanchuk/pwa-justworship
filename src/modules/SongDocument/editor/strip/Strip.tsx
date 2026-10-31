@@ -18,9 +18,10 @@
  *   … | Ти святий | Господь
  *
  * Ширина колонки — найдовша її частина (кроки чи слова), а в часі рядок
- * триває стільки, скільки прописано (`lineLength`). Порожній рядок —
- * вузька щілина; структурна примітка колонки не має — вона заголовок усього,
- * що за нею, до наступної.
+ * триває стільки, скільки прописано (`lineLength`). Межа рядків — як межа
+ * тактів, а порожній рядок у смузі місця не займає (на ПК — проміжок між
+ * смугами); структурна примітка колонки не має — вона заголовок усього, що
+ * за нею, до наступної.
  *
  * Лише перегляд: правка — у редакторі Slate (телефон стоячи, планшет), поки що.
  */
@@ -178,11 +179,11 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
   const sticky = (extra: CSSProperties = {}): CSSProperties => ({ position: "sticky", left: 0, zIndex: 3, background: PAPER, boxShadow: GUTTER_EDGE, ...extra });
   const items: ReactNode[] = [];
   /**
-   * Межа рядків — як межа тактів (2026-10-31): рядок, за яким одразу наступний,
-   * не закриває себе рискою — нею стає риска на початку наступного. Закривають
-   * лише останній рядок і рядок перед порожнім (щілиною).
+   * Межа рядків — як межа тактів (2026-10-31): рядок не закриває себе рискою —
+   * нею стає риска на початку наступного. Порожній рядок (межа частин) місця не
+   * займає; частини видно з ряду структурних приміток. Закриває лише останній.
    */
-  const closes = (col: number) => !cols[col + 1] || cols[col + 1].empty;
+  const closes = (col: number) => !cols.slice(col + 1).some((c) => !c.empty);
   // Згори вниз: таймлайн під самою панеллю, впритул під ним динаміка, далі ряд
   // структурних приміток — лише коли вони є.
   const sectionPx = sections.length ? SECTION_PX : 0;
@@ -256,11 +257,7 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
     );
 
   cols.forEach((c, col) => {
-    if (c.empty) {
-      // Порожній рядок — щілина між частинами.
-      items.push(<div key={`gap${col}`} style={{ gridColumn: col + 2, gridRow: `2 / span ${lanes.length * 2 + 2}`, width: 14 }} />);
-      return;
-    }
+    if (c.empty) return;
     const sizes = barSizes(lineLength(c.at.line, timeSignature), timeSignature, hits);
     // Таймлайн: такти пісні наскрізно; тап — грати звідси.
     items.push(
