@@ -38,7 +38,7 @@ describe("програвання: що звучить у рядку", () => {
       { lane: "blocks", tick: 0, kind: "chord", name: "Am", length: 192 }, // до F
       { lane: "tab", tick: 24, kind: "tab", string: 6, fret: 3 },
       { lane: "tab", tick: 48, kind: "tab", string: 1, fret: "x" },
-      { lane: "cajon", tick: 96, kind: "cajon", hit: "g" },
+      { lane: "cajon", tick: 96, kind: "cajon", hit: "H" },
       { lane: "blocks", tick: 192, kind: "chord", name: "F", length: 192 }, // до кінця такту
       { lane: "blocks", tick: 384, kind: "chord", name: "G", length: 384 },
     ]);

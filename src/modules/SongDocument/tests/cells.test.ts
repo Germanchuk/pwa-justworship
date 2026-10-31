@@ -52,9 +52,9 @@ const tabLine = (name: string, ...frets: [number, string][]) => {
   return `${name}|${out}|`;
 };
 
-/** Кахон текстом: `bars` тактів; удари — кроки від початку рядка (з 0) на лініях B, T, g. */
-const cajon = (bars: number, hits: { B?: number[]; T?: number[]; g?: number[] } = {}, steps = 16) =>
-  (["B", "T", "g"] as const).map(
+/** Кахон текстом: `bars` тактів; удари — кроки від початку рядка (з 0) на лініях B, T, H, M. */
+const cajon = (bars: number, hits: { B?: number[]; T?: number[]; H?: number[]; M?: number[] } = {}, steps = 16) =>
+  (["B", "T", "H", "M"] as const).map(
     (row) =>
       `${row}|${Array.from({ length: bars }, (_, b) => Array.from({ length: steps }, (_, s) => (hits[row]?.includes(b * steps + s) ? "o" : "-")).join("")).join("|")}|`,
   );
@@ -166,13 +166,14 @@ describe("сітка", () => {
 });
 
 describe("кахон", () => {
-  it("кожен удар на своїй лінії; B / T / g — на свою лінію, o — на лінію курсора, «-» стирає; курсор стоїть", () => {
+  it("кожен удар на своїй лінії; B / T / H / M (стара g — хет) — на свою лінію, o — на лінію курсора, «-» стирає; курсор стоїть", () => {
     const { net, id, type } = withLane("cajon");
     expect(type("B", 0, { step: 0, string: 0 })).toEqual({ step: 0, string: 0 });
-    type("Tg", 0, { step: 4, string: 0 }); // два удари разом
+    type("Tg", 0, { step: 4, string: 0 }); // два удари разом; g — хет
     type("o", 0, { step: 8, string: 2 });
     type("o-", 0, { step: 12, string: 1 });
-    expect(text(net.B, 0, id, "cajon")).toEqual(cajon(1, { B: [0], T: [4], g: [4, 8] }));
+    type("m", 0, { step: 14, string: 0 });
+    expect(text(net.B, 0, id, "cajon")).toEqual(cajon(1, { B: [0], T: [4], H: [4, 8], M: [14] }));
   });
 
   it("кахон однією лінією (до 2026-10-22) розкладається по лініях — і в пісні, і з буфера", () => {
@@ -187,7 +188,7 @@ describe("кахон", () => {
       upgradeCajon(slotOf(net.A, 0, id));
       upgradeGrid(slotOf(net.A, 0, id), "cajon");
     });
-    expect(text(net.B, 0, id, "cajon")).toEqual(cajon(1, { B: [0], T: [4], g: [6] }));
+    expect(text(net.B, 0, id, "cajon")).toEqual(cajon(1, { B: [0], T: [4], H: [6] })); // g — хет
     expect(parseCells("cajon", [`|B---T-g${d(9)}|`], sc("cajon"))!.cells).toEqual({ "1.1/1": "o", "1.97/2": "o", "1.145/3": "o" });
   });
 });
@@ -303,7 +304,7 @@ describe("склеювання рядків", () => {
 
 describe("вставка розпізнає доріжки і збирає їх у рядок", () => {
   const TAB = [tabLine("e"), tabLine("B", [6, "1"]), tabLine("G", [4, "0"]), tabLine("D", [2, "2"]), tabLine("A", [0, "3"]), tabLine("E")];
-  const CAJON = cajon(1, { B: [0, 4], T: [2, 6], g: [7] });
+  const CAJON = cajon(1, { B: [0, 4], T: [2, 6], H: [7], M: [12] });
 
   it("таби, кахон, акорди й слова → один рядок пісні; наступні таби — новий рядок", () => {
     const { net, id: tab } = withLane("tab", [{ words: "" }]);
