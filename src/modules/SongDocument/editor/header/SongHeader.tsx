@@ -15,6 +15,7 @@ import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPla
 import "#modules/SingleSong/components/SlateLyricsPlayground/elements/SongMetaRow/SongMetaRow.css";
 import "#modules/SingleSong/components/SlateLyricsPlayground/display/DisplayToggles.css";
 import {
+  isBuiltinKind,
   readCapo,
   readHiddenLanes,
   readMeta,
@@ -38,6 +39,8 @@ type Props = {
   capoApplies: boolean;
   /** Зміна доріжок пісні — один крок undo (`LaneView.change`). */
   change: (fn: () => void) => void;
+  /** Телефон стоячи: лише слова й акорди — ні доданих доріжок, ні сітки, ні панелі доріжок. */
+  simple?: boolean;
 };
 
 
@@ -61,7 +64,7 @@ const tempoScale = (timeSignature: string) =>
     ? { max: 240, unitLabel: "вісімок/хв (BPM)" }
     : { max: 160, unitLabel: "уд/хв (BPM)" };
 
-export function SongHeader({ song, me, canEdit, capoApplies, change }: Props) {
+export function SongHeader({ song, me, canEdit, capoApplies, change, simple = false }: Props) {
   const { doc } = song;
   const meta = readMeta(doc);
   const capo = me ? readCapo(doc, me) : { fret: 0, off: false };
@@ -128,7 +131,7 @@ export function SongHeader({ song, me, canEdit, capoApplies, change }: Props) {
             </span>
           </div>
         )}
-        {me && songLanes(doc).some((l) => l.kind === "tab" || l.kind === "cajon" || l.kind === "piano") && (
+        {me && !simple && songLanes(doc).some((l) => l.kind === "tab" || l.kind === "cajon" || l.kind === "piano") && (
           // Масштаб показу табів і кахона — особистий, як капо; запис від нього не залежить.
           <div className="song-meta-line">
             <label className="song-meta-badge" title="Сітка показу табів і кахона — лише для вас">
@@ -149,7 +152,7 @@ export function SongHeader({ song, me, canEdit, capoApplies, change }: Props) {
         )}
         {me && (
           <span className="display-toggles">
-            {songLanes(doc).map(({ id: lane, kind, name: label }) => {
+            {songLanes(doc).filter((l) => !simple || isBuiltinKind(l.kind)).map(({ id: lane, kind, name: label }) => {
               const Icon = LANE_ICON[kind];
               return (
               <span key={lane} className="song-meta-line">
@@ -168,7 +171,7 @@ export function SongHeader({ song, me, canEdit, capoApplies, change }: Props) {
               </span>
               );
             })}
-            {canEdit && (
+            {canEdit && !simple && (
               <span className="song-meta-line">
                 <span
                   className="song-meta-badge display-toggle"

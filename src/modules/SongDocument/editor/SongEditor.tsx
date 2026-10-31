@@ -14,6 +14,8 @@ import { useCanAnnotate, useCanEditContent, useCapoApplies } from "#modules/Sing
 import { useConnectionStatus, useNotesViewers } from "#modules/SingleSong/redux/selectors";
 import { useCurrentUsername } from "#modules/SingleSong/components/SlateLyricsPlayground/elements/hooks";
 import {
+  allLanes,
+  isBuiltinKind,
   isTimeRange,
   readCapo,
   readHiddenLanes,
@@ -62,17 +64,23 @@ export function SongEditor({ songId }: { songId: string | number }) {
   // сама смуга, розрізана по рядках (`SONG-97`). Обидва поки лише показують.
   if (format === "landscape") return <LandscapeSong song={song} />;
   if (format === "desktop") return <DesktopSong song={song} />;
-  return <LoadedEditor song={song} />;
+  return <LoadedEditor song={song} simple={format === "phone"} />;
 }
 
-function LoadedEditor({ song }: { song: Song }) {
+/**
+ * `simple` — телефон стоячи: лише слова й акорди (зі структурними примітками,
+ * примітками й динамікою), без доданих доріжок і програвання; правка — за тими
+ * самими правилами, що й зі схованими доріжками (`SONG-97`).
+ */
+function LoadedEditor({ song, simple }: { song: Song; simple: boolean }) {
   const me = useCurrentUsername() ?? null;
   const canEdit = useCanEditContent();
   const canAnnotate = useCanAnnotate();
   const capoApplies = useCapoApplies();
   useDocVersion(song.doc); // шапка, примітки, особисте — перечитуються на кожну зміну
 
-  const hidden = me ? readHiddenLanes(song.doc, me) : [];
+  const personal = me ? readHiddenLanes(song.doc, me) : [];
+  const hidden = simple ? [...personal, ...allLanes(song.doc).flatMap((l) => (isBuiltinKind(l.kind) ? [] : [l.id]))] : personal;
   const zoom = me ? readZoom(song.doc, me) : undefined;
   const display: LaneDisplay = { words: !hidden.includes("words"), chords: !hidden.includes("chords"), hidden, zoom };
   const lanes = useMemo(
@@ -156,6 +164,7 @@ function LoadedEditor({ song }: { song: Song }) {
     songKey: meta.key,
     canEdit,
     canAnnotate,
+    simple,
     stroke: painting ? stroke : null,
     cursorLine,
     viewers,
@@ -166,7 +175,7 @@ function LoadedEditor({ song }: { song: Song }) {
   return (
     <Ctx.Provider value={ctx}>
       <div data-song-editor className="relative">
-        <SongHeader song={song} me={me} canEdit={canEdit} capoApplies={capoApplies} change={lanes.change} />
+        <SongHeader song={song} me={me} canEdit={canEdit} capoApplies={capoApplies} change={lanes.change} simple={simple} />
         <LostNotes song={song} notes={notes} />
         <Slate
           editor={view}
@@ -199,7 +208,7 @@ function LoadedEditor({ song }: { song: Song }) {
           />
         )}
         {painting && <DynamicsPalette brush={brush} setBrush={setBrush} />}
-        <Transport song={song} lanes={lanes} me={me} canEdit={canEdit} cursorLine={cursorLine} />
+        {!simple && <Transport song={song} lanes={lanes} me={me} canEdit={canEdit} cursorLine={cursorLine} />}
         {canEdit && <RemovalWarning />}
       </div>
     </Ctx.Provider>

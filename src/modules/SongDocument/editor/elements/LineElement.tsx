@@ -14,7 +14,7 @@ export function LineElement({ attributes, children, element }: RenderElementProp
   const ln = useModelLine(element);
   const kind = ln < 0 ? "empty" : lineKind(layout(ctx.song)[ln]);
   const mark = usePlayMark();
-  const playable = !ctx.canEdit && kind === "segment" && songLanes(ctx.song.doc).some((l) => (CELL_KINDS as readonly string[]).includes(l.kind));
+  const playable = !ctx.simple && !ctx.canEdit && kind === "segment" && songLanes(ctx.song.doc).some((l) => (CELL_KINDS as readonly string[]).includes(l.kind));
   return (
     <div {...attributes} data-kind={kind} data-line={ln} className="song-row relative">
       {playable && (
