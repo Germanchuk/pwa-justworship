@@ -56,7 +56,7 @@ import {
 } from "../../model";
 import { INK, BAR_PX, PIANO_ROW_PX, ROW_PX, STEP_PX, STEPS_FONT_PX, stepsVersion } from "../elements/stepGeometry";
 import { StepRows } from "../elements/StepRows";
-import { LANE_ICON } from "../laneIcons";
+import { LANE_ICON, SECTION_ICON } from "../laneIcons";
 import { setPlayMark, usePlayMark } from "../playback/mark";
 
 /**
@@ -128,8 +128,12 @@ export function Strip({ song, me, lanes, zoom, capo, notes, split = false }: Pro
         return (
           <div key={c.ln}>
             {heads.map((s, i) => (
-              <div key={i} className="mt-3 px-1.5 text-xs font-bold text-stone-700" style={{ paddingLeft: STRIP_GUTTER + 6, lineHeight: `${SECTION_PX}px` }}>
-                {s.name}
+              // Як ряд приміток у смузі: іконка в полі доріжок, лінія під рядом.
+              <div key={i} className="mt-3 flex text-xs font-bold text-stone-700" style={{ height: SECTION_PX, boxShadow: RULE }}>
+                <SectionMark edge />
+                <span className="px-1.5" style={{ lineHeight: `${SECTION_PX}px` }}>
+                  {s.name}
+                </span>
               </div>
             ))}
             {c.empty ? (
@@ -182,8 +186,15 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
   /** Висота всього, що тримається згори: таймлайн, примітка, динаміка. */
   const headPx = RULER_PX + sectionPx + dynPx;
 
-  // Кут: над полем — порожньо, але непрозоро (під ним їдуть таймлайн і примітки).
-  items.push(<div key="corner" style={{ gridColumn: 1, gridRow: "1 / 4", ...sticky({ top: 0, zIndex: 5 }) }} />);
+  // Кут: над полем — порожньо, але непрозоро (під ним їдуть таймлайн і динаміка);
+  // ряд структурних приміток у полі — як доріжка: іконка й лінія під нею.
+  items.push(<div key="corner" style={{ gridColumn: 1, gridRow: "1 / 3", ...sticky({ top: 0, zIndex: 5 }) }} />);
+  if (sectionPx)
+    items.push(
+      <div key="gsections" style={{ gridColumn: 1, gridRow: 3, height: SECTION_PX, ...sticky({ top: RULER_PX + dynPx, zIndex: 5, boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
+        <SectionMark />
+      </div>,
+    );
 
   // Підкладка під примітки й таймлайн на всю ширину: де примітки немає (до першої,
   // порожній рядок), між таймлайном і панеллю згори не просвічує пісня.
@@ -388,6 +399,15 @@ function Marked({ text, marks }: { text: string; marks: NoteView[] }) {
         );
       })}
     </>
+  );
+}
+
+/** Іконка ряду структурних приміток у полі доріжок. */
+function SectionMark({ edge = false }: { edge?: boolean }) {
+  return (
+    <span title="Структурні примітки" className="flex shrink-0 items-center justify-end pr-1" style={{ width: STRIP_GUTTER, height: SECTION_PX, boxShadow: edge ? GUTTER_EDGE : undefined }}>
+      <SECTION_ICON aria-label="Структурні примітки" className="size-3.5 text-stone-400" />
+    </span>
   );
 }
 
