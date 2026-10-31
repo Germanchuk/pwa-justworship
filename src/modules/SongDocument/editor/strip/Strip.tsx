@@ -182,7 +182,8 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
   // структурних приміток — лише коли вони є.
   const sectionPx = sections.length ? SECTION_PX : 0;
   // Смужки динаміки: спільна, під нею моя.
-  const dynPx = me ? DYN_PX * 2 : DYN_PX;
+  // +1 px — лінія під рядом, як під доріжкою.
+  const dynPx = (me ? DYN_PX * 2 : DYN_PX) + 1;
   /** Висота всього, що тримається згори: таймлайн, примітка, динаміка. */
   const headPx = RULER_PX + sectionPx + dynPx;
 
@@ -193,7 +194,7 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
       <RowMark Icon={TIMELINE_ICON} name="Таймлайн" height={RULER_PX} />
     </div>,
   );
-  items.push(<div key="gdyn" style={{ gridColumn: 1, gridRow: 2, height: dynPx, ...sticky({ top: RULER_PX, zIndex: 5 }) }} />);
+  items.push(<div key="gdyn" style={{ gridColumn: 1, gridRow: 2, height: dynPx, ...sticky({ top: RULER_PX, zIndex: 5, boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }} />);
   if (sectionPx)
     items.push(
       <div key="gsections" style={{ gridColumn: 1, gridRow: 3, height: SECTION_PX, ...sticky({ top: RULER_PX + dynPx, zIndex: 5, boxShadow: `${GUTTER_EDGE}, ${RULE}` }) }}>
@@ -223,13 +224,21 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
       </div>,
     ),
   );
-  // Лінії під таймлайном і рядом приміток — самих рядів, а не окремих рядків чи
+  // Лінії під таймлайном, динамікою й рядом приміток — самих рядів, а не окремих рядків чи
   // приміток: суцільні й там, де нічого немає (порожній рядок, до першої примітки).
   items.push(
     <div
       key="ruler-rule"
       className="pointer-events-none"
       style={{ gridColumn: "2 / -1", gridRow: 1, position: "sticky", top: 0, zIndex: 2, height: RULER_PX, boxShadow: RULE }}
+    />,
+  );
+  items.push(
+    <div
+      key="dyn-rule"
+      className="pointer-events-none"
+      // Над смужками рядків (вони теж липнуть, з тлом).
+      style={{ gridColumn: "2 / -1", gridRow: 2, position: "sticky", top: RULER_PX, zIndex: 3, height: dynPx, boxShadow: RULE }}
     />,
   );
   if (sectionPx)
