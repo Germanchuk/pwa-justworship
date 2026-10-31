@@ -49,13 +49,15 @@ type Props = {
   clickable?: boolean;
   /** Які лінії показати (з 0); за замовчуванням — усі (піаніно в смузі — лише вживані клавіші). */
   rows?: readonly number[];
+  /** Риска в кінці рядка; без неї межею стає риска на початку наступного рядка (смуга). */
+  end?: boolean;
 };
 
 /** Чорні клавіші піаніно — трохи темніші, межа октави — лінією під C. */
 const BLACK_KEY = "rgba(60, 50, 40, 0.07)";
 const OCTAVE_EDGE = "inset 0 -1px 0 rgba(120, 95, 50, 0.22)";
 
-function StepRowsView({ kind, slot, line, timeSignature, zoom, marks, selected, here, clickable, rows }: Props) {
+function StepRowsView({ kind, slot, line, timeSignature, zoom, marks, selected, here, clickable, rows, end = true }: Props) {
   const ROW_PX = rowPxOf(kind);
   const { scale, stepPx, sizes } = stepGeometry(kind, line, timeSignature, zoom);
   const steps = scale.cells;
@@ -115,14 +117,10 @@ function StepRowsView({ kind, slot, line, timeSignature, zoom, marks, selected, 
   const row = (key: string, fn: (step: number) => ReactNode, lineStyle: React.CSSProperties = {}) => (
     <div key={key} className="whitespace-pre flex items-stretch" style={{ lineHeight: `${ROW_PX}px`, ...lineStyle }}>
       {sizes.flatMap((size, b) => [
-        <span key={`bar${b}`} className="text-stone-400" style={fixed(BAR_PX)}>
-          |
-        </span>,
+        <span key={`bar${b}`} style={{ ...fixed(BAR_PX), background: BAR_LINE }} />,
         ...Array.from({ length: size }, (_, s) => fn(b * steps + s)),
       ])}
-      <span key="end" className="text-stone-400" style={fixed(BAR_PX)}>
-        |
-      </span>
+      {end && <span key="end" style={{ ...fixed(BAR_PX), background: BAR_LINE }} />}
     </div>
   );
   /**
@@ -160,7 +158,7 @@ function StepRowsView({ kind, slot, line, timeSignature, zoom, marks, selected, 
   };
 
   // Таби — струна на лінію, кахон — вид удару на лінію.
-  if (kind === "piano") return <PianoGrid {...{ sizes, steps, scale, beatTicks, placed, marks, selected, here, rows }} />;
+  if (kind === "piano") return <PianoGrid {...{ sizes, steps, scale, beatTicks, placed, marks, selected, here, rows, end }} />;
   if (kind !== "blocks") return <>{rowsOf(kind).map((name, string) => row(name, (step) => lineStep({ step, string })))}</>;
   // Прямокутники: назва відкриває блок, «-» його тягне; порожній крок — «·».
   return row("blocks", (step) => {
@@ -198,6 +196,7 @@ const sameSteps = (a: Props, b: Props) =>
   a.timeSignature === b.timeSignature &&
   a.zoom === b.zoom &&
   a.clickable === b.clickable &&
+  a.end === b.end &&
   (a.rows?.join() ?? "") === (b.rows?.join() ?? "") &&
   a.selected?.from === b.selected?.from &&
   a.selected?.to === b.selected?.to &&
@@ -218,6 +217,7 @@ type GridProps = {
   selected?: { from: number; to: number } | null;
   here?: CellAt | null;
   rows?: readonly number[];
+  end: boolean;
 };
 
 /**
@@ -227,11 +227,11 @@ type GridProps = {
  * лише ноти, позначки, виділене й курсор. Порожня клітинка — без риски, чорні
  * клавіші притінені, межа октави — лінією під C.
  */
-function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, here, rows }: GridProps) {
+function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, here, rows, end }: GridProps) {
   const names = rowsOf("piano");
   const list = rows ?? names.map((_, i) => i);
   const yOf = new Map(list.map((row, i) => [row, i * PIANO_ROW_PX]));
-  const width = (sizes.length + 1) * BAR_PX + sizes.reduce((a, b) => a + b, 0) * STEP_PX;
+  const width = (sizes.length + (end ? 1 : 0)) * BAR_PX + sizes.reduce((a, b) => a + b, 0) * STEP_PX;
   const x = (step: number) => stepX(step, steps, STEP_PX);
   const total = (sizes.length - 1) * steps + sizes[sizes.length - 1];
   /** Комірки, що перетинають проміжок `from…to` (тіки рядка), — смугою від першої до останньої. */
@@ -251,7 +251,7 @@ function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, he
   });
   // Такти: риска перед кожним і в кінці; кожна друга доля — темніша смугою.
   sizes.forEach((size, b) => {
-    layers.push(<div key={`b${b}`} className="absolute inset-y-0" style={{ left: x(b * steps) - BAR_PX / 2 - 0.5, width: 1, background: BAR_INK }} />);
+    layers.push(<div key={`b${b}`} className="absolute inset-y-0" style={{ left: x(b * steps) - BAR_PX / 2 - 1, width: 2, background: BAR_INK }} />);
     let run: number | null = null;
     for (let s = 0; s <= size; s++) {
       const tinted = s < size && Math.floor((s * scale.tick) / beatTicks) % 2 === 1;
@@ -262,7 +262,7 @@ function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, he
       }
     }
   });
-  layers.push(<div key="end" className="absolute inset-y-0" style={{ left: width - BAR_PX / 2 - 0.5, width: 1, background: BAR_INK }} />);
+  if (end) layers.push(<div key="end" className="absolute inset-y-0" style={{ left: width - BAR_PX / 2 - 1, width: 2, background: BAR_INK }} />);
   // Позначки приміток — смугою на всю висоту (тап по ній — меню позначки), виділене — так само.
   marks.forEach((n) => {
     const at = band(n.at!.from, n.at!.to);
@@ -311,5 +311,9 @@ function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, he
   );
 }
 
-/** Риска такту на сітці піаніно — як «|» у решти доріжок. */
-const BAR_INK = "rgba(120, 113, 108, 0.45)";
+/**
+ * Риска такту — суцільна лінія посередині свого місця, як розділювач тактів
+ * таймлайну (у тій самій вертикалі), лише темніша й жирніша (2026-10-31).
+ */
+const BAR_INK = "#a8a29e";
+const BAR_LINE = `linear-gradient(${BAR_INK}, ${BAR_INK}) center / 2px 100% no-repeat`;

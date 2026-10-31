@@ -9,8 +9,9 @@
  * лишається на місці. Під нею — **тачпад**: веди по ньому пальцем, і виділення
  * їде за ним — вбік по кроках (і далі в сусідній рядок пісні), угору-вниз по
  * струнах, по діагоналі — обома, — на крок чи струну за кожен їхній розмір
- * руху пальця. Смуга гортається сама, щоб виділене було видно. Виділену
- * комірку малює рамка в смузі (`data-strip-cursor`); її ставимо прямо в DOM.
+ * руху пальця. Смуга гортається сама, щоб виділене було видно. Виділене —
+ * стовпчик кроку (`data-strip-column`) і в ньому комірка струни, куди йде лад
+ * (`data-strip-cursor`); обидва ставимо прямо в DOM.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
 import * as Y from "yjs";
@@ -37,9 +38,15 @@ const stepsOf = (box: HTMLElement) => {
   return (box.dataset.sizes ?? "").split(",").map(Number).flatMap((n, bar) => Array.from({ length: n || 0 }, (_, s) => bar * cells + s));
 };
 
-type Props = { song: Song; me: string | null; scroller: RefObject<HTMLDivElement | null> };
+type Props = {
+  song: Song;
+  me: string | null;
+  scroller: RefObject<HTMLDivElement | null>;
+  /** Довгим натиском виділили кроки під примітку — дошку сховано, виділення комірки знято. */
+  paused?: boolean;
+};
 
-export function StripCellEditor({ song, me, scroller }: Props) {
+export function StripCellEditor({ song, me, scroller, paused = false }: Props) {
   const [picked, setPicked] = useState<Picked | null>(null);
   const pickedRef = useRef(picked);
   pickedRef.current = picked;
@@ -63,23 +70,20 @@ export function StripCellEditor({ song, me, scroller }: Props) {
   /** Рамка кроків доріжки рядка, де виділення. */
   const boxOf = (p: Picked) => boxesOf(p.lane).find((b) => Number(b.dataset.ln) === p.ln) ?? null;
 
-  /** Рамка виділеного кроку в смузі; немає виділення чи кроку — схована. */
+  /** Стовпчик і комірка виділеного кроку в смузі; немає виділення чи кроку — сховані. */
   const place = (p: Picked | null) => {
     const cursor = scroller.current?.querySelector<HTMLElement>("[data-strip-cursor]");
-    if (!cursor) return;
+    const column = scroller.current?.querySelector<HTMLElement>("[data-strip-column]");
+    if (!cursor || !column) return;
     const box = p && boxOf(p);
-    if (!p || !box || !cursor.parentElement) return void (cursor.style.display = "none");
+    if (!p || !box || !cursor.parentElement) return void (cursor.style.display = column.style.display = "none");
     const grid = cursor.parentElement.getBoundingClientRect();
     const r = box.getBoundingClientRect();
     const stepPx = Number(box.dataset.stepPx);
     const rowPx = Number(box.dataset.rowPx);
-    Object.assign(cursor.style, {
-      display: "block",
-      left: `${r.left - grid.left + stepX(p.at.step, Number(box.dataset.cells), stepPx)}px`,
-      top: `${r.top - grid.top + p.at.string * rowPx}px`,
-      width: `${stepPx}px`,
-      height: `${rowPx}px`,
-    });
+    const [left, top] = [r.left - grid.left + stepX(p.at.step, Number(box.dataset.cells), stepPx), r.top - grid.top];
+    Object.assign(column.style, { display: "block", left: `${left}px`, top: `${top}px`, width: `${stepPx}px`, height: `${Number(box.dataset.rows) * rowPx}px` });
+    Object.assign(cursor.style, { display: "block", left: `${left}px`, top: `${top + p.at.string * rowPx}px`, width: `${stepPx}px`, height: `${rowPx}px` });
   };
 
   const select = (p: Picked | null) => {
@@ -146,6 +150,10 @@ export function StripCellEditor({ song, me, scroller }: Props) {
 
   // Пісня змінилась (свій ввід, чужа правка) — смуга перемальована: рамку — на місце.
   useLayoutEffect(() => place(pickedRef.current));
+  useEffect(() => {
+    if (paused) select(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paused]);
 
   // Тачпад: рамка ходить за пальцем, як під ним, — крок чи струна на кожен їхній розмір руху; по діагоналі теж.
   const drag = useRef<{ id: number; x: number; y: number; done: { x: number; y: number } } | null>(null);
@@ -183,7 +191,7 @@ export function StripCellEditor({ song, me, scroller }: Props) {
   };
 
   return (
-    <div className="flex shrink-0 flex-col gap-1 border-l border-stone-300 bg-[#f8f5eb] p-1.5" aria-label="Дошка ладів">
+    <div className={cn("flex shrink-0 flex-col gap-1 border-l border-stone-300 bg-[#f8f5eb] p-1.5", paused && "hidden")} aria-label="Дошка ладів">
       <div className="grid grid-cols-5 gap-1">
         {FRETS.map((fret) => (
           <button

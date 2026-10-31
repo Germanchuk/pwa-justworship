@@ -1,13 +1,14 @@
 /**
- * Тембри програвання доріжок (ADR-0009) — спершу найдешевші, синтезовані, без
- * семплів; судить вухо. Кожен виклик — подія в момент `time` (секунди
- * аудіоконтексту), тож звучить точно, навіть якщо запланована наперед.
+ * Тембри програвання доріжок (ADR-0009) — дешеві, синтезовані, крім гітари й
+ * кахона (семпли, `loadSamples`); судить вухо. Кожен виклик — подія в момент
+ * `time` (секунди аудіоконтексту), тож звучить точно, навіть якщо запланована
+ * наперед.
  *
- *  - таби — щипок Karplus-Strong (`PluckSynth`), м'який, з дещицею кімнати, по
- *    синту на струну: новий щипок тієї ж струни глушить попередній, як на
- *    гітарі; `x` — глухий клац;
- *  - кахон — бас (мембрана), тон (шум у середині й коротка мембрана), гост
- *    (тихий сухий шум);
+ *  - таби — семпли електрогітари, трохи овердрайву й кімнати, по семплеру на
+ *    струну: новий щипок тієї ж струни глушить попередній, як на гітарі; `x` —
+ *    глухий клац;
+ *  - кахон — семпли справжнього кахона: бас, тон (снейр), закритий хет, том; під
+ *    кожним — тихіший синтезований шар (щільніше);
  *  - прямокутники — акорд м'яким синтом, розкладений як піаніст (`voiceChord`);
  *  - піаніно — нота клавішним синтом, поки ваншот (згасає сама);
  *  - відлік — дерев'яний клац.
@@ -19,10 +20,46 @@ import { voiceChord } from "./voiceChord";
 
 /** Відкриті струни (MIDI) згори донизу, як рядки табів: e B G D A E. */
 const OPEN = [64, 59, 55, 50, 45, 40];
-/** Скільки секунд дзвенить щипок струни (до −60 дБ). */
-const RING_S = 1.8;
 
-const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+// Електрогітара Karoryfer Samples з набору tonejs-instruments (Nicholaus Brosowsky), CC-BY 3.0.
+// Семпл на кожну малу терцію E2–C6, тож Sampler розтягує ≤ ±1.5 півтона; обрізані до 3 с.
+const GUITAR_URLS = import.meta.glob<string>("./guitar/*.mp3", { eager: true, query: "?url", import: "default" });
+// Кахон VCSL (Versilian Studios), CC0: бас, слеп (снейр), том — бас із серединою на 3 півтони
+// вище, закритий хет — тихий слеп, лише верхи й коротко; по два варіанти удару (B1, B2…).
+const CAJON_URLS = import.meta.glob<string>("./cajon/*.mp3", { eager: true, query: "?url", import: "default" });
+
+/** Удар кахона — нота семплера (як у GM-барабанах); другий варіант — на півтон вище. */
+const CAJON_NOTE: Record<CajonHit, number> = { B: 36, T: 38, H: 42, M: 45 };
+/** Сила удару: хет тихий, як його й грають, — пальцями між долями. */
+const CAJON_FORCE: Record<CajonHit, number> = { B: 1, T: 0.8, H: 0.4, M: 0.75 };
+
+/** Семпли за MIDI-нотою: гітара — за висотою, кахон — `CAJON_NOTE` і варіант. */
+export type Samples = { guitar: Record<number, AudioBuffer>; cajon: Record<number, AudioBuffer> };
+let samples: Promise<Samples> | null = null;
+
+const loadSet = (urls: Record<string, string>, noteOf: (name: string) => number) =>
+  Promise.all(
+    Object.entries(urls).map(async ([path, url]) => [noteOf(/(\w+)\.mp3$/.exec(path)![1]), trimLead(await Tone.ToneAudioBuffer.fromUrl(url))] as const),
+  ).then((entries) => Object.fromEntries(entries) as Record<number, AudioBuffer>);
+
+/** Семпли вантажаться раз на запуск застосунку; перший ▶ чекає на них. */
+export const loadSamples = () =>
+  (samples ??= Promise.all([
+    loadSet(GUITAR_URLS, (name) => Midi.toMidi(name.replace("s", "#"))!), // Fs2 → F#2
+    loadSet(CAJON_URLS, (name) => CAJON_NOTE[name[0] as CajonHit] + Number(name.slice(1)) - 1), // B2 → другий варіант басу
+  ]).then(
+    ([guitar, cajon]) => ({ guitar, cajon }),
+    (error) => {
+      samples = null; // наступний ▶ спробує ще раз
+      throw error;
+    },
+  ));
+
+/** Тиша перед щипком (затримка кодека mp3) запізнила б його проти долі. */
+function trimLead(buffer: Tone.ToneAudioBuffer) {
+  const first = buffer.getChannelData(0).findIndex((v) => Math.abs(v) > 0.01);
+  return (first > 0 ? buffer.slice(first / buffer.sampleRate) : buffer).get()!;
+}
 
 export type Kit = {
   tab: (string: number, fret: number | "x", time: number) => void;
@@ -48,7 +85,8 @@ function chordNotes(name: string, prevUpper: number[] | null) {
   return voiceChord({ chordPcs: pcs, bassPc, prevUpper });
 }
 
-export function createKit(): Kit {
+/** `samples` — з `loadSamples`; без них таби й кахон мовчать. */
+export function createKit(samples: Samples | null): Kit {
   const out = new Tone.Volume(-10).toDestination(); // удари кахона й акорд разом не перевантажують вихід
   const nodes: { dispose: () => unknown }[] = [out];
   const add = <T extends { dispose: () => unknown }>(node: T) => (nodes.push(node), node);
@@ -71,26 +109,37 @@ export function createKit(): Kit {
     }
   };
 
-  // Гітара (2026-10-31: була різка, низи дзижчали). У `PluckSynth` Tone 15 фільтр стоїть лише
-  // на шумі атаки, а не в петлі струни: усі гармоніки згасають разом, і низька нота довго
-  // дзижчить «пилкою». Тож верхи гасимо самі — фільтр струни після щипка за мить темніє до
-  // кількох гармонік (`tab`), — а дзвін рівняємо в секундах, не в періодах. Плюс трохи кімнати.
-  const guitar = add(new Tone.Volume(4).connect(out));
-  const room = add(new Tone.Reverb({ decay: 1.5, preDelay: 0.01, wet: 0.2 }).connect(guitar));
-  // Басові струни трохи гучніші: без дзизку їм бракує ваги поруч із верхніми.
-  const strings = OPEN.map((_, i) => {
-    const tone = add(new Tone.Filter({ type: "lowpass", frequency: 3000, rolloff: -12, Q: 0.3 }).connect(room));
-    return { synth: add(new Tone.PluckSynth({ attackNoise: 0.5, dampening: 2200, release: 1, volume: i * 0.8 }).connect(tone)), tone };
-  });
+  // Гітара (2026-10-31: синтезований щипок звучав противно — Герман попросив семпли).
+  // Струни → трохи овердрайву → «кабінет» (без зрізу верхів овердрайв дзижчить) → кімната.
+  const level = add(new Tone.Volume(-1).connect(out));
+  const room = add(new Tone.Reverb({ decay: 1.5, preDelay: 0.01, wet: 0.1 }).connect(level));
+  const cabinet = add(new Tone.Filter({ type: "lowpass", frequency: 4000, rolloff: -24 }).connect(room));
+  const drive = add(new Tone.Distortion({ distortion: 0.1, oversample: "4x" }).connect(cabinet));
+  const strings = samples ? OPEN.map(() => add(new Tone.Sampler({ urls: samples.guitar, release: 0.08 }).connect(drive))) : [];
   const muteFilter = add(new Tone.Filter({ type: "bandpass", frequency: 1400, Q: 1.2 }).connect(out));
   const mute = add(new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.001, decay: 0.04, sustain: 0 }, volume: -10 }).connect(muteFilter));
 
-  const bass = add(new Tone.MembraneSynth({ pitchDecay: 0.04, octaves: 3, envelope: { attack: 0.001, decay: 0.35, sustain: 0, release: 0.1 }, volume: -2 }).connect(out));
+  // Кахон: удари одного виду чергують два варіанти — без «кулемета» на швидких хетах.
+  const cajon = samples && add(new Tone.Sampler({ urls: samples.cajon, volume: 1 }).connect(out));
+  const turn: Partial<Record<CajonHit, number>> = {};
+  // Під кожним семплом — синтезований шар, тихіший за нього (колишні звуки кахона): щільніше.
+  // Висоти мембран підібрані так, щоб шар складався з семплом, а не гасив його (на 52 Гц бочка тихшала).
+  const bass = add(new Tone.MembraneSynth({ pitchDecay: 0.04, octaves: 3, envelope: { attack: 0.001, decay: 0.35, sustain: 0, release: 0.1 }, volume: -6 }).connect(out));
   const slapFilter = add(new Tone.Filter({ type: "bandpass", frequency: 2600, Q: 0.9 }).connect(out));
-  const slap = add(new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.11, sustain: 0 }, volume: -4 }).connect(slapFilter));
-  const slapBody = add(new Tone.MembraneSynth({ pitchDecay: 0.01, octaves: 1.5, envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0.05 }, volume: -8 }).connect(out));
-  const ghostFilter = add(new Tone.Filter({ type: "highpass", frequency: 3200 }).connect(out));
-  const ghost = add(new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.035, sustain: 0 }, volume: -16 }).connect(ghostFilter));
+  const slap = add(new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.11, sustain: 0 }, volume: -7 }).connect(slapFilter));
+  const slapBody = add(new Tone.MembraneSynth({ pitchDecay: 0.01, octaves: 1.5, envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0.05 }, volume: -11 }).connect(out));
+  const hatFilter = add(new Tone.Filter({ type: "highpass", frequency: 3200 }).connect(out));
+  const hat = add(new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.035, sustain: 0 }, volume: -11 }).connect(hatFilter));
+  const tom = add(new Tone.MembraneSynth({ pitchDecay: 0.03, octaves: 2, envelope: { attack: 0.001, decay: 0.22, sustain: 0, release: 0.08 }, volume: -10 }).connect(out));
+  const layer: Record<CajonHit, (time: number) => void> = {
+    B: (time) => bass.triggerAttackRelease(75, 0.2, at(bass, time)),
+    T: (time) => {
+      slap.triggerAttackRelease(0.1, at(slap, time));
+      slapBody.triggerAttackRelease(190, 0.06, at(slapBody, time));
+    },
+    H: (time) => hat.triggerAttackRelease(0.03, at(hat, time)),
+    M: (time) => tom.triggerAttackRelease(120, 0.15, at(tom, time)),
+  };
 
   const pad = add(
     new Tone.PolySynth(Tone.Synth, {
@@ -119,21 +168,15 @@ export function createKit(): Kit {
         if (fret === "x") return mute.triggerAttackRelease(0.04, at(mute, time));
         const s = strings[string - 1];
         if (!s) return;
-        const f = hz(OPEN[string - 1] + fret);
-        const t = at(s.synth, time);
-        s.synth.resonance = 10 ** (-3 / (RING_S * f)); // −60 дБ за RING_S секунд на будь-якій висоті
-        s.tone.frequency.cancelScheduledValues(t);
-        s.tone.frequency.setValueAtTime(clamp(f * 14, 2500, 6000), t);
-        s.tone.frequency.exponentialRampToValueAtTime(clamp(f * 6, 800, 3000), t + 0.4);
-        s.synth.triggerAttack(f, t);
+        s.releaseAll(time);
+        s.triggerAttack(hz(OPEN[string - 1] + fret), time);
       }),
     cajon: (hit, time) =>
       safely(() => {
-        if (hit === "B") bass.triggerAttackRelease(58, 0.2, at(bass, time));
-        else if (hit === "T") {
-          slap.triggerAttackRelease(0.1, at(slap, time));
-          slapBody.triggerAttackRelease(190, 0.06, at(slapBody, time));
-        } else ghost.triggerAttackRelease(0.03, at(ghost, time));
+        layer[hit](time);
+        if (!cajon) return;
+        turn[hit] = (turn[hit] ?? 0) ^ 1;
+        cajon.triggerAttack(hz(CAJON_NOTE[hit] + turn[hit]), time, CAJON_FORCE[hit]);
       }),
     chord: (name, seconds, time) =>
       safely(() => {

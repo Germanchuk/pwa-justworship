@@ -21,8 +21,9 @@
  *
  *   прямокутники  |Am------|F---G---|   назва відкриває, «-» тягне, «.» — порожньо
  *   кахон         B|o-------o-------|  кожен удар на своїй лінії: B — бас,
- *                 T|----o-------o---|  T — тон, g — гост; «o» — удар, «-» — нічого
- *                 g|--o---o---o---o-|
+ *                 T|----o-------o---|  T — тон (снейр), H — хет, M — том;
+ *                 H|--o---o---o---o-|  «o» — удар, «-» — нічого
+ *                 M|--------------o-|
  *   таби          e|---12---|          шість струн e B G D A E; лад 0–24, x;
  *                                      порожній крок — один «-», крок із
  *                                      двозначним ладом — два символи на всіх струнах
@@ -35,8 +36,16 @@ import type { CellKind } from "./lanes";
 import type { Line } from "./song";
 
 export const TAB_STRINGS = ["e", "B", "G", "D", "A", "E"] as const;
-/** Лінії кахона згори донизу: бас, тон, гост. */
-export const CAJON_ROWS = ["B", "T", "g"] as const;
+/**
+ * Лінії кахона згори донизу: бас, тон (снейр), закритий хет, том. Хет — на місці
+ * госта `g` (до 2026-10-31): записане гостом звучить хетом.
+ */
+export const CAJON_ROWS = ["B", "T", "H", "M"] as const;
+/** Лінія кахона (з 0) за літерою, будь-якого регістру; стара `g` — хет; -1 — не кахон. */
+export const cajonRow = (ch: string) => {
+  const c = ch.toUpperCase();
+  return c === "G" ? CAJON_ROWS.indexOf("H") : CAJON_ROWS.indexOf(c as (typeof CAJON_ROWS)[number]);
+};
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const;
 /** MIDI найвищої клавіші піаніно (C8); лінія `row` (з 0) — `PIANO_TOP - row`. */
 export const PIANO_TOP = 108;
@@ -197,7 +206,7 @@ export function upgradeCajon(slot: Y.Map<unknown>) {
   Array.from(cells.entries()).forEach(([key, value]) => {
     if (key.includes("/")) return;
     cells.delete(key);
-    const row = CAJON_ROWS.indexOf(value as (typeof CAJON_ROWS)[number]);
+    const row = cajonRow(value);
     if (row >= 0) cells.set(`${key}/${row + 1}`, HIT);
   });
 }
@@ -465,7 +474,7 @@ export function parseCells(kind: CellKind, lines: string[], scale: Scale): Parse
   const all = barsIn(lines[0]);
   all.forEach((text, b) => {
     // Кахон однією лінією (як писали до 2026-10-22): літера — на свою лінію.
-    if (kind === "cajon") [...text].forEach((ch, s) => CAJON_ROWS.includes(ch as "B") && put(b + 1, s, HIT, CAJON_ROWS.indexOf(ch as "B")));
+    if (kind === "cajon") [...text].forEach((ch, s) => cajonRow(ch) >= 0 && put(b + 1, s, HIT, cajonRow(ch)));
     else
       for (const m of text.matchAll(/[^-.]+|-|\./g)) {
         if (m[0] === ".") continue;
@@ -478,7 +487,7 @@ export function parseCells(kind: CellKind, lines: string[], scale: Scale): Parse
 
 export const isTabLine = (line: string) => /^\s*[eBGDAE]\s*\|[-\dxX|hpbr/\\~ ]*$/.test(line) && line.includes("-");
 export const isCajonLine = (line: string) => /^\s*\|([BTg-]+\|)+\s*$/.test(line);
-/** Три лінії кахона: B, T, g — по «o» (чи «x») і «-». */
+/** Лінії кахона: B, T, H, M — по «o» (чи «x») і «-». */
 export const isCajonRows = (lines: string[]) =>
   lines.length === CAJON_ROWS.length && lines.every((line, i) => new RegExp(`^\\s*${CAJON_ROWS[i]}\\s*\\|([-oOxX]+\\|)+\\s*$`).test(line));
 export const isBlocksLine = (line: string) => !isCajonLine(line) && /^\s*\|([^\s|]+\|)+\s*$/.test(line) && /[A-H]/.test(line);
@@ -520,8 +529,8 @@ export function writeParsed(line: Line, slot: Y.Map<unknown>, { cells, bars, gri
  *
  * Таби й кахон — навігація ручна: друк лишає курсор на місці (цифри поспіль
  * — один лад, «12»), «-» чи пробіл стирають крок; на інший крок — стрілками.
- * У кахоні «o» чи «x» — удар на лінії курсора, B / T / g — удар на своїй лінії
- * в цьому кроці.
+ * У кахоні «o» чи «x» — удар на лінії курсора, B / T / H / M (і стара g — хет)
+ * — удар на своїй лінії в цьому кроці.
  */
 export function typeCell(
   kind: CellKind,
@@ -544,8 +553,8 @@ export function typeCell(
     return at;
   }
   if (kind === "cajon") {
-    const row = { b: 0, t: 1, g: 2 }[ch.toLowerCase()];
-    if (row !== undefined) cells.set(key({ ...at, string: row }), HIT);
+    const row = cajonRow(ch);
+    if (row >= 0) cells.set(key({ ...at, string: row }), HIT);
     else if (/[ox]/i.test(ch)) cells.set(key(at), HIT);
     else if (ch === "-" || ch === " " || ch === ".") cells.delete(key(at));
     return at;

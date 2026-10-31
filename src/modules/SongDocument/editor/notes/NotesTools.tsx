@@ -46,10 +46,10 @@ import { addNote, ALL, isTimeRange, layout, moveNoteTo, othersSeeing, removeNote
 import type { LaneView } from "../../bridge/laneView";
 
 /** Позначає інтерфейс приміток: тап по ньому не скидає ні виділення, ні обрану позначку. */
-const NOTES_UI = "data-notes-ui";
-const KEEP = `[${NOTES_UI}], [role="menu"]`;
+export const NOTES_UI = "data-notes-ui";
+export const KEEP = `[${NOTES_UI}], [role="menu"]`;
 
-const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+export const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 const keep = (e: React.MouseEvent) => e.preventDefault(); // тап по кнопці не знімає виділення
 
 /**
@@ -153,7 +153,7 @@ const span = (p: { anchor: Pos; focus: Pos }) => {
 };
 
 /** Обрані позначки — густіше й підкреслені своїм кольором (`NOTE-36`); `!important` — фон стоїть інлайном. */
-const pickedCss = (views: NoteView[]) =>
+export const pickedCss = (views: NoteView[]) =>
   views
     .map(({ note }) => {
       // Крок клітинкової доріжки підсвічує не сам себе (його фон — риска й смуга долі), а шар позначки.
@@ -318,7 +318,7 @@ export function NotesTools({ song, lanes, me, viewers, notes, addDraft, dropDraf
 }
 
 /** Кнопка палітри — квадрат на спільній плашці, фон — відтінок підсвітки. */
-function Swatch({ color, title, onClick, children }: { color: string; title: string; onClick: () => void; children: React.ReactNode }) {
+export function Swatch({ color, title, onClick, children }: { color: string; title: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
@@ -345,7 +345,7 @@ const ColorDot = ({ color }: { color: string }) =>
 const menuIconButton = cn(buttonVariants({ variant: "ghost", size: "icon" }), MENU_GROUP_ITEM);
 
 /** Колір позначки (`NOTE-42`): та сама палітра, що й при створенні. */
-function ColorMenu({ color, onPick }: { color: string; onPick: (color: string) => void }) {
+export function ColorMenu({ color, onPick }: { color: string; onPick: (color: string) => void }) {
   const options = [...COMMENT_PALETTE.map((c) => ({ key: c.name, color: c.hex })), { key: "strike", color: STRIKE_COLOR }];
   return (
     <DropdownMenu>
@@ -374,7 +374,7 @@ function ColorMenu({ color, onPick }: { color: string; onPick: (color: string) =
  * мого екрана. Публічному коментарю й соло-гурту кнопки нема. Хто вийшов з
  * гурту, але досі в адресатах, — теж у списку.
  */
-function AudienceMenu({ me, visibleFor, onChange }: { me: string; visibleFor: string[]; onChange: (v: string[]) => void }) {
+export function AudienceMenu({ me, visibleFor, onChange }: { me: string; visibleFor: string[]; onChange: (v: string[]) => void }) {
   const members = useBandMembers();
   if (visibleFor.includes(ALL)) return null;
   const names = members.map((m) => m.username).filter((u): u is string => !!u && u !== me);

@@ -45,6 +45,8 @@ export default defineConfig({
       // migration, which made generateSW throw and fail the build. Raise the
       // precache size limit so the bundle is cached instead of erroring.
       maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+      // Типові файли плюс семпли гітари: програвання доріжок має звучати й без мережі.
+      globPatterns: ["**/*.{js,wasm,css,html,mp3}"],
       runtimeCaching: [
         {
           urlPattern: /^https:\/\/be\.justworship\.uk\/api\/.*/,

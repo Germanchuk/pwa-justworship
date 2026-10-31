@@ -22,5 +22,5 @@ export function useStripView(song: Song) {
   const lanes = shownLanes(song, { words: !hidden.includes("words"), chords: !hidden.includes("chords"), hidden, zoom });
   const capo = me ? readCapo(song.doc, me) : { fret: 0, off: false };
   const notes = resolveNotes(song, viewers, (_, lane) => lanes.includes(lane));
-  return { me, lanes, zoom, capo: capoApplies && !capo.off ? capo.fret : 0, notes };
+  return { me, lanes, zoom, capo: capoApplies && !capo.off ? capo.fret : 0, notes, viewers };
 }

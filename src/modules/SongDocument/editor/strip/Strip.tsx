@@ -18,18 +18,20 @@
  *   … | Ти святий | Господь
  *
  * Ширина колонки — найдовша її частина (кроки чи слова), а в часі рядок
- * триває стільки, скільки прописано (`lineLength`). Порожній рядок —
- * вузька щілина; структурна примітка колонки не має — вона заголовок усього,
- * що за нею, до наступної.
+ * триває стільки, скільки прописано (`lineLength`). Межа рядків — як межа
+ * тактів, а порожній рядок у смузі місця не займає (на ПК — проміжок між
+ * смугами); структурна примітка колонки не має — вона заголовок усього, що
+ * за нею, до наступної.
  *
- * Лише перегляд: правка — у редакторі Slate (телефон стоячи, планшет), поки що.
+ * Сама смуга — лише вигляд: виділені кроки (`steps`) їй передають, а
+ * виділяють і правлять поза нею (`useStripSteps`, `StripCellEditor`).
  */
 import * as Y from "yjs";
 import { cn } from "@/lib/utils";
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { transposeChordTextForCapo } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/transposeChords";
 import type { SongKeyValue } from "#modules/SingleSong/components/SlateLyricsPlayground/transposition/model";
-import { cardBg, cardBorder, highlightBg, isStrike, STRIKE_INK } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/colors";
+import { highlightBg, isStrike, STRIKE_INK } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/colors";
 import {
   allLanes,
   barSizes,
@@ -53,11 +55,14 @@ import {
   shownDynamics,
   SILENCE,
   Song,
+  updateNote,
 } from "../../model";
 import { INK, BAR_PX, PIANO_ROW_PX, ROW_PX, rowPxOf, STEP_PX, stepGeometry, STEPS_FONT_PX, stepsVersion } from "../elements/stepGeometry";
 import { StepRows } from "../elements/StepRows";
 import { LANE_ICON, SECTION_ICON, TIMELINE_ICON } from "../laneIcons";
 import { setPlayMark, usePlayMark } from "../playback/mark";
+import { NoteCardBox } from "../notes/NoteCard";
+import type { StepsSel } from "./useStripSteps";
 
 /**
  * Поле зліва — не прокручується, і воно вузьке, щоб пісні лишалось місце:
@@ -69,9 +74,10 @@ const SECTION_PX = 20;
 const RULER_PX = 16;
 const DYN_PX = 4;
 const PAPER = "#f8f5eb";
-const LINE_EDGE = "inset 1px 0 0 rgba(120, 95, 50, 0.22)";
 const GUTTER_EDGE = "inset -1px 0 0 rgba(120, 95, 50, 0.22)";
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.14)";
+/** Розділювач тактів таймлайну (і початок частини) — посередині місця риски такту доріжок (`BAR_PX`). */
+const RULER_TICK = `linear-gradient(#d6d3d1, #d6d3d1) ${BAR_PX / 2 - 1}px 0 / 1px 100% no-repeat`;
 const TEXT_INK: Record<string, string> = { words: "#1e3a8a", chords: "#3b82f6", text: "#7c3aed" };
 
 type Column = { ln: number; at: LineAt; empty: boolean; start: number };
@@ -109,15 +115,22 @@ type Props = {
   notes: NoteView[];
   /** Розрізати по рядках пісні (ПК), а не однією смугою (телефон лежачи). */
   split?: boolean;
+  /** Виділені кроки клітинкової доріжки (`useStripSteps`). */
+  steps?: StepsSel | null;
+  /** Картки приміток правляться (в будь-якому режимі, як у редакторі); без цього — лише показ. */
+  cardsEdit?: CardsEdit;
 };
 
-export function Strip({ song, me, lanes, zoom, capo, notes, split = false }: Props) {
+/** Правка карток: чиїми очима дивлюсь і картки, щойно додані без тексту (`useStripSteps`). */
+type CardsEdit = { viewers: string[]; drafts: string[]; dropDraft: (id: string) => void };
+
+export function Strip({ song, me, lanes, zoom, capo, notes, split = false, steps = null, cardsEdit }: Props) {
   const { timeSignature, key } = readMeta(song.doc);
   const { cols, sections } = columnsOf(song, timeSignature);
   const defs = allLanes(song.doc);
   const kindOf = (id: string) => (id === "words" || id === "chords" ? id : defs.find((l) => l.id === id)?.kind);
   const pianoRows = Object.fromEntries(lanes.filter((id) => kindOf(id) === "piano").map((id) => [id, usedKeys(song, id)]));
-  const ctx: Ctx = { me, lanes, zoom, capo, notes, timeSignature, key, defs, kindOf, pianoRows };
+  const ctx: Ctx = { song, me, lanes, zoom, capo, notes, timeSignature, key, defs, kindOf, pianoRows, steps, cardsEdit };
   if (!split) return <StripGrid ctx={ctx} cols={cols} sections={sections} className="pb-6" />;
 
   // По рядках: структурна примітка — заголовок над першою смугою своєї частини.
@@ -162,11 +175,14 @@ type Ctx = {
   kindOf: (id: string) => string | undefined;
   /** Клавіші, що видно в доріжках піаніно, — спільні для всіх рядків пісні. */
   pianoRows: Record<string, number[]>;
+  steps: StepsSel | null;
+  song: Song;
+  cardsEdit: CardsEdit | undefined;
 };
 
 /** Сітка смуги з колонок `cols` — однієї на всю пісню чи однієї на рядок. */
 function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[]; sections: Section[]; className: string }) {
-  const { me, lanes, zoom, capo, notes, timeSignature, key, defs, kindOf } = ctx;
+  const { song, me, lanes, zoom, capo, notes, timeSignature, key, defs, kindOf, steps, cardsEdit } = ctx;
   const mark = usePlayMark();
   const hits = scaleOf("tab", timeSignature, zoom);
   const per = eighthsPerBar(timeSignature);
@@ -175,9 +191,12 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
   // Поле доріжок: межа з піснею — його права лінія, тож при прокрутці вбік вона лишається.
   const sticky = (extra: CSSProperties = {}): CSSProperties => ({ position: "sticky", left: 0, zIndex: 3, background: PAPER, boxShadow: GUTTER_EDGE, ...extra });
   const items: ReactNode[] = [];
-  /** Лінія між рядками пісні — ліворуч від колонки; у першої її немає: там межа поля доріжок. */
-  const edgeOf = (col: number) => (col === 0 ? [] : [LINE_EDGE]);
-  const shadow = (col: number, ...more: string[]) => [...edgeOf(col), ...more].join(", ") || undefined;
+  /**
+   * Межа рядків — як межа тактів (2026-10-31): рядок не закриває себе рискою —
+   * нею стає риска на початку наступного. Порожній рядок (межа частин) місця не
+   * займає; частини видно з ряду структурних приміток. Закриває лише останній.
+   */
+  const closes = (col: number) => !cols.slice(col + 1).some((c) => !c.empty);
   // Згори вниз: таймлайн під самою панеллю, впритул під ним динаміка, далі ряд
   // структурних приміток — лише коли вони є.
   const sectionPx = sections.length ? SECTION_PX : 0;
@@ -216,9 +235,10 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
     items.push(
       <div
         key={`s${i}`}
-        style={{ gridColumn: `${s.from + 2} / ${s.to + 2}`, gridRow: 3, position: "sticky", top: RULER_PX + dynPx, zIndex: 2, height: SECTION_PX, background: PAPER, boxShadow: shadow(s.from) }}
+        // Початок частини — риска в одну вертикаль із рисками тактів, як на таймлайні.
+        style={{ gridColumn: `${s.from + 2} / ${s.to + 2}`, gridRow: 3, position: "sticky", top: RULER_PX + dynPx, zIndex: 2, height: SECTION_PX, background: `${RULER_TICK}, ${PAPER}` }}
       >
-        <span className="sticky inline-block whitespace-nowrap px-1.5 text-xs font-bold text-stone-700" style={{ left: STRIP_GUTTER, lineHeight: `${SECTION_PX}px` }}>
+        <span className="sticky inline-block whitespace-nowrap pr-1.5 text-xs font-bold text-stone-700" style={{ left: STRIP_GUTTER, paddingLeft: BAR_PX / 2 + 4, lineHeight: `${SECTION_PX}px` }}>
           {s.name}
         </span>
       </div>,
@@ -251,11 +271,7 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
     );
 
   cols.forEach((c, col) => {
-    if (c.empty) {
-      // Порожній рядок — щілина між частинами.
-      items.push(<div key={`gap${col}`} style={{ gridColumn: col + 2, gridRow: `2 / span ${lanes.length * 2 + 2}`, width: 14 }} />);
-      return;
-    }
+    if (c.empty) return;
     const sizes = barSizes(lineLength(c.at.line, timeSignature), timeSignature, hits);
     // Таймлайн: такти пісні наскрізно; тап — грати звідси.
     items.push(
@@ -268,22 +284,26 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
         data-bar-ticks={hits.ticks}
         title="Грати звідси"
         onClick={() => setPlayMark(c.ln)}
-        className="flex items-stretch text-left text-[9px] text-stone-400"
-        style={at(col, 1, { position: "sticky", top: 0, zIndex: 1, height: RULER_PX, background: PAPER, boxShadow: shadow(col) })}
+        className="flex items-stretch text-left text-xs text-stone-600"
+        style={at(col, 1, { position: "sticky", top: 0, zIndex: 1, height: RULER_PX, background: PAPER })}
       >
         {sizes.map((size, b) => {
           const eighth = c.start + b * per;
           return (
             // Номер такту — посередині по висоті (над ним відступ, як під ним; нижня лінія — 1px).
-            // Риска — перед кожним тактом, крім першого: там уже межа рядка чи поля доріжок.
-            <span key={b} className={cn("relative flex shrink-0 items-center pb-px pl-0.5 leading-none", b > 0 && "border-l border-stone-300")} style={{ width: BAR_PX + size * STEP_PX }}>
+            // Риска — перед кожним тактом, в одну вертикаль із рискою такту доріжок.
+            <span
+              key={b}
+              className="relative flex shrink-0 items-center pb-px leading-none"
+              style={{ width: BAR_PX + size * STEP_PX, paddingLeft: BAR_PX / 2 + 4, background: RULER_TICK }}
+            >
               {Math.floor(eighth / per) + 1}
               {eighth % per ? `.${eighth % per}` : ""}
               {b === 0 && mark === c.ln && <span className="ml-0.5 text-red-500">▶</span>}
             </span>
           );
         })}
-        <span className="shrink-0" style={{ width: BAR_PX }} />
+        {closes(col) && <span className="shrink-0" style={{ width: BAR_PX }} />}
       </button>,
     );
     // Динаміка рядка: спільна, під нею моя; тримається згори впритул під таймлайном.
@@ -328,14 +348,13 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
     cols.forEach((c, col) => {
       if (c.empty) return;
       const marks = notes.filter((n) => n.line === c.ln && n.lane === id && n.status === "visible" && n.at && !n.foreign);
-      const cards = marks.filter((n) => n.note.body);
       const slot = c.at.line.get(id);
       let body: ReactNode = null;
       if (cells && slot instanceof Y.Map && slot.has("cells")) {
         body = (
           <div className="py-0.5" style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: STEPS_FONT_PX, lineHeight: 1.35, color: INK[kind as CellKind] }}>
             <StepsBox ln={c.ln} lane={id} kind={kind as CellKind} line={c.at.line} timeSignature={timeSignature} zoom={zoom} rows={pianoRows?.length}>
-              <StepRows version={stepsVersion(slot as Y.Map<unknown>, c.at.line, timeSignature)} kind={kind as CellKind} slot={slot as Y.Map<unknown>} line={c.at.line} timeSignature={timeSignature} zoom={zoom} marks={marks} rows={pianoRows} />
+              <StepRows version={stepsVersion(slot as Y.Map<unknown>, c.at.line, timeSignature)} kind={kind as CellKind} slot={slot as Y.Map<unknown>} line={c.at.line} timeSignature={timeSignature} zoom={zoom} marks={marks} selected={steps && steps.ln === c.ln && steps.lane === id ? steps : null} rows={pianoRows} end={closes(col)} />
             </StepsBox>
           </div>
         );
@@ -359,24 +378,16 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
         );
       }
       items.push(
-        <div key={`c${id}:${col}`} className="flex flex-col justify-end" style={at(col, cardsRow, { boxShadow: shadow(col), paddingRight: 8 })}>
-          {cards.map((n) => (
-            <div
-              key={n.note.id}
-              className="mx-1 my-0.5 max-w-64 whitespace-normal rounded border-l-4 px-1.5 py-0.5 text-xs"
-              style={{ fontFamily: "Pangolin, cursive", background: cardBg(n.note.color), borderColor: cardBorder(n.note.color), color: "#3f2a06" }}
-            >
-              {n.note.body} <span className="text-[10px] text-stone-500">{n.note.author}</span>
-            </div>
-          ))}
-        </div>,
-      );
-      items.push(
-        <div key={`${id}:${col}`} style={at(col, row, { boxShadow: shadow(col, RULE), paddingRight: 8 })}>
+        <div key={`${id}:${col}`} style={at(col, row, { boxShadow: RULE, paddingRight: closes(col) ? 8 : 0 })}>
           {body}
         </div>,
       );
     });
+    const shown = new Set(cols.filter((c) => !c.empty).map((c) => c.ln));
+    const cards = notes.filter(
+      (n) => shown.has(n.line) && n.lane === id && n.status === "visible" && n.at && !n.foreign && (n.note.body || cardsEdit?.drafts.includes(n.note.id)),
+    );
+    items.push(<LaneCards key={`c${id}`} song={song} cards={cards} edit={cardsEdit} style={{ gridColumn: `2 / span ${cols.length}`, gridRow: cardsRow }} />);
   });
 
   return (
@@ -388,7 +399,8 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
     >
       {items}
       <div data-strip-needle="" className="pointer-events-none absolute top-0 bottom-0 z-[4] w-0.5 -ml-px bg-red-500/80" style={{ display: "none" }} />
-      {/* Виділена комірка правки (`StripCellEditor` ставить її сам, поза React); під липкими рядами — їхня висота в `data-head-px`. */}
+      {/* Виділення правки — стовпчик і комірка в ньому (`StripCellEditor` ставить їх сам, поза React); під липкими рядами — їхня висота в `data-head-px`. */}
+      <div data-strip-column="" className="pointer-events-none absolute" style={{ display: "none", background: "rgba(59,130,246,0.14)" }} />
       <div data-strip-cursor="" data-head-px={headPx} className="pointer-events-none absolute" style={{ display: "none", boxShadow: "inset 0 0 0 99px rgba(59,130,246,0.3)", outline: "2px solid #3b82f6" }} />
     </div>
   );
@@ -418,7 +430,7 @@ function Marked({ text, marks }: { text: string; marks: NoteView[] }) {
         if (fills.length) style.background = fills.map((c) => `linear-gradient(${c}, ${c})`).join(", ");
         if (colors.some(isStrike)) Object.assign(style, { textDecoration: "line-through", textDecorationColor: STRIKE_INK, textDecorationThickness: 2 });
         return (
-          <span key={from} style={style}>
+          <span key={from} style={style} data-notes={on.map((n) => n.note.id).join(" ") || undefined}>
             {text.slice(from, to)}
           </span>
         );
@@ -447,6 +459,77 @@ function StepsBox({ ln, lane, kind, line, timeSignature, zoom, rows, children }:
       data-row-px={rowPxOf(kind)}
     >
       {children}
+    </div>
+  );
+}
+
+/** Проміжок між картками в ряду й між рядами карток. */
+const CARD_GAP = 4;
+
+/**
+ * Картки приміток доріжки — рядом над нею (`NOTE-50`). Кожна починається там
+ * само, де її позначка, і завширшки як її текст. Картки йдуть за часом і
+ * стають у перший ряд, де ні на що не налазять: без накладок — в один ряд,
+ * з накладкою — раніша вище, пізніша рядом нижче.
+ *
+ * Де позначка — питаємо в самої смуги (`data-notes`, `data-note-fill`): так
+ * однаково для кроків, піаніно й тексту. Тому розкладка — після малювання.
+ */
+function LaneCards({ song, cards, edit, style }: { song: Song; cards: NoteView[]; edit: CardsEdit | undefined; style: CSSProperties }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [spots, setSpots] = useState<Record<string, { left: number; top: number }>>({});
+  const [height, setHeight] = useState(0);
+  // Картка змінила розмір (довантажився шрифт, пишуть текст) — розкласти заново.
+  const [, refit] = useState(0);
+  const [observer] = useState(() => (typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => refit((n) => n + 1))));
+  useEffect(() => () => observer?.disconnect(), [observer]);
+  useEffect(() => ref.current?.querySelectorAll("[data-card]").forEach((c) => observer?.observe(c)));
+
+  // Щоразу після малювання: позначки рухаються разом із рештою смуги (масштаб, правка); пише лише те, що змінилось.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const strip = el?.closest("[data-strip]");
+    if (!el || !strip) return;
+    const base = el.getBoundingClientRect().left;
+    const placed = cards
+      .map((n) => {
+        const id = CSS.escape(n.note.id);
+        const lefts = Array.from(strip.querySelectorAll(`[data-notes~="${id}"], [data-note-fill~="${id}"]`), (a) => a.getBoundingClientRect().left);
+        const card = el.querySelector<HTMLElement>(`[data-card="${id}"]`);
+        return { id: n.note.id, left: Math.round((lefts.length ? Math.min(...lefts) : base) - base), width: card?.offsetWidth ?? 0, height: card?.offsetHeight ?? 0 };
+      })
+      .sort((a, b) => a.left - b.left);
+    // Ряди: де кожен закінчується і яка в нього висота.
+    const rows: { end: number; height: number }[] = [];
+    const at: Record<string, { left: number; row: number }> = {};
+    for (const c of placed) {
+      let row = rows.findIndex((r) => r.end + CARD_GAP <= c.left);
+      if (row < 0) row = rows.push({ end: 0, height: 0 }) - 1;
+      rows[row] = { end: c.left + c.width, height: Math.max(rows[row].height, c.height) };
+      at[c.id] = { left: c.left, row };
+    }
+    const tops = rows.map((_, i) => rows.slice(0, i).reduce((sum, r) => sum + r.height + CARD_GAP, CARD_GAP));
+    const next = Object.fromEntries(Object.entries(at).map(([id, { left, row }]) => [id, { left, top: tops[row] }]));
+    const total = rows.length ? tops[rows.length - 1] + rows[rows.length - 1].height + CARD_GAP : 0;
+    if (JSON.stringify(next) !== JSON.stringify(spots)) setSpots(next);
+    if (total !== height) setHeight(total);
+  });
+
+  return (
+    <div ref={ref} className="relative" style={{ ...style, height }}>
+      {cards.map((n) => (
+        <div key={n.note.id} data-card={n.note.id} className="absolute w-max max-w-72" style={spots[n.note.id] ?? { left: 0, top: 0, visibility: "hidden" }}>
+          <NoteCardBox
+            fit
+            view={n}
+            canAnnotate={!!edit}
+            viewers={edit?.viewers ?? []}
+            onBody={(body) => song.doc.transact(() => updateNote(n.holder, n.lane, n.note.id, { body }))}
+            onBlur={() => edit?.dropDraft(n.note.id)}
+          />
+        </div>
+      ))}
     </div>
   );
 }
