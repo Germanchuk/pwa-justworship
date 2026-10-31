@@ -5,6 +5,9 @@
  * рядка, що грає; смуга їде за нею (на ПК — ще й сторінка до смуги), доки
  * людина не погортає сама (⌖ повертає).
  *
+ * Повтор (↻) — перемикач, і до старту: з ним ▶ крутить рядок старту, тап по
+ * таймлайну переносить коло туди, а ■ повтору не знімає.
+ *
  * `scroller` — контейнер однієї смуги (лежачи); без нього гортається сторінка,
  * а кожна смуга-рядок — сама вбік (ПК).
  */
@@ -28,7 +31,7 @@ type Props = { song: Song; me: string | null; scroller?: RefObject<HTMLDivElemen
 
 export function StripTransport({ song, me, scroller, menuSide = "bottom" }: Props) {
   const state = useSyncExternalStore(lanePlayer.listen, lanePlayer.getState);
-  const loop = useSyncExternalStore(lanePlayer.listen, lanePlayer.loop);
+  const loop = useSyncExternalStore(lanePlayer.listen, lanePlayer.repeating);
   const [count, setCount] = useState<number | null>(null);
   const [follow, setFollow] = useState(true);
   const followRef = useRef(follow);
@@ -59,12 +62,12 @@ export function StripTransport({ song, me, scroller, menuSide = "bottom" }: Prop
 
   useEffect(
     () => () => {
-      lanePlayer.stop();
+      lanePlayer.reset();
       setPlayMark(null);
     },
     [song],
   );
-  // Тап по таймлайну під час гри — грати звідти.
+  // Тап по таймлайну під час гри — грати звідти (з повтором — коло переїжджає туди).
   useEffect(
     () =>
       onPlayMark(() => {
@@ -137,12 +140,6 @@ export function StripTransport({ song, me, scroller, menuSide = "bottom" }: Prop
 
   if (!songLanes(song.doc).some((l) => (CELL_KINDS as readonly string[]).includes(l.kind))) return null;
   const playing = state !== "idle";
-  const toggleLoop = () => {
-    if (loop) return lanePlayer.setLoop(null);
-    const line = lanePlayer.needle()?.line;
-    const plan = line !== undefined ? linePlan(song, line, hidden()) : null;
-    if (line !== undefined && plan) lanePlayer.setLoop({ line, from: 0, to: plan.length });
-  };
   return (
     <div className="flex items-center gap-1">
       {playing && !follow && (
@@ -150,21 +147,17 @@ export function StripTransport({ song, me, scroller, menuSide = "bottom" }: Prop
           <Crosshair className="size-5" />
         </button>
       )}
-      {playing && (
-        <>
-          <button
-            type="button"
-            className={cn(STRIP_BUTTON, loop && "bg-primary text-primary-foreground")}
-            onClick={toggleLoop}
-            aria-pressed={!!loop}
-            aria-label="Повтор"
-            title={loop ? "Без повтору" : "Повторювати цей рядок"}
-          >
-            <Repeat className="size-5" />
-          </button>
-          <TempoMenu song={song} me={me} className={STRIP_BUTTON} side={menuSide} />
-        </>
-      )}
+      <button
+        type="button"
+        className={cn(STRIP_BUTTON, loop && "bg-primary text-primary-foreground")}
+        onClick={() => lanePlayer.setLoop(!loop)}
+        aria-pressed={loop}
+        aria-label="Повтор"
+        title={loop ? "Без повтору" : "Повторювати рядок"}
+      >
+        <Repeat className="size-5" />
+      </button>
+      {playing && <TempoMenu song={song} me={me} className={STRIP_BUTTON} side={menuSide} />}
       <button
         type="button"
         className={cn(STRIP_BUTTON, playing && "bg-primary text-primary-foreground")}

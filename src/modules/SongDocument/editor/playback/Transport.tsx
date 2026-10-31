@@ -3,12 +3,15 @@
  * над нижнім баром, під великим пальцем. Є лише в пісні з клітинковими
  * доріжками: грати більше нічого.
  *
- *   не грає:  [▶]
+ *   не грає:  [↻] [▶]
  *   грає:     [⌖] [↻] [70 %] [■]     ⌖ — «до голки», коли стеження вимкнулось
  *
  * Звідки грати: у правці — від курсора-кроку (чи з рядка курсора); у
  * читанні — з рядка, по полю якого тапнули (`mark.ts`), а без позначки — з
  * рядка в центрі екрана. Тап по полю під час гри — грати звідти.
+ *
+ * Повтор (↻) — перемикач, і до старту: з ним ▶ крутить виділені кроки, а без
+ * них — рядок старту; тап по полю переносить коло туди; ■ повтору не знімає.
  *
  * Голка — риска на кроках клітинкових доріжок рядка, що грає, і підсвічений
  * рядок. Її малює цикл кадрів прямо в DOM (React на кожен кадр — надто
@@ -37,7 +40,7 @@ type Props = { song: Song; lanes: LaneView; me: string | null; canEdit: boolean;
 
 export function Transport({ song, lanes, me, canEdit, cursorLine }: Props) {
   const state = useSyncExternalStore(lanePlayer.listen, lanePlayer.getState);
-  const loop = useSyncExternalStore(lanePlayer.listen, lanePlayer.loop);
+  const loop = useSyncExternalStore(lanePlayer.listen, lanePlayer.repeating);
   const painting = useDynamicsPanel();
   const [count, setCount] = useState<number | null>(null);
   const [follow, setFollow] = useState(true);
@@ -76,22 +79,34 @@ export function Transport({ song, lanes, me, canEdit, cursorLine }: Props) {
     return nextLine(song, line, hidden()) ?? nextLine(song, -1, hidden());
   };
 
-  const play = (from: Span | null = startSpan()) => {
+  /** Виділені кроки як проміжок рядка; немає виділення — `null`. */
+  const selectionSpan = (): Span | null => {
+    const sel = lanes.cells.selection();
+    const line = sel ? layout(song).findIndex((l) => l.line === sel.line) : -1;
+    return sel && line >= 0 ? { line, from: sel.from, to: sel.to } : null;
+  };
+
+  const play = (from: Span | null, loop?: Span) => {
     if (!from) return;
     setFollow(true);
-    lanePlayer.start({ song, from, hidden, percent }).catch((error) => console.error("lane playback", error));
+    lanePlayer.start({ song, from, loop, hidden, percent }).catch((error) => console.error("lane playback", error));
+  };
+  /** ▶: з повтором і виділенням — крутити виділене, інакше — звідки грати зараз. */
+  const playHere = () => {
+    const sel = loop ? selectionSpan() : null;
+    play(sel ?? startSpan(), sel ?? undefined);
   };
 
   // Пішли з пісні — тиша; позначка старту — лише для цієї пісні.
   useEffect(
     () => () => {
-      lanePlayer.stop();
+      lanePlayer.reset();
       setPlayMark(null);
     },
     [song],
   );
 
-  // Тап по полю під час гри — грати звідти.
+  // Тап по полю під час гри — грати звідти (з повтором — коло переїжджає туди).
   useEffect(
     () =>
       onPlayMark(() => {
@@ -173,19 +188,8 @@ export function Transport({ song, lanes, me, canEdit, cursorLine }: Props) {
   if (!songLanes(song.doc).some((l) => (CELL_KINDS as readonly string[]).includes(l.kind))) return null;
 
   const playing = state !== "idle";
-  const toggleLoop = () => {
-    if (loop) return lanePlayer.setLoop(null);
-    // Виділені кроки — їх по колу; інакше — рядок, що грає.
-    const sel = lanes.cells.selection();
-    const lines = layout(song);
-    if (sel) {
-      const line = lines.findIndex((l) => l.line === sel.line);
-      if (line >= 0) return lanePlayer.setLoop({ line, from: sel.from, to: sel.to });
-    }
-    const line = lanePlayer.needle()?.line;
-    const plan = line !== undefined ? linePlan(song, line, hidden()) : null;
-    if (line !== undefined && plan) lanePlayer.setLoop({ line, from: 0, to: plan.length });
-  };
+  // Виділені кроки — їх по колу; інакше — рядок, що грає (чи, до старту, рядок старту).
+  const toggleLoop = () => lanePlayer.setLoop(!loop, selectionSpan() ?? undefined);
 
   return (
     <div
@@ -200,27 +204,25 @@ export function Transport({ song, lanes, me, canEdit, cursorLine }: Props) {
           <Crosshair className="size-6" />
         </Button>
       )}
-      {playing && (
-        <div className={MENU_GROUP}>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(MENU_GROUP_ITEM, loop && "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground")}
-            onClick={toggleLoop}
-            aria-pressed={!!loop}
-            aria-label="Повтор"
-            title={loop ? "Без повтору" : "Повторювати виділене чи цей рядок"}
-          >
-            <Repeat className="size-5" />
-          </Button>
-          <TempoMenu song={song} me={me} className={MENU_GROUP_ITEM} side="top" />
-        </div>
-      )}
+      <div className={MENU_GROUP}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(MENU_GROUP_ITEM, loop && "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground")}
+          onClick={toggleLoop}
+          aria-pressed={loop}
+          aria-label="Повтор"
+          title={loop ? "Без повтору" : "Повторювати виділене чи рядок"}
+        >
+          <Repeat className="size-5" />
+        </Button>
+        {playing && <TempoMenu song={song} me={me} className={MENU_GROUP_ITEM} side="top" />}
+      </div>
       <Button
         variant="ghost"
         size="icon"
         className={cn(MENU_TILE, playing && "border-primary bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:text-primary-foreground")}
-        onClick={() => (playing ? lanePlayer.stop() : play())}
+        onClick={() => (playing ? lanePlayer.stop() : playHere())}
         aria-label={playing ? "Зупинити" : "Грати доріжки"}
         title={playing ? "Зупинити" : "Грати доріжки"}
       >

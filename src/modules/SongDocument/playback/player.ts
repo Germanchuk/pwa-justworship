@@ -27,6 +27,8 @@ export type Needle = { line: number; tick: number };
 type Start = {
   song: Song;
   from: Span;
+  /** Що крутити, коли повтор увімкнено; без нього — увесь рядок старту. */
+  loop?: Span;
   /** Сховані людиною доріжки — не звучать (читається порядково). */
   hidden: () => readonly string[];
   /** Особистий темп у відсотках (читається порядково). */
@@ -55,11 +57,14 @@ class LanePlayer {
     beat: number;
     beats: number;
   } | null = null;
+  /** Повтор увімкнено (↻) — і до старту, і після ■; знімає його вимикач чи вихід із пісні (`reset`). */
+  private repeat = false;
+  /** Що крутиться по колу зараз — лише поки грає з повтором. */
   private loopSpan: Span | null = null;
   private generation = 0;
 
   getState = () => this.state;
-  loop = () => this.loopSpan;
+  repeating = () => this.repeat;
 
   listen = (fn: () => void) => {
     this.listeners.add(fn);
@@ -93,6 +98,7 @@ class LanePlayer {
       beat: unitTicks * spt,
       beats,
     };
+    this.loopSpan = this.repeat ? (start.loop ?? { ...start.from, from: 0 }) : null;
     this.setState("count");
     this.schedule();
   };
@@ -104,20 +110,35 @@ class LanePlayer {
     clearInterval(s.timer);
     s.kit.dispose();
     this.session = null;
-    this.loopSpan = null; // повтор — лише поки грає
+    this.loopSpan = null;
     this.setState("idle");
   };
 
-  /** Повтор проміжку (`null` — без повтору), лише поки грає: діє з кінця рядка, що грає. */
-  setLoop = (span: Span | null) => {
+  /** Пішли з пісні: тиша, повтор знято. */
+  reset = () => {
+    this.repeat = false;
+    this.stop();
+    this.notify();
+  };
+
+  /**
+   * Повтор (↻) увімкнути чи зняти. Не грає — лише перемикач: з ним ▶ крутить
+   * рядок старту. Грає — крутить `span`, а без нього рядок під голкою (на
+   * відліку — рядок старту); діє з кінця рядка, що звучить.
+   */
+  setLoop = (on: boolean, span?: Span) => {
+    this.repeat = on;
     const s = this.session;
-    if (!s) return;
-    this.loopSpan = span;
-    // Ще не запланований наступний рядок — уже повтор.
-    if (span) s.next = span;
-    else {
-      const last = s.played[s.played.length - 1];
-      s.next = last ? nextLine(s.start.song, last.span.line, s.start.hidden()) : s.next;
+    if (s) {
+      const line = this.needle()?.line ?? s.start.from.line;
+      const plan = linePlan(s.start.song, line, s.start.hidden());
+      this.loopSpan = on ? (span ?? (plan ? { line, from: 0, to: plan.length } : null)) : null;
+      // Ще не запланований наступний рядок — уже повтор.
+      if (this.loopSpan) s.next = this.loopSpan;
+      else {
+        const last = s.played[s.played.length - 1];
+        s.next = last ? nextLine(s.start.song, last.span.line, s.start.hidden()) : s.next;
+      }
     }
     this.notify();
   };
