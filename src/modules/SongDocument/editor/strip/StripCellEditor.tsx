@@ -23,8 +23,11 @@ import { cn } from "@/lib/utils";
 import { CellAt, cellKey, CellKind, layout, readMeta, readZoom, scaleOf, Song } from "../../model";
 import { stepAtPoint, stepX } from "../elements/stepGeometry";
 
-/** У правці свайп угору-вниз по пісні не гортає — лише по полю підписів. */
-const EDIT_CSS = "[data-strip-editing] [data-strip] > :not([data-strip-gutter]) { touch-action: pan-x; }";
+/**
+ * У правці смуга гортається пальцем лише вбік — уся, без щілин (порожні місця
+ * сітки теж); угору-вниз її гортає поле підписів — нашим кодом.
+ */
+const EDIT_CSS = "[data-strip-editing] { touch-action: pan-x; }";
 /** Доріжки, які вже правляться лежачи. */
 const EDITABLE: readonly string[] = ["tab"];
 const FRETS = Array.from({ length: 25 }, (_, n) => String(n));
@@ -105,17 +108,20 @@ export function StripCellEditor({ song, me, scroller }: Props) {
       const box = pickedRef.current && boxOf(pickedRef.current);
       return box ? Number(box.dataset.rowPx) : 0;
     };
-    // Свайп: вісь — за першими пікселями руху; угору-вниз — струна на кожен ряд руху пальця.
-    let swipe: { x: number; y: number; axis: "x" | "y" | null; from: number } | null = null;
+    // Свайп: вісь — за першими пікселями руху; угору-вниз — струна на кожен ряд руху
+    // пальця. По полю підписів угору-вниз — гортання смуги (пальцем, без інерції).
+    let swipe: { x: number; y: number; axis: "x" | "y" | null; from: number; gutter: boolean; top: number } | null = null;
     const onTouchStart = (e: TouchEvent) => {
       const t = e.touches[0];
-      swipe = e.touches.length === 1 && !inGutter(e) ? { x: t.clientX, y: t.clientY, axis: null, from: 0 } : null;
+      swipe = e.touches.length === 1 ? { x: t.clientX, y: t.clientY, axis: null, from: 0, gutter: inGutter(e), top: el.scrollTop } : null;
     };
     const onTouchMove = (e: TouchEvent) => {
-      const p = pickedRef.current;
-      if (!swipe || !p || !rowPx()) return;
+      if (!swipe) return;
       const t = e.touches[0];
       const [dx, dy] = [t.clientX - swipe.x, t.clientY - swipe.y];
+      if (swipe.gutter) return void (el.scrollTop = swipe.top - dy);
+      const p = pickedRef.current;
+      if (!p || !rowPx()) return;
       if (!swipe.axis) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
         swipe.axis = Math.abs(dy) > Math.abs(dx) ? "y" : "x";
@@ -124,15 +130,19 @@ export function StripCellEditor({ song, me, scroller }: Props) {
       // Палець угору — ніби пісня поїхала вгору: під прицілом — нижча струна.
       if (swipe.axis === "y") moveString(swipe.from - Math.round(dy / rowPx()));
     };
-    // Колесо (ПК, емуляція телефона): те саме, по ряду на кожен ряд прокрутки.
+    // Колесо й тачпад (ПК, емуляція телефона): над піснею вбік — гортаємо самі, без
+    // домішку вертикалі; угору-вниз — струна на кожен ряд прокрутки. Над полем — як завжди.
     let wheel = 0;
     const onWheel = (e: WheelEvent) => {
-      if (inGutter(e) || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      if (inGutter(e)) return;
       e.preventDefault();
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientWidth : 1;
+      const [dx, dy] = e.shiftKey && !e.deltaX ? [e.deltaY * unit, 0] : [e.deltaX * unit, e.deltaY * unit];
+      if (Math.abs(dx) >= Math.abs(dy)) return void (el.scrollLeft += dx);
       const p = pickedRef.current;
       const px = rowPx();
       if (!p || !px) return;
-      wheel += e.deltaY;
+      wheel += dy;
       const n = Math.trunc(wheel / px);
       if (n) {
         wheel -= n * px;
