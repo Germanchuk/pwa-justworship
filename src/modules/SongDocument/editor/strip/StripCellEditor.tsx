@@ -7,8 +7,8 @@
  *
  * Справа — **дошка**, без клавіатури: 0–24 і «Стерти»; виділення після вводу
  * лишається на місці. Під нею — **тачпад**: веди по ньому пальцем, і виділення
- * їде за ним по одній осі за жест — вбік по кроках (і далі в сусідній рядок
- * пісні), угору-вниз по струнах, — на крок чи струну за кожен їхній розмір
+ * їде за ним — вбік по кроках (і далі в сусідній рядок пісні), угору-вниз по
+ * струнах, по діагоналі — обома, — на крок чи струну за кожен їхній розмір
  * руху пальця. Смуга гортається сама, щоб виділене було видно. Виділену
  * комірку малює рамка в смузі (`data-strip-cursor`); її ставимо прямо в DOM.
  */
@@ -25,8 +25,6 @@ const EDITABLE: readonly string[] = ["tab"];
 const FRETS = Array.from({ length: 25 }, (_, n) => String(n));
 const KEY =
   "flex h-8 w-7 touch-manipulation items-center justify-center rounded-lg border border-stone-300 bg-white/80 text-sm font-semibold text-stone-700 active:bg-stone-200 disabled:opacity-40";
-/** Стільки пікселів руху пальця на тачпаді вирішують вісь жесту. */
-const AXIS_PX = 8;
 
 type Picked = { ln: number; lane: string; kind: CellKind; at: CellAt };
 
@@ -149,24 +147,20 @@ export function StripCellEditor({ song, me, scroller }: Props) {
   // Пісня змінилась (свій ввід, чужа правка) — смуга перемальована: рамку — на місце.
   useLayoutEffect(() => place(pickedRef.current));
 
-  // Тачпад: вісь — за першими пікселями руху; далі крок чи струна на кожен їхній розмір руху пальця.
-  const drag = useRef<{ id: number; x: number; y: number; axis: "x" | "y" | null; done: number } | null>(null);
+  // Тачпад: рамка ходить за пальцем, як під ним, — крок чи струна на кожен їхній розмір руху; по діагоналі теж.
+  const drag = useRef<{ id: number; x: number; y: number; done: { x: number; y: number } } | null>(null);
   const onPadDown = (e: PointerEvent<HTMLDivElement>) => {
     if (!pickedRef.current) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, axis: null, done: 0 };
+    drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, done: { x: 0, y: 0 } };
   };
   const onPadMove = (e: PointerEvent<HTMLDivElement>) => {
     const g = drag.current;
     const box = pickedRef.current && boxOf(pickedRef.current);
     if (!g || g.id !== e.pointerId || !box) return;
-    const [dx, dy] = [e.clientX - g.x, e.clientY - g.y];
-    if (!g.axis) {
-      if (Math.max(Math.abs(dx), Math.abs(dy)) < AXIS_PX) return;
-      g.axis = Math.abs(dy) > Math.abs(dx) ? "y" : "x";
-    }
-    const n = Math.round(g.axis === "x" ? dx / Number(box.dataset.stepPx) : dy / Number(box.dataset.rowPx));
-    if (n !== g.done) shift(g.axis, n - g.done);
+    const n = { x: Math.round((e.clientX - g.x) / Number(box.dataset.stepPx)), y: Math.round((e.clientY - g.y) / Number(box.dataset.rowPx)) };
+    if (n.x !== g.done.x) shift("x", n.x - g.done.x);
+    if (n.y !== g.done.y) shift("y", n.y - g.done.y);
     g.done = n;
   };
   const onPadUp = (e: PointerEvent<HTMLDivElement>) => {
