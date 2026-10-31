@@ -19,7 +19,7 @@ import * as Y from "yjs";
 import { memo, type ReactNode } from "react";
 import { highlightBg, isStrike, OTHERS_NEUTRAL_COLOR, STRIKE_INK } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/colors";
 import { CellAt, CellKind, cellSpan, isBlackKey, Line, NoteView, placeCells, rowsOf, stepsPerBeat } from "../../model";
-import { BAR_PX, INK, PIANO_ROW_PX, rowPxOf, STEP_PX, stepGeometry, stepX } from "./stepGeometry";
+import { BAR_PX, INK, PIANO_ROW_PX, rowPxOf, STEP_GLYPH_PX, STEP_PX, stepGeometry, stepX } from "./stepGeometry";
 
 const DASH = "linear-gradient(currentColor, currentColor) center / calc(100% - 2px) 1px no-repeat";
 /** Фон кольором — шаром, щоб лягати під риску й під прямокутник. */
@@ -151,7 +151,7 @@ function StepRowsView({ kind, slot, line, timeSignature, zoom, marks, selected, 
         alignItems: "center",
         justifyContent: "center", // ширший за крок лад виходить на обидва боки порівну
         height: ROW_PX,
-        fontSize: 10,
+        fontSize: STEP_GLYPH_PX,
         fontWeight: 600,
         color: cell ? INK[kind] : "#a8a29e",
         background: cell ? undefined : DASH,

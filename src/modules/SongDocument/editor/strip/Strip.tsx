@@ -54,7 +54,7 @@ import {
   SILENCE,
   Song,
 } from "../../model";
-import { INK, BAR_PX, PIANO_ROW_PX, ROW_PX, STEP_PX, stepsVersion } from "../elements/stepGeometry";
+import { INK, BAR_PX, PIANO_ROW_PX, ROW_PX, STEP_PX, STEPS_FONT_PX, stepsVersion } from "../elements/stepGeometry";
 import { StepRows } from "../elements/StepRows";
 import { LANE_ICON } from "../laneIcons";
 import { setPlayMark, usePlayMark } from "../playback/mark";
@@ -291,7 +291,7 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
       let body: ReactNode = null;
       if (cells && slot instanceof Y.Map && slot.has("cells")) {
         body = (
-          <div className="py-0.5" style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, lineHeight: 1.35, color: INK[kind as CellKind] }}>
+          <div className="py-0.5" style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: STEPS_FONT_PX, lineHeight: 1.35, color: INK[kind as CellKind] }}>
             <StepRows version={stepsVersion(slot as Y.Map<unknown>, c.at.line, timeSignature)} kind={kind as CellKind} slot={slot as Y.Map<unknown>} line={c.at.line} timeSignature={timeSignature} zoom={zoom} marks={marks} rows={pianoRows} />
           </div>
         );
