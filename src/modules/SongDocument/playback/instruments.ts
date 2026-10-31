@@ -19,6 +19,10 @@ import { voiceChord } from "./voiceChord";
 
 /** Відкриті струни (MIDI) згори донизу, як рядки табів: e B G D A E. */
 const OPEN = [64, 59, 55, 50, 45, 40];
+/** Скільки секунд дзвенить щипок струни (до −60 дБ). */
+const RING_S = 1.8;
+
+const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
 
 export type Kit = {
   tab: (string: number, fret: number | "x", time: number) => void;
@@ -67,12 +71,17 @@ export function createKit(): Kit {
     }
   };
 
-  // Гітара м'якша за «сирий» щипок (2026-10-31: був різкий): менше шуму на атаці, темніший
-  // фільтр у петлі, ще пологий зріз верхів і трохи кімнати; гучність і тривалість — як були.
-  const guitar = add(new Tone.Volume(6).connect(out));
+  // Гітара (2026-10-31: була різка, низи дзижчали). У `PluckSynth` Tone 15 фільтр стоїть лише
+  // на шумі атаки, а не в петлі струни: усі гармоніки згасають разом, і низька нота довго
+  // дзижчить «пилкою». Тож верхи гасимо самі — фільтр струни після щипка за мить темніє до
+  // кількох гармонік (`tab`), — а дзвін рівняємо в секундах, не в періодах. Плюс трохи кімнати.
+  const guitar = add(new Tone.Volume(4).connect(out));
   const room = add(new Tone.Reverb({ decay: 1.5, preDelay: 0.01, wet: 0.2 }).connect(guitar));
-  const body = add(new Tone.Filter({ type: "lowpass", frequency: 3000, Q: 0.5 }).connect(room));
-  const strings = OPEN.map(() => add(new Tone.PluckSynth({ attackNoise: 0.5, dampening: 2200, resonance: 0.97, release: 1 }).connect(body)));
+  // Басові струни трохи гучніші: без дзизку їм бракує ваги поруч із верхніми.
+  const strings = OPEN.map((_, i) => {
+    const tone = add(new Tone.Filter({ type: "lowpass", frequency: 3000, rolloff: -12, Q: 0.3 }).connect(room));
+    return { synth: add(new Tone.PluckSynth({ attackNoise: 0.5, dampening: 2200, release: 1, volume: i * 0.8 }).connect(tone)), tone };
+  });
   const muteFilter = add(new Tone.Filter({ type: "bandpass", frequency: 1400, Q: 1.2 }).connect(out));
   const mute = add(new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.001, decay: 0.04, sustain: 0 }, volume: -10 }).connect(muteFilter));
 
@@ -108,8 +117,15 @@ export function createKit(): Kit {
     tab: (string, fret, time) =>
       safely(() => {
         if (fret === "x") return mute.triggerAttackRelease(0.04, at(mute, time));
-        const synth = strings[string - 1];
-        if (synth) synth.triggerAttack(hz(OPEN[string - 1] + fret), at(synth, time));
+        const s = strings[string - 1];
+        if (!s) return;
+        const f = hz(OPEN[string - 1] + fret);
+        const t = at(s.synth, time);
+        s.synth.resonance = 10 ** (-3 / (RING_S * f)); // −60 дБ за RING_S секунд на будь-якій висоті
+        s.tone.frequency.cancelScheduledValues(t);
+        s.tone.frequency.setValueAtTime(clamp(f * 14, 2500, 6000), t);
+        s.tone.frequency.exponentialRampToValueAtTime(clamp(f * 6, 800, 3000), t + 0.4);
+        s.synth.triggerAttack(f, t);
       }),
     cajon: (hit, time) =>
       safely(() => {
