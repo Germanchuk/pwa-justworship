@@ -3,8 +3,9 @@
  * семплів; судить вухо. Кожен виклик — подія в момент `time` (секунди
  * аудіоконтексту), тож звучить точно, навіть якщо запланована наперед.
  *
- *  - таби — щипок Karplus-Strong (`PluckSynth`), по синту на струну: новий
- *    щипок тієї ж струни глушить попередній, як на гітарі; `x` — глухий клац;
+ *  - таби — щипок Karplus-Strong (`PluckSynth`), м'який, з дещицею кімнати, по
+ *    синту на струну: новий щипок тієї ж струни глушить попередній, як на
+ *    гітарі; `x` — глухий клац;
  *  - кахон — бас (мембрана), тон (шум у середині й коротка мембрана), гост
  *    (тихий сухий шум);
  *  - прямокутники — акорд м'яким синтом, розкладений як піаніст (`voiceChord`);
@@ -66,7 +67,12 @@ export function createKit(): Kit {
     }
   };
 
-  const strings = OPEN.map(() => add(new Tone.PluckSynth({ attackNoise: 1.2, dampening: 3600, resonance: 0.97, release: 1.2 }).connect(out)));
+  // Гітара м'якша за «сирий» щипок (2026-10-31: був різкий): менше шуму на атаці, темніший
+  // фільтр у петлі, ще пологий зріз верхів і трохи кімнати; гучність і тривалість — як були.
+  const guitar = add(new Tone.Volume(6).connect(out));
+  const room = add(new Tone.Reverb({ decay: 1.5, preDelay: 0.01, wet: 0.2 }).connect(guitar));
+  const body = add(new Tone.Filter({ type: "lowpass", frequency: 3000, Q: 0.5 }).connect(room));
+  const strings = OPEN.map(() => add(new Tone.PluckSynth({ attackNoise: 0.5, dampening: 2200, resonance: 0.97, release: 1 }).connect(body)));
   const muteFilter = add(new Tone.Filter({ type: "bandpass", frequency: 1400, Q: 1.2 }).connect(out));
   const mute = add(new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.001, decay: 0.04, sustain: 0 }, volume: -10 }).connect(muteFilter));
 
