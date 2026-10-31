@@ -7,7 +7,8 @@
  *  - таби — семпли електрогітари, трохи овердрайву й кімнати, по семплеру на
  *    струну: новий щипок тієї ж струни глушить попередній, як на гітарі; `x` —
  *    глухий клац;
- *  - кахон — семпли справжнього кахона: бас, тон (снейр), закритий хет, том;
+ *  - кахон — семпли справжнього кахона: бас, тон (снейр), закритий хет, том; під
+ *    кожним — тихіший синтезований шар (щільніше);
  *  - прямокутники — акорд м'яким синтом, розкладений як піаніст (`voiceChord`);
  *  - піаніно — нота клавішним синтом, поки ваншот (згасає сама);
  *  - відлік — дерев'яний клац.
@@ -121,6 +122,24 @@ export function createKit(samples: Samples | null): Kit {
   // Кахон: удари одного виду чергують два варіанти — без «кулемета» на швидких хетах.
   const cajon = samples && add(new Tone.Sampler({ urls: samples.cajon, volume: 1 }).connect(out));
   const turn: Partial<Record<CajonHit, number>> = {};
+  // Під кожним семплом — синтезований шар, тихіший за нього (колишні звуки кахона): щільніше.
+  // Висоти мембран підібрані так, щоб шар складався з семплом, а не гасив його (на 52 Гц бочка тихшала).
+  const bass = add(new Tone.MembraneSynth({ pitchDecay: 0.04, octaves: 3, envelope: { attack: 0.001, decay: 0.35, sustain: 0, release: 0.1 }, volume: -6 }).connect(out));
+  const slapFilter = add(new Tone.Filter({ type: "bandpass", frequency: 2600, Q: 0.9 }).connect(out));
+  const slap = add(new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.11, sustain: 0 }, volume: -7 }).connect(slapFilter));
+  const slapBody = add(new Tone.MembraneSynth({ pitchDecay: 0.01, octaves: 1.5, envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0.05 }, volume: -11 }).connect(out));
+  const hatFilter = add(new Tone.Filter({ type: "highpass", frequency: 3200 }).connect(out));
+  const hat = add(new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.035, sustain: 0 }, volume: -11 }).connect(hatFilter));
+  const tom = add(new Tone.MembraneSynth({ pitchDecay: 0.03, octaves: 2, envelope: { attack: 0.001, decay: 0.22, sustain: 0, release: 0.08 }, volume: -10 }).connect(out));
+  const layer: Record<CajonHit, (time: number) => void> = {
+    B: (time) => bass.triggerAttackRelease(75, 0.2, at(bass, time)),
+    T: (time) => {
+      slap.triggerAttackRelease(0.1, at(slap, time));
+      slapBody.triggerAttackRelease(190, 0.06, at(slapBody, time));
+    },
+    H: (time) => hat.triggerAttackRelease(0.03, at(hat, time)),
+    M: (time) => tom.triggerAttackRelease(120, 0.15, at(tom, time)),
+  };
 
   const pad = add(
     new Tone.PolySynth(Tone.Synth, {
@@ -154,6 +173,7 @@ export function createKit(samples: Samples | null): Kit {
       }),
     cajon: (hit, time) =>
       safely(() => {
+        layer[hit](time);
         if (!cajon) return;
         turn[hit] = (turn[hit] ?? 0) ^ 1;
         cajon.triggerAttack(hz(CAJON_NOTE[hit] + turn[hit]), time, CAJON_FORCE[hit]);
