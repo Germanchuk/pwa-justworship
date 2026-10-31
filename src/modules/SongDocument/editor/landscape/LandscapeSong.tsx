@@ -10,7 +10,9 @@
  * ПК (`strip/`): там смуга лише розрізана по рядках.
  *
  * Правка — поки лише табів, дошкою ладів справа (`strip/StripCellEditor`);
- * решта — у вертикальному положенні.
+ * решта — у вертикальному положенні. Примітки — в обох режимах, довгим
+ * натиском на кроках (`strip/useStripSteps`): палітра й меню позначки — на тій
+ * самій панелі справа, у правці на цей час замість дошки (`strip/StripNotes`).
  */
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -18,7 +20,7 @@ import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { barSpot } from "#layout/BottomBar/path";
-import { useCanEditContent, useCapoApplies, useSetSongMode, useSongMode } from "#modules/SingleSong/mode";
+import { useCanAnnotate, useCanEditContent, useCapoApplies, useSetSongMode, useSongMode } from "#modules/SingleSong/mode";
 import { MODES } from "#modules/SingleSong/components/SongControls/ModeSwitch/ModeSwitch";
 import { PlaybackControls } from "#modules/SingleSong/components/SongControls/PlaybackControls";
 import { SongActions } from "#modules/SingleSong/components/SongControls/SongActions";
@@ -28,19 +30,27 @@ import { Strip } from "../strip/Strip";
 import { STRIP_BUTTON, StripTransport } from "../strip/StripTransport";
 import { useStripView } from "../strip/useStripView";
 import { StripCellEditor } from "../strip/StripCellEditor";
+import { StripNotes } from "../strip/StripNotes";
+import { useStripSteps } from "../strip/useStripSteps";
 
 /** Кнопки меню пісні тут менші: висота екрана лежачи — на вагу золота. */
 const SMALL_TILES = "[&_.size-13]:size-10 [&_.size-13]:rounded-[14px] [&_svg]:max-h-6 [&_svg]:max-w-6";
+/** Кнопки палітри й меню позначки — теж менші. */
+const SMALL_ITEMS = "[&_.size-11]:size-9 [&_.size-11]:rounded-[11px] [&_svg]:max-h-5 [&_svg]:max-w-5";
 
 export function LandscapeSong({ song }: { song: Song }) {
   const view = useStripView(song);
   const { me } = view;
   const canEdit = useCanEditContent();
+  const canAnnotate = useCanAnnotate();
   const capoApplies = useCapoApplies();
   const [metaOpen, setMetaOpen] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const meta = readMeta(song.doc);
   const tabsShown = songLanes(song.doc).some((l) => l.kind === "tab" && view.lanes.includes(l.id));
+  // Примітки на кроках — лише в читанні: у правці тап по кроку ставить комірку для ладу.
+  const sel = useStripSteps(scroller, { song, zoom: view.zoom, notes: view.notes, on: canAnnotate && !!me });
+  const notesUi = !!me && (!!sel.steps || sel.picked.length > 0);
 
   // Сторінка під цим виглядом не гортається.
   useEffect(() => {
@@ -82,10 +92,16 @@ export function LandscapeSong({ song }: { song: Song }) {
       )}
       <div className="flex min-h-0 flex-1">
         <div ref={scroller} className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" onClick={() => metaOpen && setMetaOpen(false)}>
-          <Strip song={song} {...view} />
+          <Strip song={song} {...view} steps={sel.steps} cardsEdit={canAnnotate && me ? { viewers: view.viewers, ...sel } : undefined} />
         </div>
         {/* Правка лежачи — поки таби: дошка ладів справа (`StripCellEditor`). */}
-        {canEdit && tabsShown && <StripCellEditor song={song} me={me} scroller={scroller} />}
+        {canEdit && tabsShown && <StripCellEditor song={song} me={me} scroller={scroller} paused={notesUi} />}
+        {/* Палітра й меню позначки на виділених кроках — там само справа. */}
+        {notesUi && me && (
+          <div className="flex shrink-0 flex-col overflow-y-auto border-l border-stone-300 bg-[#f8f5eb] p-1.5">
+            <StripNotes song={song} me={me} viewers={view.viewers} notes={view.notes} {...sel} className={SMALL_ITEMS} />
+          </div>
+        )}
       </div>
     </div>
   );
