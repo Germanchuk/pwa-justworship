@@ -2,8 +2,8 @@
  * Програвання доріжок у смузі (`PLAY-50`) — і лежачи на телефоні, і на ПК.
  * Звідки грати — тап по таймлайну рядка, без нього — перший видимий рядок
  * (лежачи — біля лівого краю, на ПК — згори). Голка — риска через усю смугу
- * рядка, що грає; смуга їде за нею (на ПК — ще й сторінка до смуги), доки
- * людина не погортає сама (⌖ повертає).
+ * рядка, що грає; смуга плавно пливе під нею (`followNeedle`; на ПК — ще й
+ * сторінка до смуги), доки людина не погортає сама (⌖ повертає).
  *
  * Повтор (↻) — перемикач, і до старту: з ним ▶ крутить рядок старту, тап по
  * таймлайну переносить коло туди, а ■ повтору не знімає.
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { CELL_KINDS, readHiddenLanes, readTempo, songLanes, Song } from "../../model";
 import { lanePlayer } from "../../playback/player";
 import { linePlan, nextLine, Span } from "../../playback/timeline";
+import { followNeedle, frameClock } from "../playback/follow";
 import { getPlayMark, onPlayMark, setPlayMark } from "../playback/mark";
 import { TempoMenu } from "../playback/Transport";
 import { BAR_PX, STEP_PX } from "../elements/stepGeometry";
@@ -97,7 +98,9 @@ export function StripTransport({ song, me, scroller, menuSide = "bottom" }: Prop
     let shownCount: number | null = null;
     let shown: HTMLElement | null = null;
     let lastLine: number | null = null;
-    const frame = () => {
+    const clock = frameClock();
+    const frame = (now: number) => {
+      const dt = clock(now);
       const left = lanePlayer.countLeft();
       if (left !== shownCount) setCount((shownCount = left));
       const needle = lanePlayer.needle();
@@ -115,11 +118,9 @@ export function StripTransport({ song, me, scroller, menuSide = "bottom" }: Prop
         const x = ruler.offsetLeft + b * (BAR_PX + cells * STEP_PX) + BAR_PX + (within / cellTicks) * STEP_PX;
         n.style.display = "block";
         n.style.left = `${x}px`;
-        // Смуга вбік — у своєму контейнері (лежачи — уся пісня, на ПК — рядок).
+        // Смуга вбік — у своєму контейнері (лежачи — уся пісня, на ПК — рядок), плавно.
         const box = strip.parentElement;
-        if (followRef.current && box && (x < box.scrollLeft + STRIP_GUTTER + 16 || x > box.scrollLeft + box.clientWidth * 0.75)) {
-          box.scrollLeft = Math.max(0, x - STRIP_GUTTER - box.clientWidth * 0.2);
-        }
+        if (followRef.current && box) followNeedle(box, x, dt, STRIP_GUTTER);
         // На ПК — ще й сторінка до нового рядка, якщо він поза екраном.
         if (!scroller && followRef.current && needle.line !== lastLine) {
           const at = strip.getBoundingClientRect();

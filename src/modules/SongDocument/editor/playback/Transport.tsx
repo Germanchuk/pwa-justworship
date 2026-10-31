@@ -30,6 +30,7 @@ import { lanePlayer } from "../../playback/player";
 import { linePlan, nextLine, Span } from "../../playback/timeline";
 import { DYNAMICS_PANEL_BOTTOM } from "../dynamics/DynamicsPalette";
 import { useDynamicsPanel } from "../dynamics/panel";
+import { followNeedle, frameClock } from "./follow";
 import { getPlayMark, onPlayMark, setPlayMark } from "./mark";
 import { BAR_PX } from "../elements/stepGeometry";
 
@@ -144,7 +145,9 @@ export function Transport({ song, lanes, me, canEdit, cursorLine }: Props) {
       row?.removeAttribute("data-playing");
       row?.querySelectorAll<HTMLElement>("[data-needle]").forEach((n) => (n.style.display = "none"));
     };
-    const frame = () => {
+    const clock = frameClock();
+    const frame = (now: number) => {
+      const dt = clock(now);
       const left = lanePlayer.countLeft();
       if (left !== shownCount) setCount((shownCount = left));
       const needle = lanePlayer.needle();
@@ -163,10 +166,8 @@ export function Transport({ song, lanes, me, canEdit, cursorLine }: Props) {
           if (!el || x === null) return;
           el.style.display = "block";
           el.style.left = `${x}px`;
-          // Голка за краєм видимого — прокрутити кроки (усі доріжки рядка разом).
-          if (followRef.current && (x < sc.scrollLeft || x > sc.scrollLeft + sc.clientWidth - 24)) {
-            scrollers.forEach((o) => (o.scrollLeft = Math.max(0, x - 24)));
-          }
+          // Кроки пливуть під голкою — кожна доріжка рядка сама, до тієї самої голки.
+          if (followRef.current) followNeedle(sc, x, dt);
         });
       }
       raf = requestAnimationFrame(frame);
