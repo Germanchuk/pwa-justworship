@@ -199,7 +199,7 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
     items.push(
       <div
         key={`s${i}`}
-        style={{ gridColumn: `${s.from + 2} / ${s.to + 2}`, gridRow: 3, position: "sticky", top: RULER_PX + dynPx, zIndex: 2, height: SECTION_PX, background: PAPER, boxShadow: shadow(s.from, RULE) }}
+        style={{ gridColumn: `${s.from + 2} / ${s.to + 2}`, gridRow: 3, position: "sticky", top: RULER_PX + dynPx, zIndex: 2, height: SECTION_PX, background: PAPER, boxShadow: shadow(s.from) }}
       >
         <span className="sticky inline-block whitespace-nowrap px-1.5 text-xs font-bold text-stone-700" style={{ left: STRIP_GUTTER, lineHeight: `${SECTION_PX}px` }}>
           {s.name}
@@ -207,6 +207,16 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
       </div>,
     ),
   );
+  // Лінія під рядом приміток — його, а не окремої примітки: суцільна й там, де
+  // примітки немає (до першої, порожній рядок).
+  if (sectionPx)
+    items.push(
+      <div
+        key="sections-rule"
+        className="pointer-events-none"
+        style={{ gridColumn: "2 / -1", gridRow: 3, position: "sticky", top: RULER_PX + dynPx, zIndex: 2, height: SECTION_PX, boxShadow: RULE }}
+      />,
+    );
 
   cols.forEach((c, col) => {
     if (c.empty) {
