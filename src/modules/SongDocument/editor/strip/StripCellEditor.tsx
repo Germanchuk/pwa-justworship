@@ -8,10 +8,6 @@
  * Приціл над чимось, що не таби, — виділення немає, доки під нього не приїде
  * крок. Тап деінде — приціл знято.
  *
- * Щоб під приціл можна було підвести будь-який крок (і верхню струну, і
- * перший такт, і пісню, нижчу за екран), у правці навколо смуги — запас
- * порожнього паперу на екран з кожного боку; вигляд при цьому не стрибає.
- *
  * Лад вводить **дошка** справа — без клавіатури: 0–24 і «Стерти»; виділення
  * після вводу лишається на місці. Виділену комірку малює рамка в смузі
  * (`data-strip-cursor`); її ставимо прямо в DOM — на кожен крок прокрутки
@@ -101,23 +97,6 @@ export function StripCellEditor({ song, me, scroller }: Props) {
       place(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scroller]);
-
-  // Запас навколо смуги на час правки; прокрутку зсуваємо на нього ж — вигляд не стрибає.
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    const grid = el?.querySelector<HTMLElement>("[data-strip]");
-    if (!el || !grid) return;
-    const [x, y] = [el.clientWidth, el.clientHeight];
-    grid.style.padding = `${y}px ${x}px`;
-    el.scrollLeft += x;
-    el.scrollTop += y;
-    return () => {
-      const [left, top] = [el.scrollLeft, el.scrollTop];
-      grid.style.padding = "";
-      el.scrollLeft = left - x;
-      el.scrollTop = top - y;
-    };
   }, [scroller]);
 
   // Пісня змінилась (свій ввід, чужа правка) — смуга перемальована: рамку — на місце.
