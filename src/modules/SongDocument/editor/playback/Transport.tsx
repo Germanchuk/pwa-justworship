@@ -28,6 +28,7 @@ import { linePlan, nextLine, Span } from "../../playback/timeline";
 import { DYNAMICS_PANEL_BOTTOM } from "../dynamics/DynamicsPalette";
 import { useDynamicsPanel } from "../dynamics/panel";
 import { getPlayMark, onPlayMark, setPlayMark } from "./mark";
+import { BAR_PX } from "../elements/stepGeometry";
 
 const TEMPOS = [50, 60, 70, 80, 90, 100];
 const PLAYING_CSS = ".song-row[data-playing] { background: rgba(250, 204, 21, 0.1); }";
@@ -229,18 +230,16 @@ export function Transport({ song, lanes, me, canEdit, cursorLine }: Props) {
   );
 }
 
-/** Де на кроках доріжки тік `tick` (від початку рядка): px від початку її вмісту. */
+/** Де на кроках доріжки тік `tick` (від початку рядка): px від початку її вмісту — з геометрії, без пошуку елементів. */
 function needleX(sc: HTMLElement, tick: number): number | null {
   const cellTicks = Number(sc.dataset.cellTicks);
   const cells = Number(sc.dataset.cells);
   const bar = Number(sc.dataset.barTicks);
-  if (!cellTicks || !cells || !bar) return null;
+  const stepPx = Number(sc.dataset.stepPx);
+  if (!cellTicks || !cells || !bar || !stepPx) return null;
   const b = Math.floor(tick / bar);
   const within = tick - b * bar;
-  const step = sc.querySelector<HTMLElement>(`[data-step="${b * cells + Math.floor(within / cellTicks)}"][data-row="0"]`);
-  if (!step) return null;
-  const [r, box] = [step.getBoundingClientRect(), sc.getBoundingClientRect()];
-  return r.left - box.left + sc.scrollLeft + ((within % cellTicks) / cellTicks) * r.width;
+  return b * (BAR_PX + cells * stepPx) + BAR_PX + (within / cellTicks) * stepPx;
 }
 
 /** Темп програвання у відсотках — особисте в пісні (`PLAY-55`). */
