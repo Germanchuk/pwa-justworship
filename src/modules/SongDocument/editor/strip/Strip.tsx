@@ -72,6 +72,8 @@ const PAPER = "#f8f5eb";
 const LINE_EDGE = "inset 1px 0 0 rgba(120, 95, 50, 0.22)";
 const GUTTER_EDGE = "inset -1px 0 0 rgba(120, 95, 50, 0.22)";
 const RULE = "inset 0 -1px 0 0 rgba(120, 95, 50, 0.14)";
+/** Розділювач тактів таймлайну — посередині місця риски такту доріжок (`BAR_PX`). */
+const RULER_TICK = `linear-gradient(#d6d3d1, #d6d3d1) ${BAR_PX / 2 - 1}px 0 / 1px 100% no-repeat`;
 const TEXT_INK: Record<string, string> = { words: "#1e3a8a", chords: "#3b82f6", text: "#7c3aed" };
 
 type Column = { ln: number; at: LineAt; empty: boolean; start: number };
@@ -275,8 +277,13 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
           const eighth = c.start + b * per;
           return (
             // Номер такту — посередині по висоті (над ним відступ, як під ним; нижня лінія — 1px).
-            // Риска — перед кожним тактом, крім першого: там уже межа рядка чи поля доріжок.
-            <span key={b} className={cn("relative flex shrink-0 items-center pb-px pl-0.5 leading-none", b > 0 && "border-l border-stone-300")} style={{ width: BAR_PX + size * STEP_PX }}>
+            // Риска — в одну вертикаль із рискою такту доріжок, перед кожним тактом, крім першого:
+            // там уже межа рядка чи поля доріжок.
+            <span
+              key={b}
+              className="relative flex shrink-0 items-center pb-px leading-none"
+              style={{ width: BAR_PX + size * STEP_PX, paddingLeft: BAR_PX / 2 + 4, background: b > 0 ? RULER_TICK : undefined }}
+            >
               {Math.floor(eighth / per) + 1}
               {eighth % per ? `.${eighth % per}` : ""}
               {b === 0 && mark === c.ln && <span className="ml-0.5 text-red-500">▶</span>}

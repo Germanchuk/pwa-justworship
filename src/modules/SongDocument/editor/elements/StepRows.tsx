@@ -115,14 +115,10 @@ function StepRowsView({ kind, slot, line, timeSignature, zoom, marks, selected, 
   const row = (key: string, fn: (step: number) => ReactNode, lineStyle: React.CSSProperties = {}) => (
     <div key={key} className="whitespace-pre flex items-stretch" style={{ lineHeight: `${ROW_PX}px`, ...lineStyle }}>
       {sizes.flatMap((size, b) => [
-        <span key={`bar${b}`} className="text-stone-400" style={fixed(BAR_PX)}>
-          |
-        </span>,
+        <span key={`bar${b}`} style={{ ...fixed(BAR_PX), background: BAR_LINE }} />,
         ...Array.from({ length: size }, (_, s) => fn(b * steps + s)),
       ])}
-      <span key="end" className="text-stone-400" style={fixed(BAR_PX)}>
-        |
-      </span>
+      <span key="end" style={{ ...fixed(BAR_PX), background: BAR_LINE }} />
     </div>
   );
   /**
@@ -251,7 +247,7 @@ function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, he
   });
   // Такти: риска перед кожним і в кінці; кожна друга доля — темніша смугою.
   sizes.forEach((size, b) => {
-    layers.push(<div key={`b${b}`} className="absolute inset-y-0" style={{ left: x(b * steps) - BAR_PX / 2 - 0.5, width: 1, background: BAR_INK }} />);
+    layers.push(<div key={`b${b}`} className="absolute inset-y-0" style={{ left: x(b * steps) - BAR_PX / 2 - 1, width: 2, background: BAR_INK }} />);
     let run: number | null = null;
     for (let s = 0; s <= size; s++) {
       const tinted = s < size && Math.floor((s * scale.tick) / beatTicks) % 2 === 1;
@@ -262,7 +258,7 @@ function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, he
       }
     }
   });
-  layers.push(<div key="end" className="absolute inset-y-0" style={{ left: width - BAR_PX / 2 - 0.5, width: 1, background: BAR_INK }} />);
+  layers.push(<div key="end" className="absolute inset-y-0" style={{ left: width - BAR_PX / 2 - 1, width: 2, background: BAR_INK }} />);
   // Позначки приміток — смугою на всю висоту (тап по ній — меню позначки), виділене — так само.
   marks.forEach((n) => {
     const at = band(n.at!.from, n.at!.to);
@@ -311,5 +307,9 @@ function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, he
   );
 }
 
-/** Риска такту на сітці піаніно — як «|» у решти доріжок. */
-const BAR_INK = "rgba(120, 113, 108, 0.45)";
+/**
+ * Риска такту — суцільна лінія посередині свого місця, як розділювач тактів
+ * таймлайну (у тій самій вертикалі), лише темніша й жирніша (2026-10-31).
+ */
+const BAR_INK = "#a8a29e";
+const BAR_LINE = `linear-gradient(${BAR_INK}, ${BAR_INK}) center / 2px 100% no-repeat`;
