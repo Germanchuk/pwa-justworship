@@ -54,7 +54,7 @@ import {
   SILENCE,
   Song,
 } from "../../model";
-import { INK, BAR_PX, PIANO_ROW_PX, ROW_PX, STEP_PX, STEPS_FONT_PX, stepsVersion } from "../elements/stepGeometry";
+import { INK, BAR_PX, PIANO_ROW_PX, ROW_PX, rowPxOf, STEP_PX, stepGeometry, STEPS_FONT_PX, stepsVersion } from "../elements/stepGeometry";
 import { StepRows } from "../elements/StepRows";
 import { LANE_ICON, SECTION_ICON, TIMELINE_ICON } from "../laneIcons";
 import { setPlayMark, usePlayMark } from "../playback/mark";
@@ -334,7 +334,9 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
       if (cells && slot instanceof Y.Map && slot.has("cells")) {
         body = (
           <div className="py-0.5" style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: STEPS_FONT_PX, lineHeight: 1.35, color: INK[kind as CellKind] }}>
-            <StepRows version={stepsVersion(slot as Y.Map<unknown>, c.at.line, timeSignature)} kind={kind as CellKind} slot={slot as Y.Map<unknown>} line={c.at.line} timeSignature={timeSignature} zoom={zoom} marks={marks} rows={pianoRows} />
+            <StepsBox ln={c.ln} lane={id} kind={kind as CellKind} line={c.at.line} timeSignature={timeSignature} zoom={zoom} rows={pianoRows?.length}>
+              <StepRows version={stepsVersion(slot as Y.Map<unknown>, c.at.line, timeSignature)} kind={kind as CellKind} slot={slot as Y.Map<unknown>} line={c.at.line} timeSignature={timeSignature} zoom={zoom} marks={marks} rows={pianoRows} />
+            </StepsBox>
           </div>
         );
       } else if (!cells) {
@@ -386,6 +388,8 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
     >
       {items}
       <div data-strip-needle="" className="pointer-events-none absolute top-0 bottom-0 z-[4] w-0.5 -ml-px bg-red-500/80" style={{ display: "none" }} />
+      {/* Виділена комірка правки (`StripCellEditor` ставить її сам, поза React); під липкими рядами. */}
+      <div data-strip-cursor="" className="pointer-events-none absolute" style={{ display: "none", boxShadow: "inset 0 0 0 99px rgba(59,130,246,0.3)", outline: "2px solid #3b82f6" }} />
     </div>
   );
 }
@@ -420,6 +424,30 @@ function Marked({ text, marks }: { text: string; marks: NoteView[] }) {
         );
       })}
     </>
+  );
+}
+
+/**
+ * Рамка кроків доріжки рядка з її геометрією в `data-*` — за нею правка
+ * (`StripCellEditor`) знаходить комірку під пальцем без React: ті самі
+ * розміри, що й малюють кроки (`stepGeometry`).
+ */
+function StepsBox({ ln, lane, kind, line, timeSignature, zoom, rows, children }: { ln: number; lane: string; kind: CellKind; line: LineAt["line"]; timeSignature: string; zoom: number | undefined; rows?: number; children: ReactNode }) {
+  const { scale, stepPx, sizes } = stepGeometry(kind, line, timeSignature, zoom);
+  return (
+    <div
+      data-strip-steps=""
+      data-ln={ln}
+      data-lane={lane}
+      data-kind={kind}
+      data-cells={scale.cells}
+      data-step-px={stepPx}
+      data-sizes={sizes.join()}
+      data-rows={rows ?? rowsOf(kind).length}
+      data-row-px={rowPxOf(kind)}
+    >
+      {children}
+    </div>
   );
 }
 

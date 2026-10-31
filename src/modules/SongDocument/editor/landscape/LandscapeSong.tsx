@@ -9,8 +9,8 @@
  * частина, рядок пісні й свою доріжку. Смуга й програвання — ті самі, що й на
  * ПК (`strip/`): там смуга лише розрізана по рядках.
  *
- * Поки лише перегляд; перенесення в цей формат — щоб звільнити місце для
- * майбутньої правки.
+ * Правка — поки лише табів, дошкою ладів справа (`strip/StripCellEditor`);
+ * решта — у вертикальному положенні.
  */
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -22,11 +22,12 @@ import { useCanEditContent, useCapoApplies, useSetSongMode, useSongMode } from "
 import { MODES } from "#modules/SingleSong/components/SongControls/ModeSwitch/ModeSwitch";
 import { PlaybackControls } from "#modules/SingleSong/components/SongControls/PlaybackControls";
 import { SongActions } from "#modules/SingleSong/components/SongControls/SongActions";
-import { readMeta, Song } from "../../model";
+import { readMeta, Song, songLanes } from "../../model";
 import { SongHeader } from "../header/SongHeader";
 import { Strip } from "../strip/Strip";
 import { STRIP_BUTTON, StripTransport } from "../strip/StripTransport";
 import { useStripView } from "../strip/useStripView";
+import { StripCellEditor } from "../strip/StripCellEditor";
 
 /** Кнопки меню пісні тут менші: висота екрана лежачи — на вагу золота. */
 const SMALL_TILES = "[&_.size-13]:size-10 [&_.size-13]:rounded-[14px] [&_svg]:max-h-6 [&_svg]:max-w-6";
@@ -39,6 +40,7 @@ export function LandscapeSong({ song }: { song: Song }) {
   const [metaOpen, setMetaOpen] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const meta = readMeta(song.doc);
+  const tabsShown = songLanes(song.doc).some((l) => l.kind === "tab" && view.lanes.includes(l.id));
 
   // Сторінка під цим виглядом не гортається.
   useEffect(() => {
@@ -75,11 +77,15 @@ export function LandscapeSong({ song }: { song: Song }) {
       {metaOpen && (
         <div className="absolute inset-x-1.5 top-12 z-10 max-h-[70dvh] overflow-auto rounded-xl border border-stone-200 bg-[#f8f5eb] p-2 shadow-lg">
           <SongHeader song={song} me={me} canEdit={canEdit} capoApplies={capoApplies} change={(fn) => song.doc.transact(fn)} />
-          {canEdit && <p className="mt-1 text-xs text-stone-500">Тут поки лише перегляд: правити — у вертикальному положенні.</p>}
+          {canEdit && <p className="mt-1 text-xs text-stone-500">Лежачи поки правляться лише таби (дошка справа); решту — у вертикальному положенні.</p>}
         </div>
       )}
-      <div ref={scroller} className="min-h-0 flex-1 overflow-auto overscroll-contain" onClick={() => metaOpen && setMetaOpen(false)}>
-        <Strip song={song} {...view} />
+      <div className="flex min-h-0 flex-1">
+        <div ref={scroller} className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" onClick={() => metaOpen && setMetaOpen(false)}>
+          <Strip song={song} {...view} />
+        </div>
+        {/* Правка лежачи — поки таби: дошка ладів справа (`StripCellEditor`). */}
+        {canEdit && tabsShown && <StripCellEditor song={song} me={me} scroller={scroller} />}
       </div>
     </div>
   );
