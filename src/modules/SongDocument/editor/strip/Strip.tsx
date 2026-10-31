@@ -268,7 +268,7 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
         data-bar-ticks={hits.ticks}
         title="Грати звідси"
         onClick={() => setPlayMark(c.ln)}
-        className="flex items-stretch text-left text-[9px] text-stone-400"
+        className="flex items-stretch text-left text-xs text-stone-600"
         style={at(col, 1, { position: "sticky", top: 0, zIndex: 1, height: RULER_PX, background: PAPER, boxShadow: shadow(col) })}
       >
         {sizes.map((size, b) => {
