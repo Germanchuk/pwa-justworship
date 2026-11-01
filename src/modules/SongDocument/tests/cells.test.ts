@@ -8,6 +8,9 @@ import {
   ALL,
   barSizes,
   cellSpan,
+  copySpan,
+  lineTicks,
+  pasteSpan,
   PIANO_ROWS,
   pianoMidi,
   recognizeCells,
@@ -246,6 +249,21 @@ describe("таби", () => {
     const shown = text(net.B, 0, id, "tab");
     const parsed = parseCells("tab", shown, sc("tab"))!;
     expect(parsed.cells).toEqual({ "1.49/2": "12", "1.361/6": "3" });
+  });
+
+  it("кроки копіюються в інше місце всіма струнами: записане там на довжину копії стерто, за кінцем рядка — відкинуто", () => {
+    const { net, id, type } = withLane("tab");
+    type("3", 0, { step: 0, string: 5 });
+    type("5", 0, { step: 1, string: 1 });
+    type("7", 1, { step: 4, string: 0 }); // стане під вставку — зітреться
+    const [from] = cellSpan(sc("tab"), 0);
+    const [, to] = cellSpan(sc("tab"), 1);
+    const clip = copySpan("tab", slotOf(net.A, 0, id), from, to, "4/4");
+    const at = (ln: number, step: number) => change(net.A, () => pasteSpan(slotOf(net.A, ln, id), cellSpan(sc("tab"), step)[0], clip, lineTicks(linesOf(net.A)[ln], "4/4"), "4/4"));
+    at(1, 4);
+    at(1, 15); // другий крок копії — за кінцем рядка
+    expect(cellsJSON(net.B, 1, id)).toEqual({ "1.97/6": "3", "1.121/2": "5", "1.361/6": "3" });
+    expect(cellsJSON(net.B, 0, id)).toEqual({ "1.1/6": "3", "1.25/2": "5" }); // звідки копіювали — як було
   });
 });
 

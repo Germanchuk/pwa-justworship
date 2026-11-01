@@ -13,6 +13,7 @@
  * решта — у вертикальному положенні. Примітки — в обох режимах, довгим
  * натиском на кроках (`strip/useStripSteps`): палітра й меню позначки — на тій
  * самій панелі справа, у правці на цей час замість дошки (`strip/StripNotes`).
+ * У правці виділені кроки ще копіюють і переносять (`strip/clip.ts`).
  */
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -48,8 +49,8 @@ export function LandscapeSong({ song }: { song: Song }) {
   const scroller = useRef<HTMLDivElement>(null);
   const meta = readMeta(song.doc);
   const tabsShown = songLanes(song.doc).some((l) => l.kind === "tab" && view.lanes.includes(l.id));
-  // Примітки на кроках — лише в читанні: у правці тап по кроку ставить комірку для ладу.
-  const sel = useStripSteps(scroller, { song, zoom: view.zoom, notes: view.notes, on: canAnnotate && !!me });
+  // Кроки — довгим натиском, в обох режимах: примітки; у правці ще копіювати й переносити.
+  const sel = useStripSteps(scroller, { song, zoom: view.zoom, notes: view.notes, on: canAnnotate && !!me, edit: canEdit });
   const notesUi = !!me && (!!sel.steps || sel.picked.length > 0);
 
   // Сторінка під цим виглядом не гортається.
@@ -95,11 +96,11 @@ export function LandscapeSong({ song }: { song: Song }) {
           <Strip song={song} {...view} steps={sel.steps} cardsEdit={canAnnotate && me ? { viewers: view.viewers, ...sel } : undefined} />
         </div>
         {/* Правка лежачи — поки таби: дошка ладів справа (`StripCellEditor`). */}
-        {canEdit && tabsShown && <StripCellEditor song={song} me={me} scroller={scroller} paused={notesUi} />}
+        {canEdit && tabsShown && <StripCellEditor song={song} me={me} scroller={scroller} paused={notesUi} clip={sel.clip} />}
         {/* Палітра й меню позначки на виділених кроках — там само справа. */}
         {notesUi && me && (
           <div className="flex shrink-0 flex-col overflow-y-auto border-l border-stone-300 bg-[#f8f5eb] p-1.5">
-            <StripNotes song={song} me={me} viewers={view.viewers} notes={view.notes} {...sel} className={SMALL_ITEMS} />
+            <StripNotes song={song} me={me} viewers={view.viewers} notes={view.notes} {...sel} edit={canEdit} className={SMALL_ITEMS} />
           </div>
         )}
       </div>
