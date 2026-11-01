@@ -6,9 +6,11 @@
  * Текст нотатки — у самій картці над доріжкою (`NoteCardBox`), як у
  * редакторі: тап по картці — і пиши. «Додати нотатку» ставить порожню картку
  * з курсором; «Прибрати нотатку» лишає саме виділення (`NOTE-4`).
+ *
+ * У правці над палітрою — ще «Копіювати» (`clip.ts`): виділене — в буфер.
  */
 import { useState } from "react";
-import { Highlighter, MessageSquareOff, MessageSquarePlus, Strikethrough, TextSelect, Trash2 } from "lucide-react";
+import { Copy, Highlighter, MessageSquareOff, MessageSquarePlus, Strikethrough, TextSelect, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MENU_GROUP, MENU_GROUP_ITEM } from "#modules/SingleSong/components/SongControls/tile";
@@ -16,6 +18,7 @@ import { COMMENT_PALETTE, STRIKE_COLOR } from "#modules/SingleSong/components/Sl
 import { setPendingFocus } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/pendingFocus";
 import { addNote, moveNoteTo, othersSeeing, removeNote, updateNote, type NoteView, type Song } from "../../model";
 import { AudienceMenu, ColorMenu, newId, NOTES_UI, pickedCss, Swatch } from "../notes/NotesTools";
+import { editable } from "./clip";
 import type { StepsSel } from "./useStripSteps";
 
 type Props = {
@@ -29,10 +32,13 @@ type Props = {
   pick: (ids: string[]) => void;
   addDraft: (id: string) => void;
   dropDraft: (id: string) => void;
+  /** Режим правки: виділене можна скопіювати. */
+  edit?: boolean;
+  copy?: () => void;
   className?: string;
 };
 
-export function StripNotes({ song, me, viewers, notes, steps, picked, select, pick, addDraft, dropDraft, className }: Props) {
+export function StripNotes({ song, me, viewers, notes, steps, picked, select, pick, addDraft, dropDraft, edit = false, copy, className }: Props) {
   // Позначка, чию область зараз змінюють (`NOTE-43`): виділені кроки тоді — нова область.
   const [resizing, setResizing] = useState<string | null>(null);
   const views = resizing ? [] : notes.filter((n) => picked.includes(n.note.id) && n.status === "visible" && !n.foreign);
@@ -67,6 +73,12 @@ export function StripNotes({ song, me, viewers, notes, steps, picked, select, pi
           title="Застосувати область"
         >
           <TextSelect className="size-6" />
+        </Button>
+      )}
+
+      {!resizing && steps && edit && copy && editable(song, steps.lane) && (
+        <Button variant="ghost" size="icon" className={cn(MENU_GROUP_ITEM, "glass")} onClick={copy} aria-label="Копіювати кроки" title="Копіювати кроки">
+          <Copy className="size-6" />
         </Button>
       )}
 

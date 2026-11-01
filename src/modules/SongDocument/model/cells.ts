@@ -356,6 +356,34 @@ export function eraseSpan(kind: CellKind, slot: Y.Map<unknown>, from: number, to
   for (let i = end; cells.get(keyAt(i)) === "-"; i++) cells.delete(keyAt(i));
 }
 
+/** Записане на проміжку доріжки — що копіюють і переносять кроки смуги: час клітинок — від його початку, `length` — його довжина (тіки позначок). */
+export type CellsClip = { kind: CellKind; length: number; cells: TimedCell[] };
+
+/** Записане в слоті на проміжку `from…to` (тіки позначок), усіх ліній. */
+export function copySpan(kind: CellKind, slot: Y.Map<unknown>, from: number, to: number, timeSignature: string): CellsClip {
+  const cells = timedCells(kind, slot, timeSignature).filter((c) => c.time >= from && c.time < to);
+  return { kind, length: to - from, cells: cells.map((c) => ({ ...c, time: c.time - from })) };
+}
+
+/**
+ * Покласти `clip` у слот з `at` (тіки позначок): що там було на його
+ * довжину — стерто, що за `end` (кінець рядка) — відкинуто. Викликати в
+ * транзакції.
+ */
+export function pasteSpan(slot: Y.Map<unknown>, at: number, clip: CellsClip, end: number, timeSignature: string) {
+  const to = Math.min(at + clip.length, end);
+  eraseSpan(clip.kind, slot, at, to, timeSignature);
+  const grid = Number(slot.get("grid")) || gridOf(clip.kind);
+  const [n, d] = meter(timeSignature);
+  const perBar = Math.max(1, Math.round((n * grid) / d));
+  const cells = slot.get("cells") as Y.Map<string>;
+  clip.cells.forEach((c) => {
+    if (at + c.time >= to) return;
+    const i = Math.round(((at + c.time) * grid) / TICKS);
+    cells.set(`${Math.floor(i / perBar) + 1}.${(i % perBar) + 1}${clip.kind === "blocks" ? "" : `/${c.string}`}`, c.value);
+  });
+}
+
 /** Такти: числом — стільки повних, масивом — розміри кожного (`barSizes`). */
 type Bars = number | readonly number[];
 const sizesOf = (bars: Bars, scale: Scale) => (typeof bars === "number" ? Array.from({ length: bars }, () => scale.cells) : bars);

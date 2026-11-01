@@ -6,7 +6,8 @@
  * Прокрутка — звичайна, виділення не чіпає.
  *
  * Справа — **дошка**, без клавіатури: 0–24 і «Стерти»; виділення після вводу
- * лишається на місці. Під нею — **тачпад**: веди по ньому пальцем, і виділення
+ * лишається на місці. Скопійовано кроки (`clip.ts`) — ще «Вставити»: із
+ * комірки курсора, усіма струнами. Під нею — **тачпад**: веди по ньому пальцем, і виділення
  * їде за ним — вбік по кроках (і далі в сусідній рядок пісні), угору-вниз по
  * струнах, по діагоналі — обома, — на крок чи струну за кожен їхній розмір
  * руху пальця. Смуга гортається сама, щоб виділене було видно. Виділене —
@@ -15,14 +16,13 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
 import * as Y from "yjs";
-import { Move } from "lucide-react";
+import { ClipboardPaste, Move } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CellAt, cellKey, CellKind, layout, readMeta, readZoom, scaleOf, Song } from "../../model";
+import { CellAt, cellKey, CellKind, cellSpan, layout, readMeta, readZoom, scaleOf, Song, type CellsClip } from "../../model";
 import { stepAtPoint, stepX } from "../elements/stepGeometry";
+import { EDITABLE, pasteSteps } from "./clip";
 import { STRIP_GUTTER } from "./Strip";
 
-/** Доріжки, які вже правляться лежачи. */
-const EDITABLE: readonly string[] = ["tab"];
 const FRETS = Array.from({ length: 25 }, (_, n) => String(n));
 const KEY =
   "flex h-8 w-7 touch-manipulation items-center justify-center rounded-lg border border-stone-300 bg-white/80 text-sm font-semibold text-stone-700 active:bg-stone-200 disabled:opacity-40";
@@ -44,9 +44,11 @@ type Props = {
   scroller: RefObject<HTMLDivElement | null>;
   /** Довгим натиском виділили кроки під примітку — дошку сховано, виділення комірки знято. */
   paused?: boolean;
+  /** Скопійовані кроки (`StripNotes`): «Вставити» кладе їх із комірки курсора. */
+  clip?: CellsClip | null;
 };
 
-export function StripCellEditor({ song, me, scroller, paused = false }: Props) {
+export function StripCellEditor({ song, me, scroller, paused = false, clip = null }: Props) {
   const [picked, setPicked] = useState<Picked | null>(null);
   const pickedRef = useRef(picked);
   pickedRef.current = picked;
@@ -189,6 +191,11 @@ export function StripCellEditor({ song, me, scroller, paused = false }: Props) {
     if (!p || !cells) return;
     song.doc.transact(() => (fret === null ? cells.delete(keyOf(p)) : cells.set(keyOf(p), fret)));
   };
+  const canPaste = !!picked && !!clip && clip.kind === picked.kind;
+  const paste = () => {
+    const p = pickedRef.current;
+    if (p && clip) pasteSteps(song, p.ln, p.lane, cellSpan(scaleOf(p.kind, timeSignature, zoom), p.at.step)[0], clip);
+  };
 
   return (
     <div className={cn("flex shrink-0 flex-col gap-1 border-l border-stone-300 bg-[#f8f5eb] p-1.5", paused && "hidden")} aria-label="Дошка ладів">
@@ -209,6 +216,12 @@ export function StripCellEditor({ song, me, scroller, paused = false }: Props) {
       <button type="button" disabled={!picked || value === null} onClick={() => write(null)} className={cn(KEY, "w-full text-xs")}>
         Стерти
       </button>
+      {clip && (
+        <button type="button" disabled={!canPaste} onClick={paste} className={cn(KEY, "w-full gap-1 text-xs")} title="Вставити скопійовані кроки з цієї комірки">
+          <ClipboardPaste className="size-4" />
+          Вставити
+        </button>
+      )}
       <div
         role="group"
         aria-label="Тачпад: веди пальцем — виділення їде за ним"

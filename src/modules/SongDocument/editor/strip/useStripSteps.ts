@@ -10,29 +10,37 @@
  *  - довгий натиск на позначеному кроці й відпустив на місці — меню його позначок;
  *  - миша — так само: затримав кнопку чи одразу повів на інший крок.
  *
+ * У правці виділене ще й копіюють і переносять (`clip.ts`): «Копіювати» кладе
+ * його в буфер (`clip`), а довгий натиск на самому виділеному бере його —
+ * веди, і воно їде за пальцем, на тій самій доріжці й через рядки пісні;
+ * відпустив — записане перенесено туди.
+ *
  * Як і в редакторі, виділене — проміжок часу рядка в тіках (`cellSpan`).
  */
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { cellSpan, CellKind, NoteView, readMeta, scaleOf, Song } from "../../model";
+import { cellSpan, CellKind, NoteView, readMeta, scaleOf, Song, type CellsClip } from "../../model";
 import { stepAtPoint } from "../elements/stepGeometry";
 import { KEEP } from "../notes/NotesTools";
+import { copySteps, editable, moveSteps } from "./clip";
 
 /** Виділені кроки доріжки `lane` рядка `ln`: `from…to` — тіки від початку рядка (кінець не входить). */
 export type StepsSel = { ln: number; lane: string; from: number; to: number };
 
 const LONG_PRESS_MS = 450;
 
-type Opts = { song: Song; zoom: number | undefined; notes: NoteView[]; on: boolean };
+/** `edit` — режим правки: виділене можна копіювати й переносити. */
+type Opts = { song: Song; zoom: number | undefined; notes: NoteView[]; on: boolean; edit?: boolean };
 
-export function useStripSteps(container: RefObject<HTMLElement | null>, { song, zoom, notes, on }: Opts) {
+export function useStripSteps(container: RefObject<HTMLElement | null>, { song, zoom, notes, on, edit = false }: Opts) {
   const [steps, setSteps] = useState<StepsSel | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   /** Картки, щойно додані без тексту («Додати нотатку»): видно, поки поле не покинули. */
   const [drafts, setDrafts] = useState<string[]>([]);
   const addDraft = (id: string) => setDrafts((d) => [...d, id]);
   const dropDraft = (id: string) => setDrafts((d) => (d.includes(id) ? d.filter((x) => x !== id) : d));
-  const latest = useRef({ song, zoom, notes });
-  latest.current = { song, zoom, notes };
+  const [clip, setClip] = useState<CellsClip | null>(null);
+  const latest = useRef({ song, zoom, notes, edit, steps });
+  latest.current = { song, zoom, notes, edit, steps };
 
   const select = (next: StepsSel | null) => {
     setPicked((prev) => (prev.length ? [] : prev));
@@ -42,6 +50,11 @@ export function useStripSteps(container: RefObject<HTMLElement | null>, { song, 
   const pick = (ids: string[]) => {
     setSteps(null);
     setPicked(ids);
+  };
+  /** Виділене — в буфер; виділення знято, щоб у правці повернулась дошка з «Вставити». */
+  const copy = () => {
+    if (steps) setClip(copySteps(song, steps));
+    select(null);
   };
 
   useEffect(() => {
@@ -75,11 +88,22 @@ export function useStripSteps(container: RefObject<HTMLElement | null>, { song, 
         .map((n) => n.note.id);
     };
 
+    /** Кроків у рядку доріжки рамки `box`. */
+    const totalOf = (box: HTMLElement) => {
+      const sizes = (box.dataset.sizes ?? "").split(",").map(Number);
+      return (sizes.length - 1) * Number(box.dataset.cells) + (sizes[sizes.length - 1] || 0);
+    };
+
     // Жест: натиск на кроці; затримався — виділення з цього кроку, далі протяг його тягне.
     let timer: ReturnType<typeof setTimeout> | undefined;
     let start: { box: HTMLElement; step: number; x: number; y: number } | null = null;
     let last = -1;
     let active = false;
+    /**
+     * У правці натиснули на самому виділеному — його переносять: `offset` — від
+     * початку виділеного до кроку під пальцем (тіки), `to` — куди ляже зараз.
+     */
+    let grab: { sel: StepsSel; offset: number; to: StepsSel } | null = null;
     /** Коли жест закінчився: клік, що браузер шле слідом, — уже не тап. */
     let gestured = 0;
     /**
@@ -102,6 +126,10 @@ export function useStripSteps(container: RefObject<HTMLElement | null>, { song, 
       end();
       start = { box, step: stepOf(box, x), x, y };
       last = start.step;
+      const sel = latest.current.steps;
+      const at = spanOf(box, start.step, start.step);
+      if (latest.current.edit && sel && sel.ln === at.ln && sel.lane === at.lane && at.from >= sel.from && at.to <= sel.to && editable(latest.current.song, sel.lane))
+        grab = { sel, offset: at.from - sel.from, to: sel };
       timer = setTimeout(() => activate(touch), LONG_PRESS_MS);
     };
     const activate = (touch: boolean) => {
@@ -109,26 +137,52 @@ export function useStripSteps(container: RefObject<HTMLElement | null>, { song, 
       clearTimeout(timer);
       active = true;
       if (touch) freeze(start.box);
-      choose(start.box, start.step, last);
+      if (!grab) choose(start.box, start.step, last);
       navigator.vibrate?.(10);
     };
-    const drag = (x: number) => {
+    const drag = (x: number, y: number) => {
       if (!start) return;
+      if (grab) return carry(x, y);
       last = stepOf(start.box, x);
       choose(start.box, start.step, last);
+    };
+    /** Виділене їде за пальцем: та сама доріжка, хоч і в сусідньому рядку пісні; з рядка не вилазить. */
+    const carry = (x: number, y: number) => {
+      if (!start || !grab) return;
+      const under = boxAt(document.elementFromPoint(x, y));
+      if (under && under.dataset.lane === grab.sel.lane) start.box = under;
+      const box = start.box;
+      const length = grab.sel.to - grab.sel.from;
+      const end = spanOf(box, totalOf(box) - 1, totalOf(box) - 1).to;
+      const from = Math.max(0, Math.min(spanOf(box, stepOf(box, x), stepOf(box, x)).from - grab.offset, end - length));
+      grab.to = { ln: Number(box.dataset.ln), lane: grab.sel.lane, from, to: from + length };
+      window.getSelection()?.removeAllRanges();
+      select(grab.to);
     };
     /** Кінець жесту: затримався на позначеному кроці й не повів — меню його позначок. */
     const end = () => {
       clearTimeout(timer);
-      if (active && start) {
+      if (active && start && grab) {
+        gestured = Date.now();
+        const { sel, to } = grab;
+        if (to.ln !== sel.ln || to.from !== sel.from) moveSteps(latest.current.song, sel, to.ln, to.from);
+      } else if (active && start) {
         gestured = Date.now();
         const ids = last === start.step ? marksAt(start.box, start.step) : [];
         if (ids.length) pick(ids);
       }
+      grab = null;
       thaw();
       thaw = () => {};
       start = null;
       active = false;
+    };
+
+    /** Система перервала дотик — виділене нікуди не переносимо. */
+    const cancel = () => {
+      if (grab) select(grab.sel);
+      grab = null;
+      end();
     };
 
     const onTouchStart = (e: TouchEvent) => {
@@ -140,7 +194,7 @@ export function useStripSteps(container: RefObject<HTMLElement | null>, { song, 
       const t = e.touches[0];
       if (active) {
         if (e.cancelable) e.preventDefault();
-        drag(t.clientX);
+        drag(t.clientX, t.clientY);
       } else if (start && Math.hypot(t.clientX - start.x, t.clientY - start.y) > 8) end(); // це прокрутка
     };
 
@@ -151,10 +205,10 @@ export function useStripSteps(container: RefObject<HTMLElement | null>, { song, 
       e.preventDefault(); // протяг — не виділення тексту
       begin(box, e.clientX, e.clientY, false);
       const onMove = (m: MouseEvent) => {
-        if (active) return drag(m.clientX);
+        if (active) return drag(m.clientX, m.clientY);
         if (start && stepOf(start.box, m.clientX) !== start.step) {
           activate(false);
-          drag(m.clientX);
+          drag(m.clientX, m.clientY);
         }
       };
       const onUp = () => {
@@ -188,7 +242,7 @@ export function useStripSteps(container: RefObject<HTMLElement | null>, { song, 
     el.addEventListener("touchstart", onTouchStart, { passive: true });
     el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", end);
-    el.addEventListener("touchcancel", end);
+    el.addEventListener("touchcancel", cancel);
     el.addEventListener("contextmenu", onContextMenu);
     el.addEventListener("selectstart", onContextMenu);
     document.addEventListener("click", onDocClick);
@@ -199,12 +253,12 @@ export function useStripSteps(container: RefObject<HTMLElement | null>, { song, 
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", end);
-      el.removeEventListener("touchcancel", end);
+      el.removeEventListener("touchcancel", cancel);
       el.removeEventListener("contextmenu", onContextMenu);
       el.removeEventListener("selectstart", onContextMenu);
       document.removeEventListener("click", onDocClick);
     };
   }, [container, on]);
 
-  return { steps, picked, select, pick, drafts, addDraft, dropDraft };
+  return { steps, picked, select, pick, drafts, addDraft, dropDraft, clip, copy };
 }
