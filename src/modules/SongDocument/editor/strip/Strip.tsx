@@ -457,6 +457,8 @@ function StepsBox({ ln, lane, kind, line, timeSignature, zoom, rows, children }:
       data-sizes={sizes.join()}
       data-rows={rows ?? rowsOf(kind).length}
       data-row-px={rowPxOf(kind)}
+      // Довгий натиск тут — наше виділення кроків (`useStripSteps`), а не системне виділення тексту чи меню iOS.
+      className="select-none [-webkit-touch-callout:none]"
     >
       {children}
     </div>
