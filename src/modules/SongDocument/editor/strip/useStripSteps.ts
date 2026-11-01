@@ -172,7 +172,7 @@ export function useStripSteps(container: RefObject<HTMLElement | null>, { song, 
       select(null);
     };
 
-    // Довгий натиск на кроці — не контекстне меню браузера.
+    // Довгий натиск на кроці — не контекстне меню браузера і не системне виділення тексту (iOS).
     const onContextMenu = (e: Event) => boxAt(e.target) && e.preventDefault();
 
     // Тап повз смугу знімає виділення; палітра й меню позначки — ні.
@@ -190,6 +190,7 @@ export function useStripSteps(container: RefObject<HTMLElement | null>, { song, 
     el.addEventListener("touchend", end);
     el.addEventListener("touchcancel", end);
     el.addEventListener("contextmenu", onContextMenu);
+    el.addEventListener("selectstart", onContextMenu);
     document.addEventListener("click", onDocClick);
     return () => {
       end();
@@ -200,6 +201,7 @@ export function useStripSteps(container: RefObject<HTMLElement | null>, { song, 
       el.removeEventListener("touchend", end);
       el.removeEventListener("touchcancel", end);
       el.removeEventListener("contextmenu", onContextMenu);
+      el.removeEventListener("selectstart", onContextMenu);
       document.removeEventListener("click", onDocClick);
     };
   }, [container, on]);
