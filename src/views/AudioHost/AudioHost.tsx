@@ -3,6 +3,7 @@ import {useSelector} from "react-redux";
 import {SpeakerWaveIcon, StopIcon} from "@heroicons/react/24/outline";
 
 import {useBand} from "#modules/Band/BandLayout";
+import {useWakeLock} from "#hooks/useWakeLock";
 import AudioHostEngine, {
   type AudioHostEngineState,
 } from "#modules/Band/audio/audioHostEngine";
@@ -100,41 +101,8 @@ export default function AudioHost() {
     setDuplicateHosts(BandAudioChannel.getInstance().countPublishingHosts() > 1);
   }, [hostStatus]);
 
-  // Екран хоста не має засинати посеред служіння. Best-effort: не всі
-  // браузери вміють Wake Lock, відмова — не привід падати.
-  useEffect(() => {
-    let lock: {release: () => Promise<void>} | null = null;
-    let cancelled = false;
-
-    const request = async () => {
-      try {
-        const wakeLock = (navigator as Navigator & {
-          wakeLock?: {request: (type: "screen") => Promise<{release: () => Promise<void>}>};
-        }).wakeLock;
-        if (!wakeLock) return;
-        const acquired = await wakeLock.request("screen");
-        if (cancelled) {
-          void acquired.release();
-        } else {
-          lock = acquired;
-        }
-      } catch {
-        // відмовили — ну і гаразд
-      }
-    };
-
-    void request();
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void request();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-
-    return () => {
-      cancelled = true;
-      document.removeEventListener("visibilitychange", onVisible);
-      void lock?.release();
-    };
-  }, []);
+  // Екран хоста не має засинати посеред служіння.
+  useWakeLock();
 
   const isDesignatedHost =
     (band as {audioHostUserId?: number | null}).audioHostUserId != null &&

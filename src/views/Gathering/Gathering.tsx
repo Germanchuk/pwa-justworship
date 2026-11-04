@@ -8,6 +8,7 @@ import { SongModeProvider, StaticSongProvider } from "#modules/SingleSong/mode";
 import { buildGathering } from "#modules/Gathering/buildGathering";
 import { fetchGathering, type GatheringList } from "#modules/Gathering/gatheringSource";
 import { GatheringItemView } from "#modules/Gathering/GatheringItemView";
+import { useWakeLock } from "#hooks/useWakeLock";
 
 /**
  * РЕЖИМ ЗІБРАННЯ — усе служіння одним екраном.
@@ -38,6 +39,9 @@ export default function Gathering() {
   const band = useBand();
   const [list, setList] = useState<GatheringList | null>(null);
   const [failed, setFailed] = useState(false);
+
+  // Екран для гри на сцені — гаснути не має (`APP-39`).
+  useWakeLock();
 
   useEffect(() => {
     let cancelled = false;
