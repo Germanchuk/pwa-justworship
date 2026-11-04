@@ -8,11 +8,15 @@ import { bandPath } from "#constants/routes";
 import {SongControls} from "#modules/SingleSong/components/SongControls/SongControls";
 import {SongMenuSlotProvider} from "#modules/SingleSong/components/SongControls/menuSlot";
 import {setNotesAudience} from "#modules/SingleSong/redux/songSlice";
+import {useWakeLock} from "#hooks/useWakeLock";
 
 export default function SingleSong() {
   const { bandId, listId, songId, mode } = useParams();
   const dispatch = useDispatch();
   const setSong = useSetSong();
+
+  // З пісні грають — екран не має гаснути посеред куплету (`APP-39`).
+  useWakeLock();
 
   React.useEffect(() => {
     return () => {
