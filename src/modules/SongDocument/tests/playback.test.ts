@@ -69,7 +69,15 @@ describe("програвання: що звучить у рядку", () => {
     let piano = "";
     change(net.A, () => (piano = addLane(net.A, "piano", linesOf(net.A))));
     change(net.A, () => cellsAt(net, 0, piano).set(`1.97/${PIANO_ROWS.indexOf("C4") + 1}`, "o"));
-    expect(linePlan(net.B, 0, [])!.hits).toEqual([{ tick: 96, lane: piano, kind: "note", midi: 60 }]);
+    expect(linePlan(net.B, 0, [])!.hits).toEqual([{ tick: 96, lane: piano, kind: "note", midi: 60, length: 0 }]);
+  });
+
+  it("довга нота піаніно звучить свою тривалість, але не за кінцем рядка", () => {
+    const net = makePair([{ words: "Ти" }]);
+    let piano = "";
+    change(net.A, () => (piano = addLane(net.A, "piano", linesOf(net.A))));
+    change(net.A, () => cellsAt(net, 0, piano).set(`1.289/${PIANO_ROWS.indexOf("C4") + 1}`, "o192"));
+    expect(linePlan(net.B, 0, [])!.hits).toEqual([{ tick: 288, lane: piano, kind: "note", midi: 60, length: 96 }]);
   });
 
   it("тік у секундах: BPM рахує долю розміру, темп — у відсотках", () => {

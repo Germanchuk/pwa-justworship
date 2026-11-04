@@ -27,9 +27,12 @@
  *   таби          e|---12---|          шість струн e B G D A E; лад 0–24, x;
  *                                      порожній крок — один «-», крок із
  *                                      двозначним ладом — два символи на всіх струнах
- *   піаніно      C4|o---o---|          piano roll: 88 клавіш від C8 до A0, лінія на
- *               E4|--o-----|          клавішу; «o» — нота (поки без тривалості,
- *                                      як удар), текстом — лише лінії з нотами
+ *   піаніно      C4|o===o---|          piano roll: 88 клавіш від C8 до A0, лінія на
+ *               E4|--o-----|          клавішу; «o» — нота, «=» — вона ще звучить;
+ *                                      текстом — лише лінії з нотами
+ *
+ * Нота піаніно в клітинці — `o` (без тривалості, ваншот, як удар) або `o96` —
+ * звучить 96 тіків `TICKS` (з 2026-11-04, під запис вокалу).
  */
 import * as Y from "yjs";
 import type { CellKind } from "./lanes";
@@ -64,6 +67,12 @@ export const rowsOf = (kind: CellKind): readonly string[] =>
   kind === "tab" ? TAB_STRINGS : kind === "cajon" ? CAJON_ROWS : kind === "piano" ? PIANO_ROWS : [""];
 /** Удар кахона в клітинці. */
 const HIT = "o";
+/** Тривалість ноти піаніно в тіках `TICKS`; 0 — ваншот (`o`). */
+export const noteLength = (value: string) => Number(/^o(\d+)$/.exec(value)?.[1] ?? 0);
+/** Значення клітинки ноти піаніно тривалістю `ticks` (0 — ваншот). */
+export const noteValue = (ticks: number) => (ticks > 0 ? `${HIT}${Math.round(ticks)}` : HIT);
+/** Звучить нота й далі (текст піаніно): «o==» — нота на три комірки. */
+const HOLD = "=";
 
 /** Тіків у цілій ноті — запис ударів: 128 · 3 — і 1/128, і тріолі точно. */
 export const TICKS = 384;
@@ -405,7 +414,25 @@ export function renderCells(kind: CellKind, entries: Iterable<[string, string]>,
   if (kind === "piano") {
     // Лише клавіші, на яких щось є (88 ліній у буфері нікому не потрібні); порожньо — одна C4.
     const used = PIANO_ROWS.map((_, row) => row).filter((row) => sizes.some((size, b) => Array.from({ length: size }, (_, s) => at(b + 1, s, row)).some(Boolean)));
-    return (used.length ? used : [PIANO_ROWS.indexOf("C4")]).map((row) => PIANO_ROWS[row] + barsText((b) => each(b, (s) => (at(b, s, row) ? HIT : "-"))));
+    const cellTicks = (scale.tick * TICKS) / scale.grid;
+    return (used.length ? used : [PIANO_ROWS.indexOf("C4")]).map((row) => {
+      let hold = 0; // скільки комірок нота ще звучить
+      return (
+        PIANO_ROWS[row] +
+        barsText((b) =>
+          each(b, (s) => {
+            const v = at(b, s, row);
+            if (v) {
+              hold = Math.max(0, Math.round(noteLength(v) / cellTicks) - 1);
+              return HIT;
+            }
+            if (hold <= 0) return "-";
+            hold--;
+            return HOLD;
+          }),
+        )
+      );
+    });
   }
   if (kind === "blocks")
     return [
@@ -489,7 +516,20 @@ export function parseCells(kind: CellKind, lines: string[], scale: Scale): Parse
     if (!lines.length || !lines.every(isPianoLine)) return null;
     const rows = lines.map((line) => PIANO_ROWS.indexOf(line.trim().split("|")[0].trim()));
     const perRow = lines.map(barsIn);
-    perRow.forEach((all, i) => all.forEach((text, b) => [...text].forEach((ch, s) => /[oxOX]/.test(ch) && put(b + 1, s, HIT, rows[i]))));
+    const cellTicks = (scale.tick * TICKS) / grid;
+    perRow.forEach((all, i) => {
+      // «o==» — нота на три комірки, і через риску такту теж.
+      let open: { bar: number; s: number; cells: number } | null = null;
+      const close = () => open && put(open.bar, open.s, open.cells > 1 ? noteValue(open.cells * cellTicks) : HIT, rows[i]);
+      all.forEach((text, b) =>
+        [...text].forEach((ch, s) => {
+          if (ch === HOLD && open) return void open.cells++;
+          close();
+          open = /[oxOX]/.test(ch) ? { bar: b + 1, s, cells: 1 } : null;
+        }),
+      );
+      close();
+    });
     return { cells, bars: Math.max(1, ...perRow.map((b) => b.length)), grid };
   }
   if (kind === "cajon" && lines.length === CAJON_ROWS.length) {
@@ -520,9 +560,9 @@ export const isCajonRows = (lines: string[]) =>
   lines.length === CAJON_ROWS.length && lines.every((line, i) => new RegExp(`^\\s*${CAJON_ROWS[i]}\\s*\\|([-oOxX]+\\|)+\\s*$`).test(line));
 export const isBlocksLine = (line: string) => !isCajonLine(line) && /^\s*\|([^\s|]+\|)+\s*$/.test(line) && /[A-H]/.test(line);
 
-/** Лінія піаніно: назва клавіші з октавою (`C4`, `F#3`) і такти з «o» та «-». */
+/** Лінія піаніно: назва клавіші з октавою (`C4`, `F#3`) і такти з «o», «=» та «-». */
 export const isPianoLine = (line: string) => {
-  const m = /^\s*([A-G]#?\d)\s*\|([-oOxX]+\|)+\s*$/.exec(line);
+  const m = /^\s*([A-G]#?\d)\s*\|([-=oOxX]+\|)+\s*$/.exec(line);
   return !!m && PIANO_ROWS.includes(m[1]);
 };
 
@@ -615,15 +655,62 @@ export function typeCell(
 }
 
 /**
- * Тап по комірці піаніно: порожньо — нота, нота точно на долі комірки — геть.
- * Нота поруч (дрібніша за масштаб) не чіпається — як і в друку; тоді тап
- * ставить ще одну на долю. Викликати в транзакції.
+ * Тап по комірці піаніно: порожньо — нота, нота точно на долі комірки — геть,
+ * як і довга нота, що ще звучить у цій комірці. Нота поруч (дрібніша за
+ * масштаб) не чіпається — як і в друку; тоді тап ставить ще одну на долю.
+ * Викликати в транзакції.
  */
 export function toggleCell(kind: CellKind, slot: Y.Map<unknown>, scale: Scale, at: CellAt) {
   const cells = slot.get("cells") as Y.Map<string>;
   const key = cellKey(kind, scale, at);
-  if (cells.has(key)) cells.delete(key);
+  if (cells.has(key)) return void cells.delete(key);
+  const held = kind === "piano" ? heldAt(slot, scale, at) : null;
+  if (held) cells.delete(held);
   else cells.set(key, HIT);
+}
+
+/** Ключ довгої ноти піаніно, що звучить на долі комірки `at` (почалась раніше); `null` — такої немає. */
+function heldAt(slot: Y.Map<unknown>, scale: Scale, at: CellAt): string | null {
+  const per = TICKS / scale.grid;
+  const tick = (Math.floor(at.step / scale.cells) * scale.ticks + (at.step % scale.cells) * scale.tick) * per;
+  const perBar = scale.ticks;
+  for (const [key, value] of (slot.get("cells") as Y.Map<string>).entries()) {
+    const k = parseKey(key);
+    if (!k || k.string !== at.string + 1) continue;
+    const start = ((k.bar - 1) * perBar + k.step - 1) * per;
+    if (start < tick && tick < start + noteLength(value)) return key;
+  }
+  return null;
+}
+
+/** Нота з мікрофона (запис вокалу): `time`, `length` — тіки `TICKS` від початку рядка, `midi` — висота. */
+export type SungNote = { time: number; length: number; midi: number };
+
+/**
+ * Записати заспівані ноти в слот піаніно замість того, що там було на
+ * проміжку `from…to` (тіки позначок), — як punch-in у DAW. Нота, що
+ * почалась до проміжку й звучить у ньому, обрізається до його початку.
+ * Викликати в транзакції.
+ */
+export function writeSung(slot: Y.Map<unknown>, from: number, to: number, notes: readonly SungNote[], timeSignature: string) {
+  eraseSpan("piano", slot, from, to, timeSignature);
+  const grid = Number(slot.get("grid")) || TICKS;
+  const [n, d] = meter(timeSignature);
+  const perBar = Math.max(1, Math.round((n * grid) / d));
+  const cells = slot.get("cells") as Y.Map<string>;
+  const keyAt = (time: number, row: number) => {
+    const i = Math.round((time * grid) / TICKS);
+    return `${Math.floor(i / perBar) + 1}.${(i % perBar) + 1}/${row + 1}`;
+  };
+  timedCells("piano", slot, timeSignature).forEach(({ time, string, value }) => {
+    const length = noteLength(value);
+    if (time < from && time + length > from) cells.set(keyAt(time, string - 1), noteValue(from - time));
+  });
+  notes.forEach(({ time, length, midi }) => {
+    const row = PIANO_TOP - midi;
+    if (row < 0 || row >= PIANO_ROWS.length || time < from || time >= to) return;
+    cells.set(keyAt(time, row), noteValue(length));
+  });
 }
 
 /**

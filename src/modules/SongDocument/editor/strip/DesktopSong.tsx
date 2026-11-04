@@ -40,7 +40,7 @@ export function DesktopSong({ song }: { song: Song }) {
       </div>
       {slot && me && createPortal(<StripNotes song={song} me={me} viewers={view.viewers} notes={view.notes} {...sel} />, slot)}
       <div className="fixed right-2 z-40" style={{ bottom: DYNAMICS_PANEL_BOTTOM }}>
-        <StripTransport song={song} me={view.me} menuSide="top" />
+        <StripTransport song={song} me={view.me} menuSide="top" canEdit={canEdit} zoom={view.zoom} />
       </div>
     </div>
   );

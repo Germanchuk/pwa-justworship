@@ -80,7 +80,7 @@ export function LandscapeSong({ song }: { song: Song }) {
           <ChevronDown className={cn("size-4 shrink-0 text-stone-500 transition-transform", metaOpen && "rotate-180")} />
         </button>
         <div className="flex-1" />
-        <StripTransport song={song} me={me} scroller={scroller} />
+        <StripTransport song={song} me={me} scroller={scroller} canEdit={canEdit} zoom={view.zoom} />
         <PlaybackControls />
         <SongActions />
         <ModeToggle />

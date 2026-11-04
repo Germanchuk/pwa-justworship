@@ -10,7 +10,9 @@
  *  - кахон — семпли справжнього кахона: бас, тон (снейр), закритий хет, том; під
  *    кожним — тихіший синтезований шар (щільніше);
  *  - прямокутники — акорд м'яким синтом, розкладений як піаніст (`voiceChord`);
- *  - піаніно — нота клавішним синтом, поки ваншот (згасає сама);
+ *  - піаніно — нота без тривалості клавішним синтом (згасає сама), з
+ *    тривалістю — м'яким тягучим голосом, що тримається, поки звучить нота
+ *    (заспіваний вокал);
  *  - відлік — дерев'яний клац.
  */
 import * as Tone from "tone";
@@ -65,7 +67,8 @@ export type Kit = {
   tab: (string: number, fret: number | "x", time: number) => void;
   cajon: (hit: CajonHit, time: number) => void;
   chord: (name: string, seconds: number, time: number) => void;
-  note: (midi: number, time: number) => void;
+  /** `seconds` — скільки тримати; 0 — ваншот, згасає сам. */
+  note: (midi: number, time: number, seconds: number) => void;
   click: (time: number) => void;
   dispose: () => void;
 };
@@ -157,6 +160,15 @@ export function createKit(samples: Samples | null): Kit {
     }).connect(out),
   );
 
+  // Тягучий голос для довгих нот (вокальна лінія): м'яка атака, тримається до кінця ноти.
+  const voice = add(
+    new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: "fattriangle", count: 2, spread: 8 },
+      envelope: { attack: 0.04, decay: 0.2, sustain: 0.75, release: 0.12 },
+      volume: -12,
+    }).connect(out),
+  );
+
   const clickFilter = add(new Tone.Filter({ type: "bandpass", frequency: 2200, Q: 2.5 }).connect(out));
   const tick = add(new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.015, sustain: 0 }, volume: -2 }).connect(clickFilter));
 
@@ -185,7 +197,8 @@ export function createKit(samples: Samples | null): Kit {
         prevUpper = voiced.upper;
         pad.triggerAttackRelease([voiced.bass, ...voiced.upper].map(hz), Math.max(0.05, seconds - 0.02), time);
       }),
-    note: (midi, time) => safely(() => keys.triggerAttackRelease(hz(midi), 0.5, time)),
+    note: (midi, time, seconds) =>
+      safely(() => (seconds > 0 ? voice.triggerAttackRelease(hz(midi), Math.max(0.05, seconds - 0.01), time) : keys.triggerAttackRelease(hz(midi), 0.5, time))),
     click: (time) => safely(() => tick.triggerAttackRelease(0.015, at(tick, time))),
     dispose: () => nodes.forEach((n) => safely(() => n.dispose())),
   };

@@ -18,7 +18,7 @@
 import * as Y from "yjs";
 import { memo, type ReactNode } from "react";
 import { highlightBg, isStrike, OTHERS_NEUTRAL_COLOR, STRIKE_INK } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/colors";
-import { CellAt, CellKind, cellSpan, isBlackKey, Line, NoteView, placeCells, rowsOf, stepsPerBeat } from "../../model";
+import { CellAt, CellKind, cellSpan, isBlackKey, Line, noteLength, NoteView, PIANO_TOP, placeCells, rowsOf, stepsPerBeat, TICKS } from "../../model";
 import { BAR_PX, INK, PIANO_ROW_PX, rowPxOf, STEP_GLYPH_PX, STEP_PX, stepGeometry, stepX } from "./stepGeometry";
 
 const DASH = "linear-gradient(currentColor, currentColor) center / calc(100% - 2px) 1px no-repeat";
@@ -51,13 +51,22 @@ type Props = {
   rows?: readonly number[];
   /** Риска в кінці рядка; без неї межею стає риска на початку наступного рядка (смуга). */
   end?: boolean;
+  /** Піаніно: чернетка запису вокалу в цьому рядку — заспівані ноти і проміжки, які вони замінять. */
+  draft?: LineDraft | null;
 };
+
+/** Чернетка запису вокалу на рядку: ноти (тіки рядка, MIDI) і проміжки дубля. */
+export type LineDraft = { notes: { time: number; length: number; midi: number }[]; spans: { from: number; to: number }[] };
+
+/** Чернетка запису вокалу: заспівані ноти й проміжок дубля. */
+const DRAFT_INK = "#059669";
+const DRAFT_BAND = "rgba(5, 150, 105, 0.08)";
 
 /** Чорні клавіші піаніно — трохи темніші, межа октави — лінією під C. */
 const BLACK_KEY = "rgba(60, 50, 40, 0.07)";
 const OCTAVE_EDGE = "inset 0 -1px 0 rgba(120, 95, 50, 0.22)";
 
-function StepRowsView({ kind, slot, line, timeSignature, zoom, marks, selected, here, clickable, rows, end = true }: Props) {
+function StepRowsView({ kind, slot, line, timeSignature, zoom, marks, selected, here, clickable, rows, end = true, draft }: Props) {
   const ROW_PX = rowPxOf(kind);
   const { scale, stepPx, sizes } = stepGeometry(kind, line, timeSignature, zoom);
   const steps = scale.cells;
@@ -158,7 +167,7 @@ function StepRowsView({ kind, slot, line, timeSignature, zoom, marks, selected, 
   };
 
   // Таби — струна на лінію, кахон — вид удару на лінію.
-  if (kind === "piano") return <PianoGrid {...{ sizes, steps, scale, beatTicks, placed, marks, selected, here, rows, end }} />;
+  if (kind === "piano") return <PianoGrid {...{ sizes, steps, scale, beatTicks, placed, marks, selected, here, rows, end, draft }} />;
   if (kind !== "blocks") return <>{rowsOf(kind).map((name, string) => row(name, (step) => lineStep({ step, string })))}</>;
   // Прямокутники: назва відкриває блок, «-» його тягне; порожній крок — «·».
   return row("blocks", (step) => {
@@ -197,6 +206,7 @@ const sameSteps = (a: Props, b: Props) =>
   a.zoom === b.zoom &&
   a.clickable === b.clickable &&
   a.end === b.end &&
+  a.draft === b.draft &&
   (a.rows?.join() ?? "") === (b.rows?.join() ?? "") &&
   a.selected?.from === b.selected?.from &&
   a.selected?.to === b.selected?.to &&
@@ -218,6 +228,7 @@ type GridProps = {
   here?: CellAt | null;
   rows?: readonly number[];
   end: boolean;
+  draft?: LineDraft | null;
 };
 
 /**
@@ -227,7 +238,7 @@ type GridProps = {
  * лише ноти, позначки, виділене й курсор. Порожня клітинка — без риски, чорні
  * клавіші притінені, межа октави — лінією під C.
  */
-function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, here, rows, end }: GridProps) {
+function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, here, rows, end, draft }: GridProps) {
   const names = rowsOf("piano");
   const list = rows ?? names.map((_, i) => i);
   const yOf = new Map(list.map((row, i) => [row, i * PIANO_ROW_PX]));
@@ -280,20 +291,52 @@ function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, he
   });
   const sel = selected && band(selected.from, selected.to);
   if (sel) layers.push(<div key="sel" className="pointer-events-none absolute inset-y-0" style={{ ...sel, background: SELECTED }} />);
-  // Ноти: заповнений прямокутник; не на долі комірки — блідо-червоний, прозоріший, що далі.
+  // Ноти: заповнений прямокутник на свою тривалість (ваншот — комірка); не на долі комірки — блідо-червоний, прозоріший, що далі.
+  const cellTicks = (scale.tick * TICKS) / scale.grid;
+  /** Правий край комірок до `c` (дробове, від початку рядка): у кінці такту — до риски, а не за нею. */
+  const rightOf = (c: number) => {
+    const bar = Math.ceil(c / steps) - 1;
+    return bar * (BAR_PX + steps * STEP_PX) + BAR_PX + (c - bar * steps) * STEP_PX;
+  };
+  /** Комірка (дробова) тіку рядка `t`. */
+  const cellOf = (t: number) => {
+    const bar = Math.floor(t / (scale.ticks * (TICKS / scale.grid)));
+    return bar * steps + (t - bar * scale.ticks * (TICKS / scale.grid)) / cellTicks;
+  };
+  // Чернетка: те, що дубль замінить, — бліде, заспіване — зеленим поверх.
+  const replaced = (step: number) => !!draft?.spans.some((s) => cellOf(s.from) - 0.5 <= step && step < cellOf(s.to) - 0.5);
+  draft?.spans.forEach((s, i) => {
+    const at = band(s.from, s.to);
+    if (at) layers.push(<div key={`ds${i}`} className="pointer-events-none absolute inset-y-0" style={{ ...at, background: DRAFT_BAND }} />);
+  });
+  draft?.notes.forEach((n, i) => {
+    const top = yOf.get(PIANO_TOP - n.midi);
+    if (top === undefined) return;
+    const [a, b] = [cellOf(n.time), Math.min(cellOf(n.time + n.length), total)];
+    layers.push(
+      <div
+        key={`dn${i}`}
+        data-draft-note=""
+        className="pointer-events-none absolute z-[1] rounded-[2px]"
+        style={{ left: x(Math.floor(a)) + (a % 1) * STEP_PX + 1, top: top + 1, width: Math.max(4, rightOf(b) - x(Math.floor(a)) - (a % 1) * STEP_PX - 2), height: PIANO_ROW_PX - 2, background: DRAFT_INK }}
+      />,
+    );
+  });
   placed.forEach((cell, key) => {
     const [step, row] = key.split("/").map(Number);
     const top = yOf.get(row);
     if (top === undefined) return;
-    cell.all.forEach(({ off }, i) =>
+    const fade = replaced(step) ? 0.25 : 1;
+    cell.all.forEach(({ value, off }, i) => {
+      const cells = Math.min(Math.max(1, noteLength(value) / cellTicks), total - step);
       layers.push(
         <div
           key={`n${key}.${i}`}
           className="pointer-events-none absolute rounded-[2px]"
-          style={{ left: x(step) + 1, top: top + 1, width: STEP_PX - 2, height: PIANO_ROW_PX - 2, background: off ? OFF_GRID_INK : INK.piano, opacity: off ? 1 - off * 0.6 : 1 }}
+          style={{ left: x(step) + 1, top: top + 1, width: rightOf(step + cells) - x(step) - 2, height: PIANO_ROW_PX - 2, background: off ? OFF_GRID_INK : INK.piano, opacity: (off ? 1 - off * 0.6 : 1) * fade }}
         />,
-      ),
-    );
+      );
+    });
   });
   if (here && yOf.has(here.string)) {
     layers.push(
