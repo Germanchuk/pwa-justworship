@@ -107,15 +107,15 @@
     "vite": "^7.1.5",
     "vite-plugin-pwa": "^0.21.1",
     "vitest": "^4.0.3",
-    "workbox-build": "^7.3.0",
-    "workbox-window": "^7.3.0",
+    "workbox-build": "^7.4.1",
+    "workbox-window": "^7.4.1",
     "xregexp": "^5.1.1",
     "yjs": "^13.6.20"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
     "vite-tsconfig-paths": "^5.1.4",
-    "wrangler": "4.112.0"
+    "wrangler": "4.86.0"
   },
   "packageManager": "yarn@1.22.22",
   "engines": {
