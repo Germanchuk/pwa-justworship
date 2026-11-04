@@ -13,6 +13,8 @@ import {
   pasteSpan,
   PIANO_ROWS,
   pianoMidi,
+  noteLength,
+  writeSung,
   recognizeCells,
   toggleCell,
   endOf,
@@ -519,5 +521,37 @@ describe("піаніно (piano roll)", () => {
     expect(lines).toEqual([`E4|--o${d(13)}|`, `C4|o${d(15)}|`]);
     expect(recognizeCells(lines, 0)).toEqual({ kind: "piano", size: 2 });
     expect(parseCells("piano", lines, sc("piano"))!.cells).toEqual({ [`1.1/${C4 + 1}`]: "o", [`1.49/${E4 + 1}`]: "o" });
+  });
+
+  it("довга нота: «o96» звучить 96 тіків, текстом — «o===», вставка розбирає назад", () => {
+    const { net, id } = withLane("piano");
+    change(net.A, () => (slotOf(net.A, 0, id).get("cells") as Y.Map<string>).set(`1.1/${C4 + 1}`, "o96"));
+    const lines = text(net.B, 0, id, "piano");
+    expect(lines).toEqual([`C4|o===${d(12)}|`]);
+    expect(parseCells("piano", lines, sc("piano"))!.cells).toEqual({ [`1.1/${C4 + 1}`]: "o96" });
+    expect([noteLength("o96"), noteLength("o")]).toEqual([96, 0]);
+  });
+
+  it("довга нота через риску такту текстом не рветься", () => {
+    expect(parseCells("piano", [`C4|${d(14)}o=|==${d(14)}|`], sc("piano"))!.cells).toEqual({ [`1.337/${C4 + 1}`]: "o96" });
+  });
+
+  it("тап по комірці, де ще звучить довга нота, прибирає її", () => {
+    const { net, id } = withLane("piano");
+    change(net.A, () => (slotOf(net.A, 0, id).get("cells") as Y.Map<string>).set(`1.1/${C4 + 1}`, "o96"));
+    change(net.A, () => toggleCell("piano", slotOf(net.A, 0, id), sc("piano"), { step: 2, string: C4 }));
+    expect(cellsJSON(net.B, 0, id)).toEqual({});
+  });
+
+  it("заспіване лягає замість записаного на проміжку дубля; нота, що в нього заходить, обрізається", () => {
+    const { net, id } = withLane("piano");
+    change(net.A, () => {
+      const cells = slotOf(net.A, 0, id).get("cells") as Y.Map<string>;
+      cells.set(`1.1/${C4 + 1}`, "o192"); // з початку — пів такту, заходить у дубль
+      cells.set(`1.241/${E4 + 1}`, "o"); // у дублі — геть
+      cells.set(`1.361/${E4 + 1}`, "o"); // за дублем — лишається
+    });
+    change(net.A, () => writeSung(slotOf(net.A, 0, id), 96, 336, [{ time: 144, length: 48, midi: 64 }], "4/4"));
+    expect(cellsJSON(net.B, 0, id)).toEqual({ [`1.1/${C4 + 1}`]: "o96", [`1.145/${E4 + 1}`]: "o48", [`1.361/${E4 + 1}`]: "o" });
   });
 });

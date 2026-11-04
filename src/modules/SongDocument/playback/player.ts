@@ -17,7 +17,8 @@
 import * as Tone from "tone";
 import DronePlayer from "#modules/SingleSong/services/DronePlayer/DronePlayer";
 import { DEFAULT_BPM } from "#modules/SingleSong/services/songChords/songDefaults";
-import { barTicks, readMeta, Song, TICKS } from "../model";
+import { barTicks, layout, Line, readMeta, Song, TICKS } from "../model";
+import type { PlayedSpan } from "./pitch";
 import { createKit, loadSamples, type Kit } from "./instruments";
 import { linePlan, nextLine, Span, tickSeconds } from "./timeline";
 
@@ -34,6 +35,12 @@ type Start = {
   hidden: () => readonly string[];
   /** Особистий темп у відсотках (читається порядково). */
   percent: () => number;
+  /**
+   * Запис вокалу: кожен рядок, щойно покладений у час, — сюди (`PlayedSpan`:
+   * де він у часі аудіоконтексту). Під час запису повтору немає — пісня йде
+   * вперед, як записали, так і лягло.
+   */
+  onSpan?: (span: PlayedSpan, line: Line) => void;
 };
 
 /** Скільки секунд наперед планувати. */
@@ -102,7 +109,7 @@ class LanePlayer {
       beat: unitTicks * spt,
       beats,
     };
-    this.loopSpan = this.repeat ? (start.loop ?? { ...start.from, from: 0 }) : null;
+    this.loopSpan = this.repeat && !start.onSpan ? (start.loop ?? { ...start.from, from: 0 }) : null;
     this.setState("count");
     this.schedule();
   };
@@ -133,7 +140,7 @@ class LanePlayer {
   setLoop = (on: boolean, span?: Span) => {
     this.repeat = on;
     const s = this.session;
-    if (s) {
+    if (s && !s.start.onSpan) {
       const line = this.needle()?.line ?? s.start.from.line;
       const plan = linePlan(s.start.song, line, s.start.hidden());
       this.loopSpan = on ? (span ?? (plan ? { line, from: 0, to: plan.length } : null)) : null;
@@ -189,11 +196,13 @@ class LanePlayer {
         const time = s.cursor + (hit.tick - span.from) * spt;
         if (hit.kind === "tab") s.kit.tab(hit.string, hit.fret, time);
         else if (hit.kind === "cajon") s.kit.cajon(hit.hit, time);
-        else if (hit.kind === "note") s.kit.note(hit.midi, time);
+        else if (hit.kind === "note") s.kit.note(hit.midi, time, hit.length ? Math.min(hit.length, to - hit.tick) * spt : 0);
         else s.kit.chord(hit.name, Math.min(hit.length, to - hit.tick) * spt, time);
       });
       const end = s.cursor + (to - span.from) * spt;
       s.played.push({ span: { ...span, to }, at: s.cursor, end, spt });
+      const line = layout(s.start.song)[span.line]?.line;
+      if (s.start.onSpan && line) s.start.onSpan({ line: span.line, from: span.from, to, at: s.cursor, end, spt }, line);
       s.played = s.played.filter((p) => p.end > now - 1);
       s.cursor = end;
       s.next = this.loopSpan ?? nextLine(s.start.song, span.line, s.start.hidden());

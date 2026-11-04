@@ -10,12 +10,30 @@
  *
  * `scroller` — контейнер однієї смуги (лежачи); без нього гортається сторінка,
  * а кожна смуга-рядок — сама вбік (ПК).
+ *
+ * Хто може правити, має ще 🎤 — запис вокалу в доріжку піаніно (`VocalRecord`):
+ * той самий ▶ (звідки, відлік, голка), лише з мікрофоном і без повтору; після
+ * ■ замість транспорту — чернетка дубля.
  */
-import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from "react";
 import { Crosshair, Play, Repeat, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CELL_KINDS, readHiddenLanes, readTempo, songLanes, Song } from "../../model";
+import {
+  CELL_KINDS,
+  readHiddenLanes,
+  readTempo,
+  songLanes,
+  Song,
+} from "../../model";
 import { lanePlayer } from "../../playback/player";
+import { vocalRecorder } from "../../playback/recorder";
+import { DraftBar, RecordButton } from "./VocalRecord";
 import { linePlan, nextLine, Span } from "../../playback/timeline";
 import { followNeedle, frameClock } from "../playback/follow";
 import { getPlayMark, onPlayMark, setPlayMark } from "../playback/mark";
@@ -23,15 +41,35 @@ import { TempoMenu } from "../playback/Transport";
 import { BAR_PX, STEP_PX } from "../elements/stepGeometry";
 import { STRIP_GUTTER } from "./Strip";
 
-export const STRIP_BUTTON = "inline-flex size-10 shrink-0 items-center justify-center rounded-[14px] glass";
+export const STRIP_BUTTON =
+  "inline-flex size-10 shrink-0 items-center justify-center rounded-[14px] glass";
 /** Згори сторінки на ПК — верхній бар, знизу — нижній: смуга, що грає, має бути між ними. */
 const PAGE_TOP = 64;
 const PAGE_BOTTOM = 112;
 
-type Props = { song: Song; me: string | null; scroller?: RefObject<HTMLDivElement | null>; menuSide?: "top" | "bottom" };
+type Props = {
+  song: Song;
+  me: string | null;
+  scroller?: RefObject<HTMLDivElement | null>;
+  menuSide?: "top" | "bottom";
+  /** Може правити — є запис вокалу. */
+  canEdit?: boolean;
+  zoom?: number;
+};
 
-export function StripTransport({ song, me, scroller, menuSide = "bottom" }: Props) {
+export function StripTransport({
+  song,
+  me,
+  scroller,
+  menuSide = "bottom",
+  canEdit = false,
+  zoom,
+}: Props) {
   const state = useSyncExternalStore(lanePlayer.listen, lanePlayer.getState);
+  const rec = useSyncExternalStore(
+    vocalRecorder.listen,
+    vocalRecorder.getState,
+  );
   const loop = useSyncExternalStore(lanePlayer.listen, lanePlayer.repeating);
   const [count, setCount] = useState<number | null>(null);
   const [follow, setFollow] = useState(true);
@@ -44,25 +82,34 @@ export function StripTransport({ song, me, scroller, menuSide = "bottom" }: Prop
   /** Перший рядок, якого видно таймлайн: лежачи — біля лівого краю, на ПК — згори. */
   const firstLine = () => {
     const box = scroller?.current?.getBoundingClientRect();
-    const rows = Array.from(root().querySelectorAll<HTMLElement>("[data-strip-line]"));
+    const rows = Array.from(
+      root().querySelectorAll<HTMLElement>("[data-strip-line]"),
+    );
     const hit = rows.find((r) => {
       const at = r.getBoundingClientRect();
-      return box ? at.right > box.left + STRIP_GUTTER + 8 : at.top > PAGE_TOP - 8;
+      return box
+        ? at.right > box.left + STRIP_GUTTER + 8
+        : at.top > PAGE_TOP - 8;
     });
     return hit ? Number(hit.dataset.stripLine) : 0;
   };
   const spanFrom = (line: number): Span | null => {
     const plan = linePlan(song, line, hidden());
-    return plan ? { line, from: 0, to: plan.length } : (nextLine(song, line, hidden()) ?? nextLine(song, -1, hidden()));
+    return plan
+      ? { line, from: 0, to: plan.length }
+      : (nextLine(song, line, hidden()) ?? nextLine(song, -1, hidden()));
   };
   const play = (from: Span | null) => {
     if (!from) return;
     setFollow(true);
-    lanePlayer.start({ song, from, hidden, percent }).catch((error) => console.error("lane playback", error));
+    lanePlayer
+      .start({ song, from, hidden, percent })
+      .catch((error) => console.error("lane playback", error));
   };
 
   useEffect(
     () => () => {
+      vocalRecorder.discard();
       lanePlayer.reset();
       setPlayMark(null);
     },
@@ -73,7 +120,12 @@ export function StripTransport({ song, me, scroller, menuSide = "bottom" }: Prop
     () =>
       onPlayMark(() => {
         const mark = getPlayMark();
-        if (mark !== null && lanePlayer.getState() !== "idle") play(spanFrom(mark));
+        if (
+          mark !== null &&
+          lanePlayer.getState() !== "idle" &&
+          vocalRecorder.getState() === "idle"
+        )
+          play(spanFrom(mark));
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [song, me],
@@ -104,9 +156,12 @@ export function StripTransport({ song, me, scroller, menuSide = "bottom" }: Prop
       const left = lanePlayer.countLeft();
       if (left !== shownCount) setCount((shownCount = left));
       const needle = lanePlayer.needle();
-      const ruler = needle && root().querySelector<HTMLElement>(`[data-strip-line="${needle.line}"]`);
+      const ruler =
+        needle &&
+        root().querySelector<HTMLElement>(`[data-strip-line="${needle.line}"]`);
       const strip = ruler?.closest<HTMLElement>("[data-strip]");
-      const n = strip?.querySelector<HTMLElement>("[data-strip-needle]") ?? null;
+      const n =
+        strip?.querySelector<HTMLElement>("[data-strip-needle]") ?? null;
       if (shown && shown !== n) shown.style.display = "none";
       shown = n;
       if (n && ruler && needle && strip) {
@@ -115,7 +170,11 @@ export function StripTransport({ song, me, scroller, menuSide = "bottom" }: Prop
         const bar = Number(ruler.dataset.barTicks);
         const b = Math.floor(needle.tick / bar);
         const within = needle.tick - b * bar;
-        const x = ruler.offsetLeft + b * (BAR_PX + cells * STEP_PX) + BAR_PX + (within / cellTicks) * STEP_PX;
+        const x =
+          ruler.offsetLeft +
+          b * (BAR_PX + cells * STEP_PX) +
+          BAR_PX +
+          (within / cellTicks) * STEP_PX;
         n.style.display = "block";
         n.style.left = `${x}px`;
         // Смуга вбік — у своєму контейнері (лежачи — уся пісня, на ПК — рядок), плавно.
@@ -124,7 +183,11 @@ export function StripTransport({ song, me, scroller, menuSide = "bottom" }: Prop
         // На ПК — ще й сторінка до нового рядка, якщо він поза екраном.
         if (!scroller && followRef.current && needle.line !== lastLine) {
           const at = strip.getBoundingClientRect();
-          if (at.top < PAGE_TOP || at.bottom > window.innerHeight - PAGE_BOTTOM) window.scrollBy({ top: at.top - window.innerHeight * 0.25, behavior: "smooth" });
+          if (at.top < PAGE_TOP || at.bottom > window.innerHeight - PAGE_BOTTOM)
+            window.scrollBy({
+              top: at.top - window.innerHeight * 0.25,
+              behavior: "smooth",
+            });
         }
         lastLine = needle.line;
       }
@@ -139,35 +202,84 @@ export function StripTransport({ song, me, scroller, menuSide = "bottom" }: Prop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, scroller]);
 
-  if (!songLanes(song.doc).some((l) => (CELL_KINDS as readonly string[]).includes(l.kind))) return null;
+  const hasCells = songLanes(song.doc).some((l) =>
+    (CELL_KINDS as readonly string[]).includes(l.kind),
+  );
+  if (!hasCells && !canEdit) return null;
+  if (rec === "analyzing" || rec === "review") return <DraftBar />;
   const playing = state !== "idle";
+  const recording = rec !== "idle";
+  const record = canEdit && (
+    <RecordButton
+      song={song}
+      me={me}
+      zoom={zoom}
+      from={() => spanFrom(getPlayMark() ?? firstLine())}
+      side={menuSide}
+    />
+  );
+  if (!hasCells) return record;
   return (
     <div className="flex items-center gap-1">
       {playing && !follow && (
-        <button type="button" className={STRIP_BUTTON} onClick={() => setFollow(true)} aria-label="До голки" title="До голки">
+        <button
+          type="button"
+          className={STRIP_BUTTON}
+          onClick={() => setFollow(true)}
+          aria-label="До голки"
+          title="До голки"
+        >
           <Crosshair className="size-5" />
         </button>
       )}
+      {!recording && (
+        <button
+          type="button"
+          className={cn(
+            STRIP_BUTTON,
+            loop && "bg-primary text-primary-foreground",
+          )}
+          onClick={() => lanePlayer.setLoop(!loop)}
+          aria-pressed={loop}
+          aria-label="Повтор"
+          title={loop ? "Без повтору" : "Повторювати рядок"}
+        >
+          <Repeat className="size-5" />
+        </button>
+      )}
+      {playing && (
+        <TempoMenu
+          song={song}
+          me={me}
+          className={STRIP_BUTTON}
+          side={menuSide}
+        />
+      )}
       <button
         type="button"
-        className={cn(STRIP_BUTTON, loop && "bg-primary text-primary-foreground")}
-        onClick={() => lanePlayer.setLoop(!loop)}
-        aria-pressed={loop}
-        aria-label="Повтор"
-        title={loop ? "Без повтору" : "Повторювати рядок"}
-      >
-        <Repeat className="size-5" />
-      </button>
-      {playing && <TempoMenu song={song} me={me} className={STRIP_BUTTON} side={menuSide} />}
-      <button
-        type="button"
-        className={cn(STRIP_BUTTON, playing && "bg-primary text-primary-foreground")}
-        onClick={() => (playing ? lanePlayer.stop() : play(spanFrom(getPlayMark() ?? firstLine())))}
+        className={cn(
+          STRIP_BUTTON,
+          playing && "bg-primary text-primary-foreground",
+        )}
+        onClick={() =>
+          recording
+            ? vocalRecorder.stop()
+            : playing
+              ? lanePlayer.stop()
+              : play(spanFrom(getPlayMark() ?? firstLine()))
+        }
         aria-label={playing ? "Зупинити" : "Грати доріжки"}
         title={playing ? "Зупинити" : "Грати доріжки"}
       >
-        {count !== null ? <span className="text-base font-bold">{count}</span> : playing ? <Square className="size-4" fill="currentColor" /> : <Play className="size-5" />}
+        {count !== null ? (
+          <span className="text-base font-bold">{count}</span>
+        ) : playing ? (
+          <Square className="size-4" fill="currentColor" />
+        ) : (
+          <Play className="size-5" />
+        )}
       </button>
+      {record}
     </div>
   );
 }
