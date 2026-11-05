@@ -24,7 +24,8 @@
  * за нею, до наступної.
  *
  * Сама смуга — лише вигляд: виділені кроки (`steps`) їй передають, а
- * виділяють і правлять поза нею (`useStripSteps`, `StripCellEditor`).
+ * виділяють і правлять поза нею (`useStripSteps`, `StripCellEditor`,
+ * `usePianoEdit`).
  */
 import * as Y from "yjs";
 import { cn } from "@/lib/utils";
@@ -121,21 +122,23 @@ type Props = {
   steps?: StepsSel | null;
   /** Картки приміток правляться (в будь-якому режимі, як у редакторі); без цього — лише показ. */
   cardsEdit?: CardsEdit;
+  /** Режим правки: ноти піаніно беруться й тягнуться (`usePianoEdit`), клавіш видно більше. */
+  edit?: boolean;
 };
 
 /** Правка карток: чиїми очима дивлюсь і картки, щойно додані без тексту (`useStripSteps`). */
 type CardsEdit = { viewers: string[]; drafts: string[]; dropDraft: (id: string) => void };
 
-export function Strip({ song, me, lanes, zoom, capo, notes, split = false, steps = null, cardsEdit }: Props) {
+export function Strip({ song, me, lanes, zoom, capo, notes, split = false, steps = null, cardsEdit, edit = false }: Props) {
   const { timeSignature, key } = readMeta(song.doc);
   const { cols, sections } = columnsOf(song, timeSignature);
   const defs = allLanes(song.doc);
   const kindOf = (id: string) => (id === "words" || id === "chords" ? id : defs.find((l) => l.id === id)?.kind);
   const draft = useSyncExternalStore(vocalRecorder.listen, vocalRecorder.getDraft);
-  const pianoRows = Object.fromEntries(lanes.filter((id) => kindOf(id) === "piano").map((id) => [id, usedKeys(song, id, draft?.lane === id ? draft : null)]));
+  const pianoRows = Object.fromEntries(lanes.filter((id) => kindOf(id) === "piano").map((id) => [id, usedKeys(song, id, draft?.lane === id ? draft : null, edit)]));
   // Чернетка запису вокалу — по рядках (той самий об'єкт, доки чернетка та сама: кроки не перемальовуються даремно).
   const drafts = useMemo(() => draftsByLine(draft), [draft]);
-  const ctx: Ctx = { song, me, lanes, zoom, capo, notes, timeSignature, key, defs, kindOf, pianoRows, steps, cardsEdit, draft: draft && { lane: draft.lane, lines: drafts } };
+  const ctx: Ctx = { song, me, lanes, zoom, capo, notes, timeSignature, key, defs, kindOf, pianoRows, steps, cardsEdit, edit, draft: draft && { lane: draft.lane, lines: drafts } };
   if (!split) return <StripGrid ctx={ctx} cols={cols} sections={sections} className="pb-6" />;
 
   // По рядках: структурна примітка — заголовок над першою смугою своєї частини.
@@ -185,6 +188,7 @@ type Ctx = {
   cardsEdit: CardsEdit | undefined;
   /** Чернетка запису вокалу — доріжка й ноти по рядках. */
   draft: { lane: string; lines: Map<number, LineDraft> } | null;
+  edit: boolean;
 };
 
 function draftsByLine(draft: Draft | null): Map<number, LineDraft> {
@@ -343,7 +347,7 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
     const name = id === "words" ? "Слова" : id === "chords" ? "Акорди" : (defs.find((l) => l.id === id)?.name ?? "");
     items.push(<div key={`gc${id}`} style={{ gridColumn: 1, gridRow: cardsRow, ...sticky() }} />);
     const Icon = kind && (!cells || kind === "blocks") ? LANE_ICON[kind as LaneKind] : null;
-    // Піаніно лише для перегляду: клавіші від найнижчої до найвищої вживаної в пісні (із запасом), без нот — октава від C4.
+    // Піаніно: клавіші від найнижчої до найвищої вживаної в пісні (із запасом, у правці — більшим), без нот — октава від C4.
     const pianoRows = kind === "piano" ? ctx.pianoRows[id] : undefined;
     const labels = pianoRows ? pianoRows.map((row) => PIANO_ROWS[row]) : rowsOf(kind as CellKind);
     const labelPx = kind === "piano" ? PIANO_ROW_PX : ROW_PX;
@@ -371,8 +375,8 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
       if (cells && slot instanceof Y.Map && slot.has("cells")) {
         body = (
           <div className="py-0.5" style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: STEPS_FONT_PX, lineHeight: 1.35, color: INK[kind as CellKind] }}>
-            <StepsBox ln={c.ln} lane={id} kind={kind as CellKind} line={c.at.line} timeSignature={timeSignature} zoom={zoom} rows={pianoRows?.length}>
-              <StepRows version={stepsVersion(slot as Y.Map<unknown>, c.at.line, timeSignature)} kind={kind as CellKind} slot={slot as Y.Map<unknown>} line={c.at.line} timeSignature={timeSignature} zoom={zoom} marks={marks} selected={steps && steps.ln === c.ln && steps.lane === id ? steps : null} rows={pianoRows} end={closes(col)} draft={ctx.draft?.lane === id ? ctx.draft.lines.get(c.ln) : null} />
+            <StepsBox ln={c.ln} lane={id} kind={kind as CellKind} line={c.at.line} timeSignature={timeSignature} zoom={zoom} rows={pianoRows?.length} keyTop={pianoRows?.[0]}>
+              <StepRows version={stepsVersion(slot as Y.Map<unknown>, c.at.line, timeSignature)} kind={kind as CellKind} slot={slot as Y.Map<unknown>} line={c.at.line} timeSignature={timeSignature} zoom={zoom} marks={marks} selected={steps && steps.ln === c.ln && steps.lane === id ? steps : null} rows={pianoRows} end={closes(col)} draft={ctx.draft?.lane === id ? ctx.draft.lines.get(c.ln) : null} editNotes={ctx.edit && kind === "piano"} />
             </StepsBox>
           </div>
         );
@@ -424,17 +428,26 @@ function StripGrid({ ctx, cols, sections, className }: { ctx: Ctx; cols: Column[
   );
 }
 
-/** Клавіші піаніно доріжки `lane`, на яких у пісні є ноти, — суцільним проміжком із запасом у дві; без нот — октава від C4. */
-function usedKeys(song: Song, lane: string, draft: Draft | null): number[] {
+/**
+ * Клавіші піаніно доріжки `lane`, на яких у пісні є ноти, — суцільним
+ * проміжком із запасом у дві; без нот — октава від C4. У правці запас —
+ * сім клавіш (і довкола октави без нот), щоб було куди ставити й тягнути.
+ */
+function usedKeys(song: Song, lane: string, draft: Draft | null, edit: boolean): number[] {
   const rows = layout(song).flatMap((l) => {
     const cells = (l.line.get(lane) as Y.Map<unknown> | undefined)?.get?.("cells");
     return cells instanceof Y.Map ? Array.from(cells.keys(), (key) => Number(String(key).split("/")[1]) - 1).filter((r) => r >= 0) : [];
   });
   // Заспіване в чернетці теж має бути видно.
   draft?.notes.forEach((n) => rows.push(PIANO_TOP - n.midi));
-  const [top, bottom] = rows.length ? [Math.max(0, Math.min(...rows) - 2), Math.min(PIANO_ROWS.length - 1, Math.max(...rows) + 2)] : [PIANO_ROWS.indexOf("C5"), PIANO_ROWS.indexOf("C4")];
+  const pad = rows.length ? (edit ? EDIT_PAD : 2) : edit ? EDIT_PAD : 0;
+  const [high, low] = rows.length ? [Math.min(...rows), Math.max(...rows)] : [PIANO_ROWS.indexOf("C5"), PIANO_ROWS.indexOf("C4")];
+  const [top, bottom] = [Math.max(0, high - pad), Math.min(PIANO_ROWS.length - 1, low + pad)];
   return Array.from({ length: bottom - top + 1 }, (_, i) => top + i);
 }
+
+/** Запас клавіш піаніно над найвищою й під найнижчою нотою в правці — кварта-квінта. */
+const EDIT_PAD = 7;
 
 /** Текст доріжки з позначками приміток — шарами їхніх кольорів, закреслення — рисою. */
 function Marked({ text, marks }: { text: string; marks: NoteView[] }) {
@@ -464,7 +477,7 @@ function Marked({ text, marks }: { text: string; marks: NoteView[] }) {
  * (`StripCellEditor`) знаходить комірку під пальцем без React: ті самі
  * розміри, що й малюють кроки (`stepGeometry`).
  */
-function StepsBox({ ln, lane, kind, line, timeSignature, zoom, rows, children }: { ln: number; lane: string; kind: CellKind; line: LineAt["line"]; timeSignature: string; zoom: number | undefined; rows?: number; children: ReactNode }) {
+function StepsBox({ ln, lane, kind, line, timeSignature, zoom, rows, keyTop, children }: { ln: number; lane: string; kind: CellKind; line: LineAt["line"]; timeSignature: string; zoom: number | undefined; rows?: number; keyTop?: number; children: ReactNode }) {
   const { scale, stepPx, sizes } = stepGeometry(kind, line, timeSignature, zoom);
   return (
     <div
@@ -477,6 +490,8 @@ function StepsBox({ ln, lane, kind, line, timeSignature, zoom, rows, children }:
       data-sizes={sizes.join()}
       data-rows={rows ?? rowsOf(kind).length}
       data-row-px={rowPxOf(kind)}
+      // Піаніно: клавіша першої лінії (видно не всі 88).
+      data-key-top={keyTop}
       // Довгий натиск тут — наше виділення кроків (`useStripSteps`), а не системне виділення тексту чи меню iOS.
       className="select-none [-webkit-touch-callout:none]"
     >

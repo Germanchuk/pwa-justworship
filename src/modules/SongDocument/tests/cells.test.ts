@@ -7,8 +7,13 @@ import {
   addNote,
   ALL,
   barSizes,
+  cellAt,
   cellSpan,
   copySpan,
+  movePianoNote,
+  noteValue,
+  pianoNote,
+  putPianoNote,
   lineTicks,
   pasteSpan,
   PIANO_ROWS,
@@ -553,5 +558,38 @@ describe("піаніно (piano roll)", () => {
     });
     change(net.A, () => writeSung(slotOf(net.A, 0, id), 96, 336, [{ time: 144, length: 48, midi: 64 }], "4/4"));
     expect(cellsJSON(net.B, 0, id)).toEqual({ [`1.1/${C4 + 1}`]: "o96", [`1.145/${E4 + 1}`]: "o48", [`1.361/${E4 + 1}`]: "o" });
+  });
+
+  describe("правка в смузі, як у FL Studio", () => {
+    it("нова нота — на своєму часі й клавіші, з тривалістю; читається назад", () => {
+      const { net, id } = withLane("piano");
+      change(net.A, () => putPianoNote(slotOf(net.A, 0, id), { time: 48, row: C4, value: noteValue(24) }, "4/4"));
+      expect(cellsJSON(net.B, 0, id)).toEqual({ [`1.49/${C4 + 1}`]: "o24" });
+      expect(pianoNote(slotOf(net.B, 0, id), `1.49/${C4 + 1}`, "4/4")).toEqual({ time: 48, row: C4, value: "o24" });
+    });
+
+    it("розтягнута нота — той самий ключ, нова тривалість", () => {
+      const { net, id } = withLane("piano");
+      change(net.A, () => putPianoNote(slotOf(net.A, 0, id), { time: 48, row: C4, value: "o" }, "4/4"));
+      change(net.A, () => putPianoNote(slotOf(net.A, 0, id), { time: 48, row: C4, value: noteValue(96) }, "4/4"));
+      expect(cellsJSON(net.B, 0, id)).toEqual({ [`1.49/${C4 + 1}`]: "o96" });
+    });
+
+    it("перенесена нота — в часі, по висоті й у сусідній рядок, з тією самою тривалістю", () => {
+      const { net, id } = withLane("piano");
+      change(net.A, () => putPianoNote(slotOf(net.A, 0, id), { time: 0, row: C4, value: "o72" }, "4/4"));
+      change(net.A, () => movePianoNote(slotOf(net.A, 0, id), `1.1/${C4 + 1}`, slotOf(net.A, 0, id), 384 + 24, E4, "4/4"));
+      expect(cellsJSON(net.B, 0, id)).toEqual({ [`2.25/${E4 + 1}`]: "o72" });
+      change(net.A, () => movePianoNote(slotOf(net.A, 0, id), `2.25/${E4 + 1}`, slotOf(net.A, 1, id), 96, C4, "4/4"));
+      expect([cellsJSON(net.B, 0, id), cellsJSON(net.B, 1, id)]).toEqual([{}, { [`1.97/${C4 + 1}`]: "o72" }]);
+    });
+
+    it("комірка тіку — обернене до її проміжку, і в 6/8 на тріолях", () => {
+      for (const [ts, zoom] of [["4/4", 16], ["6/8", 24], ["3/4", 32]] as const) {
+        const s = sc("piano", zoom, ts);
+        [0, 1, s.cells - 1, s.cells, s.cells + 3].forEach((i) => expect(cellAt(s, cellSpan(s, i)[0])).toBe(i));
+      }
+      expect(cellAt(sc("piano"), 36)).toBe(1.5); // між долями — дробова
+    });
   });
 });

@@ -18,8 +18,8 @@
 import * as Y from "yjs";
 import { memo, type ReactNode } from "react";
 import { highlightBg, isStrike, OTHERS_NEUTRAL_COLOR, STRIKE_INK } from "#modules/SingleSong/components/SlateLyricsPlayground/comments/colors";
-import { CellAt, CellKind, cellSpan, isBlackKey, Line, noteLength, NoteView, PIANO_TOP, placeCells, rowsOf, stepsPerBeat, TICKS } from "../../model";
-import { BAR_PX, INK, PIANO_ROW_PX, rowPxOf, STEP_GLYPH_PX, STEP_PX, stepGeometry, stepX } from "./stepGeometry";
+import { CellAt, cellAt, cellKey, CellKind, cellSpan, isBlackKey, Line, noteLength, NoteView, PIANO_TOP, placeCells, rowsOf, stepsPerBeat, TICKS } from "../../model";
+import { BAR_PX, cellRightX, INK, noteRect, PIANO_ROW_PX, rowPxOf, STEP_GLYPH_PX, STEP_PX, stepGeometry, stepX } from "./stepGeometry";
 
 const DASH = "linear-gradient(currentColor, currentColor) center / calc(100% - 2px) 1px no-repeat";
 /** Фон кольором — шаром, щоб лягати під риску й під прямокутник. */
@@ -53,6 +53,8 @@ type Props = {
   end?: boolean;
   /** Піаніно: чернетка запису вокалу в цьому рядку — заспівані ноти і проміжки, які вони замінять. */
   draft?: LineDraft | null;
+  /** Піаніно: ноти правляться мишею й пальцем (`usePianoEdit`) — ноти на долі беруться, у них є край. */
+  editNotes?: boolean;
 };
 
 /** Чернетка запису вокалу на рядку: ноти (тіки рядка, MIDI) і проміжки дубля. */
@@ -66,7 +68,7 @@ const DRAFT_BAND = "rgba(5, 150, 105, 0.08)";
 const BLACK_KEY = "rgba(60, 50, 40, 0.07)";
 const OCTAVE_EDGE = "inset 0 -1px 0 rgba(120, 95, 50, 0.22)";
 
-function StepRowsView({ kind, slot, line, timeSignature, zoom, marks, selected, here, clickable, rows, end = true, draft }: Props) {
+function StepRowsView({ kind, slot, line, timeSignature, zoom, marks, selected, here, clickable, rows, end = true, draft, editNotes = false }: Props) {
   const ROW_PX = rowPxOf(kind);
   const { scale, stepPx, sizes } = stepGeometry(kind, line, timeSignature, zoom);
   const steps = scale.cells;
@@ -167,7 +169,7 @@ function StepRowsView({ kind, slot, line, timeSignature, zoom, marks, selected, 
   };
 
   // Таби — струна на лінію, кахон — вид удару на лінію.
-  if (kind === "piano") return <PianoGrid {...{ sizes, steps, scale, beatTicks, placed, marks, selected, here, rows, end, draft }} />;
+  if (kind === "piano") return <PianoGrid {...{ sizes, steps, scale, beatTicks, placed, marks, selected, here, rows, end, draft, editNotes }} />;
   if (kind !== "blocks") return <>{rowsOf(kind).map((name, string) => row(name, (step) => lineStep({ step, string })))}</>;
   // Прямокутники: назва відкриває блок, «-» його тягне; порожній крок — «·».
   return row("blocks", (step) => {
@@ -207,6 +209,7 @@ const sameSteps = (a: Props, b: Props) =>
   a.clickable === b.clickable &&
   a.end === b.end &&
   a.draft === b.draft &&
+  a.editNotes === b.editNotes &&
   (a.rows?.join() ?? "") === (b.rows?.join() ?? "") &&
   a.selected?.from === b.selected?.from &&
   a.selected?.to === b.selected?.to &&
@@ -229,6 +232,7 @@ type GridProps = {
   rows?: readonly number[];
   end: boolean;
   draft?: LineDraft | null;
+  editNotes: boolean;
 };
 
 /**
@@ -238,7 +242,7 @@ type GridProps = {
  * лише ноти, позначки, виділене й курсор. Порожня клітинка — без риски, чорні
  * клавіші притінені, межа октави — лінією під C.
  */
-function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, here, rows, end, draft }: GridProps) {
+function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, here, rows, end, draft, editNotes }: GridProps) {
   const names = rowsOf("piano");
   const list = rows ?? names.map((_, i) => i);
   const yOf = new Map(list.map((row, i) => [row, i * PIANO_ROW_PX]));
@@ -293,16 +297,8 @@ function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, he
   if (sel) layers.push(<div key="sel" className="pointer-events-none absolute inset-y-0" style={{ ...sel, background: SELECTED }} />);
   // Ноти: заповнений прямокутник на свою тривалість (ваншот — комірка); не на долі комірки — блідо-червоний, прозоріший, що далі.
   const cellTicks = (scale.tick * TICKS) / scale.grid;
-  /** Правий край комірок до `c` (дробове, від початку рядка): у кінці такту — до риски, а не за нею. */
-  const rightOf = (c: number) => {
-    const bar = Math.ceil(c / steps) - 1;
-    return bar * (BAR_PX + steps * STEP_PX) + BAR_PX + (c - bar * steps) * STEP_PX;
-  };
-  /** Комірка (дробова) тіку рядка `t`. */
-  const cellOf = (t: number) => {
-    const bar = Math.floor(t / (scale.ticks * (TICKS / scale.grid)));
-    return bar * steps + (t - bar * scale.ticks * (TICKS / scale.grid)) / cellTicks;
-  };
+  const rightOf = (c: number) => cellRightX(c, steps, STEP_PX);
+  const cellOf = (t: number) => cellAt(scale, t);
   // Чернетка: те, що дубль замінить, — бліде, заспіване — зеленим поверх.
   const replaced = (step: number) => !!draft?.spans.some((s) => cellOf(s.from) - 0.5 <= step && step < cellOf(s.to) - 0.5);
   draft?.spans.forEach((s, i) => {
@@ -328,13 +324,24 @@ function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, he
     if (top === undefined) return;
     const fade = replaced(step) ? 0.25 : 1;
     cell.all.forEach(({ value, off }, i) => {
-      const cells = Math.min(Math.max(1, noteLength(value) / cellTicks), total - step);
+      // У правці ноту на долі беруть (тягнуть, стирають), за край — розтягують; ноту поруч видно, але правиться вона в масштабі, де вона точна.
+      const grab = editNotes && !off;
       layers.push(
         <div
           key={`n${key}.${i}`}
-          className="pointer-events-none absolute rounded-[2px]"
-          style={{ left: x(step) + 1, top: top + 1, width: rightOf(step + cells) - x(step) - 2, height: PIANO_ROW_PX - 2, background: off ? OFF_GRID_INK : INK.piano, opacity: (off ? 1 - off * 0.6 : 1) * fade }}
-        />,
+          data-piano-note={grab ? cellKey("piano", scale, { step, string: row }) : undefined}
+          className={grab ? "absolute rounded-[2px]" : "pointer-events-none absolute rounded-[2px]"}
+          style={{
+            ...noteRect(step, noteLength(value) / cellTicks, steps, total, STEP_PX),
+            top: top + 1,
+            height: PIANO_ROW_PX - 2,
+            background: off ? OFF_GRID_INK : INK.piano,
+            opacity: (off ? 1 - off * 0.6 : 1) * fade,
+            ...(grab ? { cursor: "move", touchAction: "none" } : {}),
+          }}
+        >
+          {grab && <div data-piano-edge="" className="absolute inset-y-0" style={{ right: -EDGE_PX / 2, width: EDGE_PX, cursor: "ew-resize", touchAction: "none" }} />}
+        </div>,
       );
     });
   });
@@ -348,11 +355,14 @@ function PianoGrid({ sizes, steps, scale, beatTicks, placed, marks, selected, he
     );
   }
   return (
-    <div data-piano-grid="" className="relative" style={{ width, height: list.length * PIANO_ROW_PX }}>
+    <div data-piano-grid="" className="relative" style={{ width, height: list.length * PIANO_ROW_PX, cursor: editNotes ? "cell" : undefined }}>
       {layers}
     </div>
   );
 }
+
+/** Край ноти, за який її розтягують, — навпіл усередині й за нею (пальцем теж влучити). */
+const EDGE_PX = 12;
 
 /**
  * Риска такту — суцільна лінія посередині свого місця, як розділювач тактів

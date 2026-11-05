@@ -314,6 +314,13 @@ export function cellSpan(scale: Scale, i: number): [number, number] {
   return [(bar + at) * per, (bar + Math.min(at + scale.tick, scale.ticks)) * per];
 }
 
+/** Комірка масштабу, на яку припадає тік рядка `t` (тіки позначок), — обернене до `cellSpan`; між долями — дробова. */
+export function cellAt(scale: Scale, t: number) {
+  const k = (t * scale.grid) / TICKS; // кроки запису від початку рядка
+  const bar = Math.floor(k / scale.ticks);
+  return bar * scale.cells + (k - bar * scale.ticks) / scale.tick;
+}
+
 /** Клітинка слота в часі: `time` — тіки позначок від початку рядка, `string` — лінія (з 1). */
 export type TimedCell = { time: number; string: number; value: string };
 
@@ -694,23 +701,58 @@ export type SungNote = { time: number; length: number; midi: number };
  */
 export function writeSung(slot: Y.Map<unknown>, from: number, to: number, notes: readonly SungNote[], timeSignature: string) {
   eraseSpan("piano", slot, from, to, timeSignature);
-  const grid = Number(slot.get("grid")) || TICKS;
-  const [n, d] = meter(timeSignature);
-  const perBar = Math.max(1, Math.round((n * grid) / d));
-  const cells = slot.get("cells") as Y.Map<string>;
-  const keyAt = (time: number, row: number) => {
-    const i = Math.round((time * grid) / TICKS);
-    return `${Math.floor(i / perBar) + 1}.${(i % perBar) + 1}/${row + 1}`;
-  };
   timedCells("piano", slot, timeSignature).forEach(({ time, string, value }) => {
     const length = noteLength(value);
-    if (time < from && time + length > from) cells.set(keyAt(time, string - 1), noteValue(from - time));
+    if (time < from && time + length > from) putPianoNote(slot, { time, row: string - 1, value: noteValue(from - time) }, timeSignature);
   });
   notes.forEach(({ time, length, midi }) => {
     const row = PIANO_TOP - midi;
     if (row < 0 || row >= PIANO_ROWS.length || time < from || time >= to) return;
-    cells.set(keyAt(time, row), noteValue(length));
+    putPianoNote(slot, { time, row, value: noteValue(length) }, timeSignature);
   });
+}
+
+/** Нота піаніно в рядку: `time` — тіки позначок від початку рядка, `row` — клавіша (з 0), `value` — `o` (ваншот) чи `o<тіки>`. */
+export type PianoNote = { time: number; row: number; value: string };
+
+/** Ключ запису ноти піаніно на `time` (тіки позначок від початку рядка) і клавіші `row` (з 0). */
+function pianoKey(slot: Y.Map<unknown>, time: number, row: number, timeSignature: string) {
+  const grid = Number(slot.get("grid")) || TICKS;
+  const [n, d] = meter(timeSignature);
+  const perBar = Math.max(1, Math.round((n * grid) / d));
+  const i = Math.round((time * grid) / TICKS);
+  return `${Math.floor(i / perBar) + 1}.${(i % perBar) + 1}/${row + 1}`;
+}
+
+/** Нота піаніно за ключем запису; немає — `null`. */
+export function pianoNote(slot: Y.Map<unknown>, key: string, timeSignature: string): PianoNote | null {
+  const value = (slot.get("cells") as Y.Map<string>).get(key);
+  const k = parseKey(key);
+  if (!value || !k) return null;
+  const grid = Number(slot.get("grid")) || TICKS;
+  const [n, d] = meter(timeSignature);
+  const perBar = Math.max(1, Math.round((n * grid) / d));
+  return { time: (((k.bar - 1) * perBar + k.step - 1) * TICKS) / grid, row: k.string - 1, value };
+}
+
+/**
+ * Записати ноту піаніно — нову чи розтягнуту (на тому самому місці ключ
+ * той самий, тож нота просто отримує нову тривалість). Нота, що вже
+ * починалась там само на тій самій клавіші, замінюється. Викликати в транзакції.
+ */
+export function putPianoNote(slot: Y.Map<unknown>, note: PianoNote, timeSignature: string) {
+  (slot.get("cells") as Y.Map<string>).set(pianoKey(slot, note.time, note.row, timeSignature), note.value);
+}
+
+/**
+ * Перенести ноту `key` слота `from` на `time` і клавішу `row` слота `to` (той
+ * самий рядок чи інший, тієї самої доріжки) — з її тривалістю. Викликати в транзакції.
+ */
+export function movePianoNote(from: Y.Map<unknown>, key: string, to: Y.Map<unknown>, time: number, row: number, timeSignature: string) {
+  const note = pianoNote(from, key, timeSignature);
+  if (!note) return;
+  (from.get("cells") as Y.Map<string>).delete(key);
+  putPianoNote(to, { time, row, value: note.value }, timeSignature);
 }
 
 /**

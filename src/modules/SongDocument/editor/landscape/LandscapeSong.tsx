@@ -9,8 +9,9 @@
  * частина, рядок пісні й свою доріжку. Смуга й програвання — ті самі, що й на
  * ПК (`strip/`): там смуга лише розрізана по рядках.
  *
- * Правка — поки лише табів, дошкою ладів справа (`strip/StripCellEditor`);
- * решта — у вертикальному положенні. Примітки — в обох режимах, довгим
+ * Правка — поки табів, дошкою ладів справа (`strip/StripCellEditor`), і нот
+ * піаніно — пальцем, як у FL Studio (`strip/usePianoEdit`); решта — у
+ * вертикальному положенні. Примітки — в обох режимах, довгим
  * натиском на кроках (`strip/useStripSteps`): палітра й меню позначки — на тій
  * самій панелі справа, у правці на цей час замість дошки (`strip/StripNotes`).
  * У правці виділені кроки ще копіюють і переносять (`strip/clip.ts`).
@@ -32,6 +33,7 @@ import { STRIP_BUTTON, StripTransport } from "../strip/StripTransport";
 import { useStripView } from "../strip/useStripView";
 import { StripCellEditor } from "../strip/StripCellEditor";
 import { StripNotes } from "../strip/StripNotes";
+import { usePianoEdit } from "../strip/usePianoEdit";
 import { useStripSteps } from "../strip/useStripSteps";
 
 /** Кнопки меню пісні тут менші: висота екрана лежачи — на вагу золота. */
@@ -50,7 +52,8 @@ export function LandscapeSong({ song }: { song: Song }) {
   const meta = readMeta(song.doc);
   const tabsShown = songLanes(song.doc).some((l) => l.kind === "tab" && view.lanes.includes(l.id));
   // Кроки — довгим натиском, в обох режимах: примітки; у правці ще копіювати й переносити.
-  const sel = useStripSteps(scroller, { song, zoom: view.zoom, notes: view.notes, on: canAnnotate && !!me, edit: canEdit });
+  const sel = useStripSteps(scroller, { song, zoom: view.zoom, notes: view.notes, on: canAnnotate && !!me, edit: canEdit, pianoEdit: canEdit });
+  usePianoEdit(scroller, { song, zoom: view.zoom, on: canEdit });
   const notesUi = !!me && (!!sel.steps || sel.picked.length > 0);
 
   // Сторінка під цим виглядом не гортається.
@@ -88,12 +91,12 @@ export function LandscapeSong({ song }: { song: Song }) {
       {metaOpen && (
         <div className="absolute inset-x-1.5 top-12 z-10 max-h-[70dvh] overflow-auto rounded-xl border border-stone-200 bg-[#f8f5eb] p-2 shadow-lg">
           <SongHeader song={song} me={me} canEdit={canEdit} capoApplies={capoApplies} change={(fn) => song.doc.transact(fn)} />
-          {canEdit && <p className="mt-1 text-xs text-stone-500">Лежачи поки правляться лише таби (дошка справа); решту — у вертикальному положенні.</p>}
+          {canEdit && <p className="mt-1 text-xs text-stone-500">Лежачи поки правляться таби (дошка справа) і піаніно: тап ставить ноту, тап по ноті стирає, протяг ноти переносить, край — довжина. Решту — у вертикальному положенні.</p>}
         </div>
       )}
       <div className="flex min-h-0 flex-1">
         <div ref={scroller} className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" onClick={() => metaOpen && setMetaOpen(false)}>
-          <Strip song={song} {...view} steps={sel.steps} cardsEdit={canAnnotate && me ? { viewers: view.viewers, ...sel } : undefined} />
+          <Strip song={song} {...view} steps={sel.steps} cardsEdit={canAnnotate && me ? { viewers: view.viewers, ...sel } : undefined} edit={canEdit} />
         </div>
         {/* Правка лежачи — поки таби: дошка ладів справа (`StripCellEditor`). */}
         {canEdit && tabsShown && <StripCellEditor song={song} me={me} scroller={scroller} paused={notesUi} clip={sel.clip} />}

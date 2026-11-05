@@ -26,12 +26,16 @@ import { copySteps, editable, moveSteps } from "./clip";
 /** Виділені кроки доріжки `lane` рядка `ln`: `from…to` — тіки від початку рядка (кінець не входить). */
 export type StepsSel = { ln: number; lane: string; from: number; to: number };
 
-const LONG_PRESS_MS = 450;
+export const LONG_PRESS_MS = 450;
 
-/** `edit` — режим правки: виділене можна копіювати й переносити. */
-type Opts = { song: Song; zoom: number | undefined; notes: NoteView[]; on: boolean; edit?: boolean };
+/**
+ * `edit` — режим правки: виділене можна копіювати й переносити. `pianoEdit` —
+ * ноти піаніно правляться мишею (`usePianoEdit`): там протяг мишею — нота, а
+ * кроки виділяє лише Ctrl/⌘ + протяг, як рамка в FL Studio.
+ */
+type Opts = { song: Song; zoom: number | undefined; notes: NoteView[]; on: boolean; edit?: boolean; pianoEdit?: boolean };
 
-export function useStripSteps(container: RefObject<HTMLElement | null>, { song, zoom, notes, on, edit = false }: Opts) {
+export function useStripSteps(container: RefObject<HTMLElement | null>, { song, zoom, notes, on, edit = false, pianoEdit = false }: Opts) {
   const [steps, setSteps] = useState<StepsSel | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   /** Картки, щойно додані без тексту («Додати нотатку»): видно, поки поле не покинули. */
@@ -39,8 +43,8 @@ export function useStripSteps(container: RefObject<HTMLElement | null>, { song, 
   const addDraft = (id: string) => setDrafts((d) => [...d, id]);
   const dropDraft = (id: string) => setDrafts((d) => (d.includes(id) ? d.filter((x) => x !== id) : d));
   const [clip, setClip] = useState<CellsClip | null>(null);
-  const latest = useRef({ song, zoom, notes, edit, steps });
-  latest.current = { song, zoom, notes, edit, steps };
+  const latest = useRef({ song, zoom, notes, edit, steps, pianoEdit });
+  latest.current = { song, zoom, notes, edit, steps, pianoEdit };
 
   const select = (next: StepsSel | null) => {
     setPicked((prev) => (prev.length ? [] : prev));
@@ -202,6 +206,7 @@ export function useStripSteps(container: RefObject<HTMLElement | null>, { song, 
     const onMouseDown = (e: MouseEvent) => {
       const box = e.button === 0 ? boxAt(e.target) : null;
       if (!box) return;
+      if (latest.current.pianoEdit && box.dataset.kind === "piano" && !e.ctrlKey && !e.metaKey) return; // це правка нот
       e.preventDefault(); // протяг — не виділення тексту
       begin(box, e.clientX, e.clientY, false);
       const onMove = (m: MouseEvent) => {

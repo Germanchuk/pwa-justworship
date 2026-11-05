@@ -33,6 +33,29 @@ export function stepGeometry(kind: CellKind, line: Line, timeSignature: string, 
 export const stepX = (step: number, cells: number, stepPx: number) =>
   Math.floor(step / cells) * (BAR_PX + cells * stepPx) + BAR_PX + (step % cells) * stepPx;
 
+/** Правий край комірок до `c` (дробове, від початку рядка): у кінці такту — до риски, а не за нею. */
+export function cellRightX(c: number, cells: number, stepPx: number) {
+  const bar = Math.ceil(c / cells) - 1;
+  return bar * (BAR_PX + cells * stepPx) + BAR_PX + (c - bar * cells) * stepPx;
+}
+
+/**
+ * Прямокутник ноти піаніно з комірки `step` на `span` комірок (не менше
+ * однієї; кінцем рядка `total` обрізано) — однаково для нот на екрані й
+ * тієї, яку саме тягнуть (`usePianoEdit`).
+ */
+export function noteRect(step: number, span: number, cells: number, total: number, stepPx: number) {
+  const left = stepX(step, cells, stepPx);
+  return { left: left + 1, width: cellRightX(Math.min(step + Math.max(1, span), total), cells, stepPx) - left - 2 };
+}
+
+/** Найближча до `x` межа комірок — скільки їх від початку рядка (0…усі): кінець ноти, яку тягнуть за край. */
+export function boundaryAtX(x: number, sizes: readonly number[], cells: number, stepPx: number) {
+  const barW = BAR_PX + cells * stepPx;
+  const bar = Math.min(Math.max(Math.floor(x / barW), 0), sizes.length - 1);
+  return bar * cells + Math.min(Math.max(Math.round((x - bar * barW - BAR_PX) / stepPx), 0), sizes[bar]);
+}
+
 /**
  * Комірка під точкою `x`, `y` (px від верхнього лівого кута смуги кроків), —
  * обернене до `stepX`; поза смугою — найближча. Без пошуку елемента під
